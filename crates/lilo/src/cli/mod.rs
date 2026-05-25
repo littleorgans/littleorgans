@@ -8,13 +8,46 @@ use lilo_common::diagnostic::Diagnostic;
 
 use self::doctor::DoctorCommand;
 
+const HELP_TEMPLATE: &str = "\
+{about-with-newline}
+{usage-heading} {usage}
+
+Session commands:
+  run         Run an agent session
+  create      Create a session, label, or other resource
+  get         Show sessions and other resources
+  delete      Delete sessions and other resources
+  label       Update labels on a resource
+  mail        Send mail to an agent
+  nudge       Nudge an agent
+  capture     Capture session output
+  logs        Tail session logs
+  wait        Wait for a session condition
+  mcp         Run lilo as an MCP server
+
+Substrate operator commands:
+  runtime     Raw runtime operator namespace (diagnostic; never creates sessions)
+  session     Session substrate operator namespace
+  identity    Identity substrate operator namespace
+
+Diagnostics:
+  doctor      Inspect local lilo health
+
+Daemon lifecycle:
+  daemon      Manage the local lilo daemon process
+
+Options:
+{options}{after-help}
+";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "lilo",
     version = lilo_common::version::VERSION_STRING,
     about = "Local-first Little Organs control plane",
     arg_required_else_help = true,
-    disable_help_subcommand = true
+    disable_help_subcommand = true,
+    help_template = HELP_TEMPLATE
 )]
 pub struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
@@ -131,6 +164,28 @@ mod tests {
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
         assert!(!help.contains("__runtime-shim"));
+    }
+
+    #[test]
+    fn help_groups_commands_by_category() {
+        let help = Cli::command().render_long_help().to_string();
+
+        for heading in [
+            "Session commands:",
+            "Substrate operator commands:",
+            "Diagnostics:",
+            "Daemon lifecycle:",
+        ] {
+            assert!(help.contains(heading), "missing heading: {heading}");
+        }
+
+        let session_idx = help.find("Session commands:").unwrap();
+        let operator_idx = help.find("Substrate operator commands:").unwrap();
+        let diagnostics_idx = help.find("Diagnostics:").unwrap();
+        let daemon_idx = help.find("Daemon lifecycle:").unwrap();
+        assert!(session_idx < operator_idx);
+        assert!(operator_idx < diagnostics_idx);
+        assert!(diagnostics_idx < daemon_idx);
     }
 
     #[test]
