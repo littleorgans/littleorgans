@@ -73,6 +73,9 @@ fn try_init_subscriber(filter: EnvFilter, format: LogFormat) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     #[test]
     fn init_logging_succeeds_when_called_twice() {
@@ -97,6 +100,39 @@ mod tests {
 
     #[test]
     fn lilo_log_json_env_var_has_no_format_effect() {
-        assert_eq!(select_format(false, true), LogFormat::Pretty);
+        let _lock = ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("environment lock is not poisoned");
+
+        let previous_lilo_log_json = std::env::var_os("LILO_LOG_JSON");
+        let previous_lilo_log_format = std::env::var_os("LILO_LOG_FORMAT");
+
+        // SAFETY: This test serializes its environment mutation through ENV_LOCK
+        // and restores the original values before the lock is released.
+        unsafe {
+            std::env::set_var("LILO_LOG_JSON", "1");
+            std::env::set_var("LILO_LOG_FORMAT", "json");
+        };
+
+        let format = select_format(false, true);
+
+        restore_env_var("LILO_LOG_JSON", previous_lilo_log_json);
+        restore_env_var("LILO_LOG_FORMAT", previous_lilo_log_format);
+
+        assert_eq!(format, LogFormat::Pretty);
+    }
+
+    fn restore_env_var(name: &str, previous: Option<std::ffi::OsString>) {
+        match previous {
+            Some(value) => {
+                // SAFETY: This test serializes environment mutation through ENV_LOCK.
+                unsafe { std::env::set_var(name, value) };
+            }
+            None => {
+                // SAFETY: This test serializes environment mutation through ENV_LOCK.
+                unsafe { std::env::remove_var(name) };
+            }
+        }
     }
 }
