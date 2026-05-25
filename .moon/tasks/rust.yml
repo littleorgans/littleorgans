@@ -1,0 +1,42 @@
+inheritedBy:
+  toolchains: ["rust"]
+
+fileGroups:
+  sources:
+    - "src/**/*"
+    - "Cargo.toml"
+  tests:
+    - "benches/**/*"
+    - "tests/**/*"
+
+tasks:
+  fmt-check:
+    command: "cargo fmt --all -- --check"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: false
+
+  clippy:
+    command: "cargo clippy --all-targets -- -D warnings"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: false
+
+  build:
+    command: "cargo build"
+    inputs:
+      - "@globs(sources)"
+    options:
+      runInCI: false
+
+  test:
+    command: "cargo test"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: false

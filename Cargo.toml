@@ -1,0 +1,60 @@
+[workspace]
+members = [
+    "crates/lilo",
+    "crates/lilo-common",
+    "crates/lilo-paths",
+    "tools/xtask",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.8.0"
+edition = "2024"
+authors = ["Stuart Robinson"]
+license = "MIT"
+repository = "https://github.com/littleorgans/littleorgans"
+rust-version = "1.90"
+
+[workspace.dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[profile.install-local]
+inherits = "release"
+codegen-units = 16
+lto = false
+
+[workspace.metadata.dist]
+cargo-dist-version = "0.31.0"
+ci = "github"
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+installers = ["shell"]
+github-attestations = true
+create-release = false
+unix-archive = ".tar.gz"
+windows-archive = ".zip"
+include = ["LICENSE", "README.md"]
+auto-includes = false
+pr-run-mode = "skip"

@@ -1,0 +1,16 @@
+# fmm configuration
+# Defaults apply for omitted fields. .gitignore and .fmmignore are always respected.
+
+# Maximum lines per file. Files exceeding this limit are skipped during indexing.
+# max_lines = 100_000
+
+# Additional glob patterns to exclude.
+# exclude = ["vendor/**", "dist/**"]
+
+# Override indexed languages.
+# languages = ["rs", "py", "ts", "tsx", "js", "jsx"]
+
+# Test file detection patterns.
+# [test_patterns]
+# path_contains = ["/test/", "/tests/", "/spec/", "/e2e/", "/__tests__/"]
+# filename_suffixes = [".spec.ts", ".test.ts", ".test.js", "_test.go", "_test.rs"]

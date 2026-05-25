@@ -1,0 +1,8 @@
+rust:
+  version: "1.90"
+
+# Reserved until TypeScript workspace files are introduced.
+# node: {}
+
+# Reserved until Python workspace files are introduced.
+# python: {}

@@ -1,4 +1,14 @@
+/target/
+.moon/cache/
+
+# Cargo keeps the workspace lockfile committed for reproducible builds.
+
+**/*.rs.bk
+
+.DS_Store
+
 .fmm.db
 .fmm.db-shm
 .fmm.db-wal
+
 .nancy/

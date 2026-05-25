@@ -1,0 +1,78 @@
+language: "rust"
+layer: "application"
+
+env:
+  CARGO_TERM_COLOR: "always"
+
+workspace:
+  inheritedTasks:
+    include: []
+
+fileGroups:
+  sources:
+    - "Cargo.toml"
+    - "rust-toolchain.toml"
+    - "crates/*/Cargo.toml"
+    - "crates/*/src/**/*"
+    - "tools/*/Cargo.toml"
+    - "tools/*/src/**/*"
+    - "scripts/**/*"
+  tests:
+    - "crates/*/tests/**/*"
+    - "tools/*/tests/**/*"
+
+tasks:
+  fmt:
+    command: "cargo fmt --all"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: false
+
+  fmt-check:
+    command: "cargo fmt --all -- --check"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: "always"
+
+  clippy:
+    command: "cargo clippy --workspace --all-targets -- -D warnings"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: "always"
+
+  build:
+    command: "cargo build --workspace"
+    inputs:
+      - "@globs(sources)"
+    options:
+      runInCI: "always"
+
+  test:
+    command: "cargo test --workspace"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: "always"
+
+  check-loc:
+    command: "./scripts/check-loc-limit.sh"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+    options:
+      runInCI: "always"
+
+  check:
+    deps:
+      - "fmt-check"
+      - "clippy"
+      - "check-loc"
+    options:
+      runInCI: false

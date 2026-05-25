@@ -1,0 +1,12 @@
+projects:
+  globs:
+    - "crates/*"
+    - "internal/*/*"
+    - "tools/*"
+  sources:
+    littleorgans: "."
+
+vcs:
+  client: "git"
+  defaultBranch: "main"
+  provider: "github"

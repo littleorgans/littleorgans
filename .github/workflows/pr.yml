@@ -1,0 +1,52 @@
+---
+name: PR
+
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pr:
+    name: PR gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.90
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust build outputs
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Moon toolchain
+        uses: moonrepo/setup-toolchain@v0
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy with warnings as errors
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Test workspace
+        run: cargo test --workspace
+
+      - name: Moon CI
+        run: moon ci
+
+      - name: Lilo binary smoke test
+        run: |
+          ./target/debug/lilo --version
+          ./target/debug/lilo doctor --output json | jq .
