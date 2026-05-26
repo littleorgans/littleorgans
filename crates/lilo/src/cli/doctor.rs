@@ -1,3 +1,9 @@
+// `DoctorCommand` and `DoctorStatus::SubstrateStatus` are Phase 1 placeholders
+// that will gain fields as the doctor command grows in later phases. Until
+// then, `&self` receivers and the zero-sized substrate value type are
+// intentional shape; allow the corresponding pedantic lints at module scope.
+#![allow(clippy::unused_self, clippy::zero_sized_map_values)]
+
 use std::collections::BTreeMap;
 
 use clap::Args;

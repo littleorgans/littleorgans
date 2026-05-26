@@ -40,14 +40,14 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
     let started_at = Utc::now();
 
     for action in Action::ALL {
-        let authorized = authorizer
+        let granted = authorizer
             .authorize(&Principal::Local(process_uid), action, &resource)
             .await
             .expect("local uid should authorize");
 
-        assert_eq!(authorized.principal, Principal::Local(process_uid));
-        assert_eq!(authorized.role, "admin");
-        assert!(authorized.capabilities.is_empty());
+        assert_eq!(granted.principal, Principal::Local(process_uid));
+        assert_eq!(granted.role, "admin");
+        assert!(granted.capabilities.is_empty());
     }
 
     let rows = query_audit(&db_path, AuditFilters::default())

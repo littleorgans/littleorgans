@@ -22,7 +22,11 @@ enum Xtask {
 impl Xtask {
     fn run(self) -> ExitCode {
         eprintln!("{}", self.deferral_message());
-        ExitCode::from(exit_codes::DOMAIN as u8)
+        // Exit codes in `lilo_common::exit_codes` are `i32` to align with the
+        // `Diagnostic.exit_code` field, but fit in `u8` by construction. The
+        // fallback to 1 (`INTERNAL`) is defensive: any value outside `u8`
+        // signals a logic bug worth surfacing as an internal failure.
+        ExitCode::from(u8::try_from(exit_codes::DOMAIN).unwrap_or(1))
     }
 
     fn deferral_message(&self) -> &'static str {

@@ -1,5 +1,5 @@
 rust:
-  version: "1.90"
+  version: "1.95"
 
 # Reserved until TypeScript workspace files are introduced.
 # node: {}
