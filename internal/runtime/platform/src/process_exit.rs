@@ -49,7 +49,13 @@ mod linux {
         std::thread::spawn(move || wait_for_pidfd_exit(pidfd, cancel, sender));
     }
 
+    // pidfd is owned so the fd stays open across poll iterations and is closed
+    // on Drop when the thread exits. cancel is moved in so the Arc handle lives
+    // for the thread lifetime. needless_pass_by_value misreads this pattern.
+    #[allow(clippy::needless_pass_by_value)]
     fn wait_for_pidfd_exit(pidfd: OwnedFd, cancel: Arc<AtomicBool>, sender: oneshot::Sender<()>) {
+        let poll_timeout = libc::c_int::try_from(WATCH_POLL_INTERVAL.as_millis())
+            .expect("poll interval fits in c_int");
         while !cancel.load(Ordering::Acquire) {
             let mut poll_fd = libc::pollfd {
                 fd: pidfd.as_raw_fd(),
@@ -58,13 +64,7 @@ mod linux {
             };
             // SAFETY: poll_fd points to one initialized pollfd, nfds is 1, and
             // the file descriptor is borrowed from a live OwnedFd for this call.
-            let result = unsafe {
-                libc::poll(
-                    &mut poll_fd,
-                    1,
-                    WATCH_POLL_INTERVAL.as_millis() as libc::c_int,
-                )
-            };
+            let result = unsafe { libc::poll(&raw mut poll_fd, 1, poll_timeout) };
 
             if result > 0 {
                 let _ = sender.send(());
