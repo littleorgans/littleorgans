@@ -7,6 +7,8 @@ use lilo_common::{exit_codes, logging};
 
 use crate::cli::Cli;
 
+pub const VERSION: &str = env!("LILO_CLI_VERSION");
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
