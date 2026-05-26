@@ -69,4 +69,7 @@ clippy-fix:
 check-loc:
     bash scripts/check-loc-limit.sh
 
-check: fmt clippy-fix fmt-check check-loc clippy
+check-provenance:
+    bash scripts/check-provenance.sh
+
+check: fmt clippy-fix fmt-check check-loc check-provenance clippy
