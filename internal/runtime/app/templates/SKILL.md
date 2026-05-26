@@ -1,6 +1,8 @@
-# littleorgans
+---
+name: rtm-admin
+description: Admin MCP tools for runtime-matters rtmd.
+---
 
-<!-- rtm-admin-tools:start -->
 ## Admin MCP Tools
 
 | Tool | Purpose |
@@ -9,4 +11,3 @@
 | `rtm_status` | Return rtmd Lifecycle rows, optionally filtered by session id, session set, runtime, lifecycle state, and updated time. |
 | `rtm_version` | Return the rtmd package version, build git sha, protocol version, and advertised capabilities. |
 | `rtm_watchers` | Return rtmd operator visibility counters for process exit watchers, pending shim socket waiters, and Events long poll waiters. |
-<!-- rtm-admin-tools:end -->

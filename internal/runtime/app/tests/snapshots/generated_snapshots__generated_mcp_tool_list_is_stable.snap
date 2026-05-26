@@ -1,0 +1,173 @@
+---
+source: crates/rtm-cli/tests/generated_snapshots.rs
+expression: tools
+---
+{
+  "tools": [
+    {
+      "description": "Admin escape hatch that signals a runtime process by pid, waits for the grace period, then sends SIGKILL if the process remains alive.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "grace_secs": {
+            "description": "Seconds to wait before SIGKILL fallback.",
+            "format": "u32",
+            "type": "integer"
+          },
+          "pid": {
+            "description": "Runtime process id to signal.",
+            "format": "u32",
+            "type": "integer"
+          },
+          "signal": {
+            "description": "POSIX signal number to send.",
+            "format": "i32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pid",
+          "signal",
+          "grace_secs"
+        ],
+        "type": "object"
+      },
+      "name": "rtm_kill_by_pid",
+      "outputSchema": {
+        "additionalProperties": false,
+        "description": "Signal delivery outcome for the requested pid.",
+        "properties": {
+          "killed_after_grace": {
+            "description": "Whether SIGKILL was sent after the grace period.",
+            "type": "boolean"
+          },
+          "pid": {
+            "description": "Process id that was signaled.",
+            "type": "integer"
+          },
+          "signal": {
+            "description": "Signal number sent first.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "Return rtmd Lifecycle rows, optionally filtered by session id, session set, runtime, lifecycle state, and updated time.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "runtime": {
+            "description": "Optional runtime kind filter.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Optional session id filter.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "session_ids": {
+            "description": "Optional session id set filter.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "state": {
+            "description": "Optional lifecycle state filter.",
+            "type": "string"
+          },
+          "updated_since": {
+            "description": "Optional RFC3339 updated_at lower bound.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "rtm_status",
+      "outputSchema": {
+        "additionalProperties": false,
+        "description": "Lifecycle rows visible to rtmd.",
+        "properties": {
+          "lifecycles": {
+            "description": "Matching Lifecycle rows.",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "Return the rtmd package version, build git sha, protocol version, and advertised capabilities.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "rtm_version",
+      "outputSchema": {
+        "additionalProperties": false,
+        "description": "Version metadata for the running daemon.",
+        "properties": {
+          "capabilities": {
+            "description": "Stable runtime protocol capability names.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "git_sha": {
+            "description": "Build git sha.",
+            "type": "string"
+          },
+          "protocol_version": {
+            "description": "Runtime protocol compatibility version.",
+            "type": "string"
+          },
+          "version": {
+            "description": "Package version.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "description": "Return rtmd operator visibility counters for process exit watchers, pending shim socket waiters, and Events long poll waiters.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "rtm_watchers",
+      "outputSchema": {
+        "additionalProperties": false,
+        "description": "Watcher counters for the running daemon.",
+        "properties": {
+          "event_waiters": {
+            "description": "Active Events long poll waiters.",
+            "type": "integer"
+          },
+          "process_exit_watchers": {
+            "description": "Active process exit watchers.",
+            "type": "integer"
+          },
+          "shim_sockets": {
+            "description": "Pending shim socket waiters.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ]
+}

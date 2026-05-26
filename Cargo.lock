@@ -972,6 +972,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilo-rm-client"
+version = "0.8.0"
+dependencies = [
+ "lilo-paths",
+ "lilo-rm-core",
+ "lilo-runtime-daemon",
+ "lilo-runtime-store",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "lilo-rm-core"
 version = "0.8.0"
 dependencies = [
@@ -982,6 +997,29 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml",
+ "uuid",
+]
+
+[[package]]
+name = "lilo-runtime-app"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "insta",
+ "libc",
+ "lilo-rm-client",
+ "lilo-rm-core",
+ "lilo-runtime-daemon",
+ "lilo-runtime-platform",
+ "lilo-runtime-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
