@@ -1,0 +1,11 @@
+# Tmux integration tests share one global tmux server, so parallel
+# respawn-pane and kill-session calls race against each other and
+# surface as intermittent `launch_failed: failed to respawn tmux pane`
+# errors during full-workspace runs. Cap any test whose name matches
+# /tmux/ to one-at-a-time. Prior incident: ALP-2607.
+[test-groups]
+tmux = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(/tmux/)'
+test-group = 'tmux'
