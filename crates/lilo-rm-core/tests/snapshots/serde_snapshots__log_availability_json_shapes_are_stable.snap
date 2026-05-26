@@ -1,0 +1,22 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: values
+---
+[
+  {
+    "type": "headless",
+    "payload": {
+      "stdout_path": "/tmp/rtm/stdout.log",
+      "stderr_path": "/tmp/rtm/stderr.log"
+    }
+  },
+  {
+    "type": "tmux_pane_snapshot"
+  },
+  {
+    "type": "unavailable",
+    "payload": {
+      "reason": "tmux_target"
+    }
+  }
+]

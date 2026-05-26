@@ -1,0 +1,26 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: request
+---
+{
+  "session_id": "018f6e28-0000-7000-8000-000000000001",
+  "runtime": "claude",
+  "isolation": {
+    "type": "docker",
+    "payload": {}
+  },
+  "image": "runtime-matters-agent:latest",
+  "env": [],
+  "mounts": [
+    {
+      "source": "/host/claude-config",
+      "target": "/container/claude-config",
+      "read_only": true
+    }
+  ],
+  "cwd": "/tmp/rtm",
+  "target": {
+    "type": "headless",
+    "payload": {}
+  }
+}

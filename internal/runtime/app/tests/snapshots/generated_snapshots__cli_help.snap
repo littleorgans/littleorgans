@@ -1,0 +1,9 @@
+---
+source: crates/rtm-cli/tests/generated_snapshots.rs
+expression: "[lilo_runtime_app::generated::cli_help::MCP_ABOUT,\nlilo_runtime_app::generated::cli_help::KILL_ABOUT,\nlilo_runtime_app::generated::cli_help::STATUS_ABOUT,\nlilo_runtime_app::generated::cli_help::VERSION_ABOUT,\nlilo_runtime_app::generated::cli_help::WATCHERS_ABOUT,].join(\"\\n\")"
+---
+Run the admin MCP stdio bridge.
+Send an operator signal to a runtime process by pid.
+List lifecycle rows from rtmd.
+Print rtmd version metadata.
+Print rtmd watcher counters.

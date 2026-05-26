@@ -1,0 +1,10 @@
+---
+source: crates/rtm-cli/tests/generated_snapshots.rs
+expression: "lilo_runtime_app::generated::mcp_tools::TOOL_NAMES"
+---
+[
+    "rtm_kill_by_pid",
+    "rtm_status",
+    "rtm_version",
+    "rtm_watchers",
+]

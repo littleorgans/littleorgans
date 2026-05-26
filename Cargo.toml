@@ -6,7 +6,14 @@ members = [
     "crates/lilo-im-stub",
     "crates/lilo-common",
     "crates/lilo-paths",
+    "crates/lilo-rm-core",
+    "crates/lilo-rm-client",
     "internal/identity/service",
+    "internal/runtime/platform",
+    "internal/runtime/launchers",
+    "internal/runtime/store",
+    "internal/runtime/daemon",
+    "internal/runtime/app",
     "tools/xtask",
 ]
 resolver = "3"
@@ -30,10 +37,19 @@ lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
 lilo-identity-service = { path = "internal/identity/service" }
+lilo-paths = { path = "crates/lilo-paths", version = "0.8.0" }
+lilo-rm-client = { path = "crates/lilo-rm-client", version = "0.8.0" }
+lilo-rm-core = { path = "crates/lilo-rm-core", version = "0.8.0" }
+lilo-runtime-app = { path = "internal/runtime/app" }
+lilo-runtime-daemon = { path = "internal/runtime/daemon" }
+lilo-runtime-launchers = { path = "internal/runtime/launchers" }
+lilo-runtime-platform = { path = "internal/runtime/platform" }
+lilo-runtime-store = { path = "internal/runtime/store" }
 nix = { version = "0.30", features = ["socket", "user"] }
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+sqlx = { version = "0.8.3", features = ["chrono", "migrate", "runtime-tokio", "sqlite", "uuid"] }
 tempfile = "3.23.0"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = [

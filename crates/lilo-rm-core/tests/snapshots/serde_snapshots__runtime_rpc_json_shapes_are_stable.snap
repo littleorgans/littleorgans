@@ -1,0 +1,147 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+assertion_line: 106
+expression: rpcs
+---
+[
+  {
+    "type": "spawn",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "runtime": "claude",
+        "isolation": {
+          "type": "host"
+        },
+        "env": [],
+        "cwd": "/tmp/rtm",
+        "target": {
+          "type": "tmux",
+          "payload": {
+            "address": "rtm:0.1"
+          }
+        },
+        "force": true
+      }
+    }
+  },
+  {
+    "type": "validate_target",
+    "payload": {
+      "request": {
+        "target": "tmux:rtm:0.1"
+      }
+    }
+  },
+  {
+    "type": "kill",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "signal": "term",
+        "grace_secs": 2
+      }
+    }
+  },
+  {
+    "type": "kill_by_pid",
+    "payload": {
+      "request": {
+        "pid": 4242,
+        "signal": 15,
+        "grace_secs": 1
+      }
+    }
+  },
+  {
+    "type": "nudge",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "content": "wake up"
+      }
+    }
+  },
+  {
+    "type": "capture",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "scrollback_lines": 500
+      }
+    }
+  },
+  {
+    "type": "status",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "session_ids": [
+          "018f6e28-0000-7000-8000-000000000002"
+        ],
+        "updated_since": "2023-11-14T22:13:20Z",
+        "runtime": "claude",
+        "state": "Running"
+      }
+    }
+  },
+  {
+    "type": "version"
+  },
+  {
+    "type": "watchers"
+  },
+  {
+    "type": "doctor"
+  },
+  {
+    "type": "events",
+    "payload": {
+      "since": 7,
+      "wait_ms": 500
+    }
+  },
+  {
+    "type": "stop"
+  },
+  {
+    "type": "mcp_bridge",
+    "payload": {
+      "request": {
+        "line": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}"
+      }
+    }
+  },
+  {
+    "type": "shim_launch",
+    "payload": {
+      "request": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001"
+      }
+    }
+  },
+  {
+    "type": "shim_ready",
+    "payload": {
+      "ready": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "shim_pid": 4241,
+        "runtime_pid": 4242,
+        "start_time": "2023-11-14T22:13:20Z",
+        "tmux_pane": "rtm:0.1"
+      }
+    }
+  },
+  {
+    "type": "shim_exit",
+    "payload": {
+      "exit": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "exit": {
+          "code": null,
+          "signal": 9
+        }
+      }
+    }
+  }
+]

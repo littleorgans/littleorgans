@@ -1,0 +1,31 @@
+---
+source: crates/rtm-cli/tests/surface_snapshots.rs
+expression: normalize_doctor(&output_stdout(output))
+---
+rtmd
+  version             [version]
+  protocol            0.6
+  capabilities        structured_protocol_errors, headless_stdio_log_paths, status_session_set_filter, status_updated_since_filter, typed_nudge_outcomes, validate_target_preflight, events_cursor, events_long_poll, tmux_pane_snapshot, kill_outcomes, spawn_conflicts, spawn_request_mounts
+  socket              [socket]
+  uptime              [uptime]
+sqlite
+  applied migrations  3 of 3 (lifecycle, probe state, lifecycle isolation)
+lifecycles
+  forking             0
+  running             0
+  exited              0
+  lost                0
+process exit watchers 0
+shim sockets          0
+event waiters         0
+launchers
+  claude              [command]
+  codex               [command]
+tmux                  [availability]
+docker
+  cli                 ready (Docker version 27.0.0)
+  daemon              ready (fake-docker)
+  manifest validation ready ({"manifests":[{"platform":{"architecture":"arm64"}}]})
+  isolation           supported=true workspace=/workspace experimental=true
+last probe sweep      [timestamp]
+recent lost           (none in last 24h)

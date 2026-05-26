@@ -1,0 +1,30 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: events
+---
+[
+  {
+    "type": "running",
+    "payload": {
+      "session_id": "018f6e28-0000-7000-8000-000000000001",
+      "runtime_pid": 4242,
+      "start_time": "2023-11-14T22:13:20Z"
+    }
+  },
+  {
+    "type": "terminated",
+    "payload": {
+      "session_id": "018f6e28-0000-7000-8000-000000000001",
+      "exit_code": null,
+      "signal": 9,
+      "evidence": "process_exit"
+    }
+  },
+  {
+    "type": "lost",
+    "payload": {
+      "session_id": "018f6e28-0000-7000-8000-000000000001",
+      "evidence": "pid_reuse_detected"
+    }
+  }
+]

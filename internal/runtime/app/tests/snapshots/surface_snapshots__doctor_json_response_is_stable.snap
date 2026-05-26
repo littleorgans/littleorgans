@@ -1,0 +1,90 @@
+---
+source: crates/rtm-cli/tests/surface_snapshots.rs
+expression: doctor
+---
+{
+  "docker": {
+    "cli": {
+      "detail": "[detail]",
+      "error": "[launcher_error]",
+      "ready": "[readiness]"
+    },
+    "daemon": {
+      "detail": "[detail]",
+      "error": "[launcher_error]",
+      "ready": "[readiness]"
+    },
+    "isolation": {
+      "default_workspace": "[workspace]",
+      "experimental": "[experimental]",
+      "supported": "[support]"
+    },
+    "manifest_validation": {
+      "detail": "[detail]",
+      "error": "[launcher_error]",
+      "ready": "[readiness]"
+    }
+  },
+  "last_probe_sweep": "[timestamp]",
+  "launchers": [
+    {
+      "command": "[command]",
+      "error": "[launcher_error]",
+      "runtime": "claude"
+    },
+    {
+      "command": "[command]",
+      "error": "[launcher_error]",
+      "runtime": "codex"
+    }
+  ],
+  "lifecycles": {
+    "exited": "[count]",
+    "forking": "[count]",
+    "lost": "[count]",
+    "running": "[count]"
+  },
+  "log_availability": [],
+  "recent_lost": [],
+  "socket_path": "[socket]",
+  "sqlite": {
+    "applied": 3,
+    "applied_descriptions": [
+      "lifecycle",
+      "probe state",
+      "lifecycle isolation"
+    ],
+    "pending_descriptions": [],
+    "total": 3
+  },
+  "tmux": {
+    "available": "[tmux]",
+    "error": "[launcher_error]",
+    "version": "[version]"
+  },
+  "uptime_secs": "[uptime]",
+  "version": {
+    "capabilities": [
+      "structured_protocol_errors",
+      "headless_stdio_log_paths",
+      "status_session_set_filter",
+      "status_updated_since_filter",
+      "typed_nudge_outcomes",
+      "validate_target_preflight",
+      "events_cursor",
+      "events_long_poll",
+      "tmux_pane_snapshot",
+      "kill_outcomes",
+      "spawn_conflicts",
+      "spawn_request_mounts"
+    ],
+    "git_sha": "[git_sha]",
+    "protocol_version": "0.6",
+    "version": "[version]"
+  },
+  "watchers": {
+    "event_waiters": 0,
+    "process_exit_watchers": "[count]",
+    "shim_sockets": "[count]"
+  }
+}

@@ -1,0 +1,16 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+assertion_line: 296
+expression: codes
+---
+[
+  "runtime_unavailable",
+  "session_not_found",
+  "tmux_pane_dead",
+  "headless_nudge_unsupported",
+  "launch_failed",
+  "invalid_target",
+  "unsupported_isolation_policy",
+  "spawn_conflict",
+  "protocol_mismatch"
+]
