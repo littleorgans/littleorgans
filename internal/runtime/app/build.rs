@@ -40,15 +40,47 @@ fn emit_cli_version() {
 }
 
 fn emit_git_rerun_directives() {
-    println!("cargo:rerun-if-changed=../../../.git/HEAD");
-    println!("cargo:rerun-if-changed=../../../.git/packed-refs");
-
-    let Some(head) = fs::read_to_string("../../../.git/HEAD").ok() else {
+    // Resolve git directives via `git rev-parse --git-path` so the paths
+    // work in both the main repo (.git is a directory) and a worktree (.git
+    // is a pointer file at <main>/.git/worktrees/<name>/). Only emit
+    // `cargo:rerun-if-changed` for paths that currently exist; otherwise
+    // cargo flags the build script as stale on every invocation and forces
+    // every downstream crate to recompile. Packed-refs and unpacked-ref
+    // files toggle existence based on git GC state, so we tolerate either.
+    let Some(head_path) = git_path("HEAD") else {
         return;
     };
-    if let Some(ref_path) = head.trim().strip_prefix("ref: ") {
-        println!("cargo:rerun-if-changed=../../../.git/{ref_path}");
+    emit_rerun_if_path_exists(Path::new(&head_path));
+
+    if let Some(packed_refs) = git_path("packed-refs") {
+        emit_rerun_if_path_exists(Path::new(&packed_refs));
     }
+
+    let Ok(head) = fs::read_to_string(&head_path) else {
+        return;
+    };
+    if let Some(ref_path) = head.trim().strip_prefix("ref: ")
+        && let Some(resolved) = git_path(ref_path)
+    {
+        emit_rerun_if_path_exists(Path::new(&resolved));
+    }
+}
+
+fn emit_rerun_if_path_exists(path: &Path) {
+    if path.exists() {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+}
+
+fn git_path(rel: &str) -> Option<String> {
+    Command::new("git")
+        .args(["rev-parse", "--git-path", rel])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 fn include_git_sha() -> bool {

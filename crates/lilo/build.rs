@@ -46,34 +46,38 @@ fn short_sha(sha: &str) -> Option<String> {
 }
 
 fn emit_git_rerun_directives() {
-    let git_path = workspace_git_path();
-    println!("cargo:rerun-if-changed={}", git_path.display());
+    emit_rerun_if_path_exists(&workspace_git_path());
 
     let Some(git_dir) = resolve_git_dir() else {
         return;
     };
 
     let head_path = git_dir.join("HEAD");
-    println!("cargo:rerun-if-changed={}", head_path.display());
+    emit_rerun_if_path_exists(&head_path);
 
     let Ok(head) = std::fs::read_to_string(&head_path) else {
         return;
     };
     if let Some(ref_path) = head.trim().strip_prefix("ref: ") {
-        println!(
-            "cargo:rerun-if-changed={}",
-            git_dir.join(ref_path).display()
-        );
+        emit_rerun_if_path_exists(&git_dir.join(ref_path));
         if let Some(common_dir) = resolve_common_git_dir(&git_dir) {
-            println!(
-                "cargo:rerun-if-changed={}",
-                common_dir.join(ref_path).display()
-            );
-            println!(
-                "cargo:rerun-if-changed={}",
-                common_dir.join("packed-refs").display()
-            );
+            emit_rerun_if_path_exists(&common_dir.join(ref_path));
+            emit_rerun_if_path_exists(&common_dir.join("packed-refs"));
         }
+    }
+}
+
+/// Print a `cargo:rerun-if-changed` directive only when the path actually
+/// exists on disk. Git refs may be packed (file absent) or unpacked (file
+/// present), and the workspace's .git layout in a worktree (.git is a
+/// pointer file, real data under <main>/.git/worktrees/<name>/) means many
+/// of the canonical paths cargo would otherwise track are missing. When
+/// cargo encounters a `rerun-if-changed` target that does not exist it
+/// flags the build script as stale on every invocation, forcing every
+/// downstream crate to recompile.
+fn emit_rerun_if_path_exists(path: &Path) {
+    if path.exists() {
+        println!("cargo:rerun-if-changed={}", path.display());
     }
 }
 
