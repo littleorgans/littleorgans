@@ -17,3 +17,6 @@ clap.workspace = true
 lilo-common = { path = "../lilo-common", version = "0.8.0" }
 serde.workspace = true
 serde_json.workspace = true
+
+[lints]
+workspace = true

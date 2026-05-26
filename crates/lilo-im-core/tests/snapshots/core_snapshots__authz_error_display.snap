@@ -1,0 +1,8 @@
+---
+source: crates/im-core/tests/core_snapshots.rs
+expression: rendered
+---
+unauthorized principal for action
+unknown principal
+audit sink failed: sqlite unavailable
+internal authorization error: peer credentials unavailable
