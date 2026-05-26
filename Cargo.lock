@@ -454,6 +454,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilo-identity-service"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "lilo-im-core",
+ "lilo-im-store",
+ "lilo-im-stub",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "lilo-im-core"
 version = "0.8.0"
 dependencies = [

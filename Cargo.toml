@@ -6,6 +6,7 @@ members = [
     "crates/lilo-im-stub",
     "crates/lilo-common",
     "crates/lilo-paths",
+    "internal/identity/service",
     "tools/xtask",
 ]
 resolver = "3"
@@ -28,6 +29,7 @@ insta = { version = "1", features = ["json"] }
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
+lilo-identity-service = { path = "internal/identity/service" }
 nix = { version = "0.30", features = ["socket", "user"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
