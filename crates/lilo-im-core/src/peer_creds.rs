@@ -23,7 +23,12 @@ pub async fn extract(stream: &UnixStream) -> Result<Principal, AuthzError> {
     Ok(principal_from_uid(uid))
 }
 
+// `async` is kept for call-site parity with the macOS branch (which awaits a
+// spawn_blocking task). Linux SO_PEERCRED is a non-blocking getsockopt call so
+// nothing inside actually awaits. clippy::unused_async flags this when only
+// Linux is compiled; the parity guarantee is the load-bearing reason.
 #[cfg(target_os = "linux")]
+#[allow(clippy::unused_async)]
 pub async fn extract(stream: &UnixStream) -> Result<Principal, AuthzError> {
     let credentials = getsockopt(stream, sockopt::PeerCredentials)
         .map_err(|error| internal_error("SO_PEERCRED failed", error))?;
@@ -31,7 +36,9 @@ pub async fn extract(stream: &UnixStream) -> Result<Principal, AuthzError> {
     Ok(principal_from_uid(credentials.uid()))
 }
 
+// Same parity rationale as the Linux branch; this stub never awaits anything.
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "linux"))))]
+#[allow(clippy::unused_async)]
 pub async fn extract(_stream: &UnixStream) -> Result<Principal, AuthzError> {
     Err(unsupported_platform_error())
 }
