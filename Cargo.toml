@@ -23,7 +23,7 @@ rust-version = "1.95"
 [workspace.dependencies]
 anyhow = "1.0.100"
 chrono = { version = "0.4.42", features = ["clock", "serde"] }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5.51", features = ["derive"] }
 insta = { version = "1.43.2", features = ["json", "redactions"] }
 libc = "0.2.186"
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
