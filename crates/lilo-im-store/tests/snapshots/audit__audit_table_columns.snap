@@ -1,0 +1,15 @@
+---
+source: crates/im-store/tests/audit.rs
+expression: audit_columns_snapshot(&columns)
+---
+id TEXT not_null=true primary_key=true
+timestamp TEXT not_null=true primary_key=false
+principal TEXT not_null=true primary_key=false
+action TEXT not_null=true primary_key=false
+resource TEXT not_null=true primary_key=false
+decision TEXT not_null=true primary_key=false
+session_ref TEXT not_null=false primary_key=false
+notes TEXT not_null=false primary_key=false
+policy_id TEXT not_null=false primary_key=false
+evaluation_trace TEXT not_null=false primary_key=false
+denial_reason TEXT not_null=false primary_key=false

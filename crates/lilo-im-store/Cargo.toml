@@ -1,0 +1,33 @@
+[package]
+name = "lilo-im-store"
+description = "Identity Matters audit storage: SqliteAuditSink and filtered audit query API"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["iam", "authorization", "audit", "principal"]
+categories = ["authentication"]
+
+[lib]
+name = "lilo_im_store"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+lilo-im-core.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+lilo-im-stub.workspace = true
+insta.workspace = true
+nix.workspace = true
+tempfile.workspace = true
