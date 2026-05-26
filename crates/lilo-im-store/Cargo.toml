@@ -4,6 +4,7 @@ description = "Identity Matters audit storage: SqliteAuditSink and filtered audi
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -16,7 +17,6 @@ name = "lilo_im_store"
 path = "src/lib.rs"
 
 [dependencies]
-async-trait.workspace = true
 chrono.workspace = true
 lilo-im-core.workspace = true
 rusqlite.workspace = true
@@ -31,3 +31,6 @@ lilo-im-stub.workspace = true
 insta.workspace = true
 nix.workspace = true
 tempfile.workspace = true
+
+[lints]
+workspace = true

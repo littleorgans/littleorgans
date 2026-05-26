@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use lilo_im_core::{Action, AuditRow, Authorizer, AuthzResult, Principal, ResourceSpec};
 use lilo_im_store::{AuditFilters, SqliteAuditSink, StoreError};
 use lilo_im_stub::StubAuthorizer;
@@ -85,7 +84,6 @@ impl IdentityService {
     }
 }
 
-#[async_trait]
 impl Authorizer for IdentityService {
     async fn authorize(
         &self,

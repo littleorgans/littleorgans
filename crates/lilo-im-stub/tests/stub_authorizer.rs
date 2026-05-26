@@ -1,6 +1,5 @@
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Authorized, Authorizer, AuthzError,
     Principal, ResourceSpec,
@@ -18,7 +17,6 @@ impl MockAuditSink {
     }
 }
 
-#[async_trait]
 impl AuditSink for MockAuditSink {
     async fn record(&self, row: AuditRow) -> Result<(), AuditError> {
         self.rows
@@ -45,7 +43,7 @@ async fn authorizes_local_uid_and_audits_both_decisions_with_mock_sink() {
 
 async fn authorize_both_decisions<S>(audit_sink: &S, process_uid: u32)
 where
-    S: AuditSink + ?Sized,
+    S: AuditSink,
 {
     let authorizer = StubAuthorizer::new(audit_sink, process_uid);
     let resource = ResourceSpec::default();

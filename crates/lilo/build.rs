@@ -21,19 +21,23 @@ fn emit_cli_version() {
 fn include_git_sha() -> bool {
     matches!(
         std::env::var("LILO_VERSION_INCLUDE_GIT_SHA").as_deref(),
-        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes")
+        Ok("1" | "true" | "TRUE" | "yes")
     )
 }
 
 fn build_git_sha() -> Option<String> {
     std::env::var("LILO_GIT_SHA")
         .ok()
-        .and_then(short_sha)
-        .or_else(|| std::env::var("GITHUB_SHA").ok().and_then(short_sha))
+        .and_then(|sha| short_sha(&sha))
+        .or_else(|| {
+            std::env::var("GITHUB_SHA")
+                .ok()
+                .and_then(|sha| short_sha(&sha))
+        })
         .or_else(git_head_sha)
 }
 
-fn short_sha(sha: String) -> Option<String> {
+fn short_sha(sha: &str) -> Option<String> {
     let trimmed = sha.trim();
     if trimmed.len() < 7 {
         return None;
@@ -81,7 +85,7 @@ fn git_head_sha() -> Option<String> {
         for dir in git_lookup_dirs(&git_dir) {
             let ref_file = dir.join(ref_path);
             if let Ok(sha) = std::fs::read_to_string(&ref_file) {
-                return short_sha(sha.trim().to_string());
+                return short_sha(sha.trim());
             }
         }
         for dir in git_lookup_dirs(&git_dir) {
@@ -90,14 +94,14 @@ fn git_head_sha() -> Option<String> {
                     if let Some((sha, name)) = line.split_once(' ')
                         && name == ref_path
                     {
-                        return short_sha(sha.to_string());
+                        return short_sha(sha);
                     }
                 }
             }
         }
         None
     } else {
-        short_sha(trimmed.to_string())
+        short_sha(trimmed)
     }
 }
 

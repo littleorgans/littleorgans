@@ -4,6 +4,7 @@ description = "Identity Matters v1 stub: StubAuthorizer that audits decisions wi
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
@@ -16,10 +17,12 @@ name = "lilo_im_stub"
 path = "src/lib.rs"
 
 [dependencies]
-async-trait.workspace = true
 lilo-im-core.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 nix.workspace = true
 tokio.workspace = true
+
+[lints]
+workspace = true

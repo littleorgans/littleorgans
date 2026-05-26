@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -58,7 +57,9 @@ impl AuditRow {
     }
 }
 
-#[async_trait]
 pub trait AuditSink: Send + Sync {
-    async fn record(&self, row: AuditRow) -> Result<(), AuditError>;
+    fn record(
+        &self,
+        row: AuditRow,
+    ) -> impl std::future::Future<Output = Result<(), AuditError>> + Send;
 }

@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Principal, ResourceSpec,
@@ -90,13 +89,12 @@ impl SqliteAuditSink {
 
     async fn insert_audit_row(&self, row: AuditRow) -> Result<(), StoreError> {
         with_connection(self.path.clone(), move |connection| {
-            insert_audit_row(connection, row)
+            insert_audit_row(connection, &row)
         })
         .await
     }
 }
 
-#[async_trait]
 impl AuditSink for SqliteAuditSink {
     async fn record(&self, row: AuditRow) -> Result<(), AuditError> {
         self.insert_audit_row(row)
@@ -237,7 +235,7 @@ fn query_audit_table_columns(
     columns.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
-fn insert_audit_row(connection: &mut Connection, row: AuditRow) -> Result<(), StoreError> {
+fn insert_audit_row(connection: &mut Connection, row: &AuditRow) -> Result<(), StoreError> {
     let id = row.id.to_string();
     let timestamp = row.timestamp.to_rfc3339();
     let principal = serialize_json(&row.principal)?;
@@ -257,10 +255,10 @@ fn insert_audit_row(connection: &mut Connection, row: AuditRow) -> Result<(), St
             resource,
             decision,
             session_ref,
-            row.notes,
-            row.policy_id,
-            row.evaluation_trace,
-            row.denial_reason,
+            row.notes.as_deref(),
+            row.policy_id.as_deref(),
+            row.evaluation_trace.as_deref(),
+            row.denial_reason.as_deref(),
         ],
     )?;
     Ok(())

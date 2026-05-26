@@ -20,7 +20,7 @@ pub enum AuthzError {
 
 impl AuthzError {
     #[must_use]
-    pub fn audit(error: AuditError) -> Self {
+    pub fn audit(error: &AuditError) -> Self {
         Self::Audit {
             message: error.to_string(),
         }

@@ -22,7 +22,6 @@ rust-version = "1.90"
 
 [workspace.dependencies]
 anyhow = "1.0"
-async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 insta = { version = "1", features = ["json"] }
@@ -40,6 +39,11 @@ tokio = { version = "1", features = ["macros", "net", "rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 uuid = { version = "1.9", features = ["serde", "v7"] }
+
+[workspace.lints.clippy]
+needless_pass_by_value = "warn"
+return_self_not_must_use = "warn"
+unnested_or_patterns = "warn"
 
 [profile.release]
 codegen-units = 1

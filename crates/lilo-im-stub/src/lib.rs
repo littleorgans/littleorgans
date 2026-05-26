@@ -2,18 +2,17 @@
 //! enforcement. Use this crate to lock the `lilo-im-core` boundary at call
 //! sites today; v2+ swaps it for `lilo-im-daemon` behind the same `Authorizer`.
 
-use async_trait::async_trait;
 use lilo_im_core::{
     Action, AuditDecision, AuditRow, AuditSink, Authorized, Authorizer, AuthzError, AuthzResult,
     Principal, ResourceSpec,
 };
 
-pub struct StubAuthorizer<'a, S: AuditSink + ?Sized> {
+pub struct StubAuthorizer<'a, S: AuditSink> {
     pub audit_sink: &'a S,
     pub local_uid: u32,
 }
 
-impl<'a, S: AuditSink + ?Sized> StubAuthorizer<'a, S> {
+impl<'a, S: AuditSink> StubAuthorizer<'a, S> {
     #[must_use]
     pub fn new(audit_sink: &'a S, local_uid: u32) -> Self {
         Self {
@@ -30,14 +29,16 @@ impl<'a, S: AuditSink + ?Sized> StubAuthorizer<'a, S> {
         decision: AuditDecision,
     ) -> Result<(), AuthzError> {
         let row = AuditRow::new(principal.clone(), action, resource.clone(), decision);
-        self.audit_sink.record(row).await.map_err(AuthzError::audit)
+        self.audit_sink
+            .record(row)
+            .await
+            .map_err(|error| AuthzError::audit(&error))
     }
 }
 
-#[async_trait]
 impl<S> Authorizer for StubAuthorizer<'_, S>
 where
-    S: AuditSink + ?Sized,
+    S: AuditSink,
 {
     async fn authorize(
         &self,
