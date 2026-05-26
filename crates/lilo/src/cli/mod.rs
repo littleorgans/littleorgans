@@ -43,7 +43,8 @@ Options:
 #[derive(Debug, Parser)]
 #[command(
     name = "lilo",
-    version = lilo_common::version::VERSION_STRING,
+    display_name = "littleorgans",
+    version = crate::VERSION,
     about = "Local-first Little Organs control plane",
     arg_required_else_help = true,
     disable_help_subcommand = true,
