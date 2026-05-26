@@ -14,6 +14,9 @@ fmt-check:
 clippy:
     cargo clippy --workspace --all-targets -- -D warnings
 
+clippy-fix:
+    cargo clippy --fix --workspace --all-targets --allow-dirty --allow-staged -- -D warnings
+
 build:
     cargo build --workspace
 
@@ -21,6 +24,6 @@ test:
     cargo test --workspace
 
 check-loc:
-    ./scripts/check-loc-limit.sh
+    bash scripts/check-loc-limit.sh
 
-check: fmt-check clippy check-loc
+check: fmt clippy-fix fmt-check check-loc clippy
