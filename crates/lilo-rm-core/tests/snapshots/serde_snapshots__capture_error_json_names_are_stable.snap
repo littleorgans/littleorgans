@@ -1,0 +1,24 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: errors
+---
+[
+  {
+    "type": "not_a_tmux_target"
+  },
+  {
+    "type": "pane_unavailable"
+  },
+  {
+    "type": "session_missing"
+  },
+  {
+    "type": "tmux_not_available"
+  },
+  {
+    "type": "capture_pane_failed",
+    "payload": {
+      "stderr": "no pane"
+    }
+  }
+]

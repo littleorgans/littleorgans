@@ -1,0 +1,18 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: "lilo_rm_core::RUNTIME_PROTOCOL_CAPABILITIES"
+---
+[
+  "structured_protocol_errors",
+  "headless_stdio_log_paths",
+  "status_session_set_filter",
+  "status_updated_since_filter",
+  "typed_nudge_outcomes",
+  "validate_target_preflight",
+  "events_cursor",
+  "events_long_poll",
+  "tmux_pane_snapshot",
+  "kill_outcomes",
+  "spawn_conflicts",
+  "spawn_request_mounts"
+]

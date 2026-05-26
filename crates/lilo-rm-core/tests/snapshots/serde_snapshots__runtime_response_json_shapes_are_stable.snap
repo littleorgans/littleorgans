@@ -1,0 +1,367 @@
+---
+source: crates/rtm-core/tests/serde_snapshots.rs
+expression: responses
+---
+[
+  {
+    "type": "spawned",
+    "payload": {
+      "lifecycle": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "runtime": "claude",
+        "state": "running",
+        "shim_pid": 4241,
+        "runtime_pid": 4242,
+        "start_time": "2023-11-14T22:13:20Z",
+        "tmux_pane": "rtm:0.1",
+        "log_availability": {
+          "type": "headless",
+          "payload": {
+            "stdout_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stdout.log",
+            "stderr_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stderr.log"
+          }
+        }
+      },
+      "event": {
+        "type": "running",
+        "payload": {
+          "session_id": "018f6e28-0000-7000-8000-000000000001",
+          "runtime_pid": 4242,
+          "start_time": "2023-11-14T22:13:20Z"
+        }
+      },
+      "log_dir": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001",
+      "stdout_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stdout.log",
+      "stderr_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stderr.log"
+    }
+  },
+  {
+    "type": "spawned",
+    "payload": {
+      "lifecycle": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "runtime": "claude",
+        "state": "running",
+        "shim_pid": 4241,
+        "runtime_pid": 4242,
+        "start_time": "2023-11-14T22:13:20Z",
+        "tmux_pane": "rtm:0.1",
+        "log_availability": {
+          "type": "tmux_pane_snapshot"
+        }
+      },
+      "event": {
+        "type": "running",
+        "payload": {
+          "session_id": "018f6e28-0000-7000-8000-000000000001",
+          "runtime_pid": 4243,
+          "start_time": "2023-11-14T22:13:20Z"
+        }
+      },
+      "log_dir": null,
+      "stdout_path": null,
+      "stderr_path": null
+    }
+  },
+  {
+    "type": "spawn_conflict",
+    "payload": {
+      "kind": "tmux_pane_occupancy",
+      "lifecycle": {
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "runtime": "claude",
+        "state": "running",
+        "shim_pid": 4241,
+        "runtime_pid": 4242,
+        "start_time": "2023-11-14T22:13:20Z",
+        "tmux_pane": "rtm:0.1",
+        "log_availability": {
+          "type": "tmux_pane_snapshot"
+        }
+      }
+    }
+  },
+  {
+    "type": "validate_target",
+    "payload": {
+      "response": {
+        "valid": true,
+        "outcome": {
+          "kind": "valid"
+        }
+      }
+    }
+  },
+  {
+    "type": "validate_target",
+    "payload": {
+      "response": {
+        "valid": false,
+        "outcome": {
+          "kind": "invalid_target",
+          "message": "invalid spawn target tmux:not-a-pane; expected headless or tmux:<session>:<window>.<pane>"
+        }
+      }
+    }
+  },
+  {
+    "type": "validate_target",
+    "payload": {
+      "response": {
+        "valid": false,
+        "outcome": {
+          "kind": "tmux_pane_dead",
+          "address": "rtm:0.1"
+        }
+      }
+    }
+  },
+  {
+    "type": "validate_target",
+    "payload": {
+      "response": {
+        "valid": false,
+        "outcome": {
+          "kind": "unsupported_target",
+          "target": "ssh:remote"
+        }
+      }
+    }
+  },
+  {
+    "type": "shim_launch",
+    "payload": {
+      "launch": {
+        "argv": [
+          "claude",
+          "--resume"
+        ],
+        "env": [
+          {
+            "key": "RTM",
+            "value": "1"
+          }
+        ],
+        "cwd": "/tmp/rtm"
+      }
+    }
+  },
+  {
+    "type": "ack"
+  },
+  {
+    "type": "nudge",
+    "payload": {
+      "response": {
+        "delivered": true,
+        "outcome": {
+          "kind": "delivered"
+        }
+      }
+    }
+  },
+  {
+    "type": "nudge",
+    "payload": {
+      "response": {
+        "delivered": false,
+        "outcome": {
+          "kind": "unsupported",
+          "reason": "headless_lifecycle"
+        }
+      }
+    }
+  },
+  {
+    "type": "nudge",
+    "payload": {
+      "response": {
+        "delivered": false,
+        "outcome": {
+          "kind": "failed",
+          "reason": "tmux_pane_dead"
+        }
+      }
+    }
+  },
+  {
+    "type": "capture",
+    "payload": {
+      "response": {
+        "status": "captured",
+        "payload": {
+          "content": "\u001b[32mhello\u001b[0m",
+          "captured_at_ms": 1700000001000,
+          "scrollback_lines_requested": 1000,
+          "scrollback_lines_included": 1,
+          "pane_history_lines": 2000
+        }
+      }
+    }
+  },
+  {
+    "type": "capture",
+    "payload": {
+      "response": {
+        "status": "failed",
+        "payload": {
+          "type": "pane_unavailable"
+        }
+      }
+    }
+  },
+  {
+    "type": "version",
+    "payload": {
+      "version": {
+        "version": "0.1.6",
+        "git_sha": "0123456",
+        "protocol_version": "0.6",
+        "capabilities": [
+          "structured_protocol_errors",
+          "headless_stdio_log_paths",
+          "status_session_set_filter",
+          "status_updated_since_filter",
+          "typed_nudge_outcomes",
+          "validate_target_preflight",
+          "events_cursor",
+          "events_long_poll",
+          "tmux_pane_snapshot",
+          "kill_outcomes",
+          "spawn_conflicts",
+          "spawn_request_mounts"
+        ]
+      }
+    }
+  },
+  {
+    "type": "doctor",
+    "payload": {
+      "doctor": {
+        "version": {
+          "version": "0.1.6",
+          "git_sha": "0123456",
+          "protocol_version": "0.6",
+          "capabilities": [
+            "structured_protocol_errors",
+            "headless_stdio_log_paths",
+            "status_session_set_filter",
+            "status_updated_since_filter",
+            "typed_nudge_outcomes",
+            "validate_target_preflight",
+            "events_cursor",
+            "events_long_poll",
+            "tmux_pane_snapshot",
+            "kill_outcomes",
+            "spawn_conflicts",
+            "spawn_request_mounts"
+          ]
+        },
+        "socket_path": "/tmp/rtmd.sock",
+        "uptime_secs": 12,
+        "sqlite": {
+          "applied": 3,
+          "total": 3,
+          "applied_descriptions": [
+            "lifecycle",
+            "probe state",
+            "lifecycle isolation"
+          ],
+          "pending_descriptions": []
+        },
+        "lifecycles": {
+          "forking": 1,
+          "running": 2,
+          "exited": 3,
+          "lost": 4
+        },
+        "watchers": {
+          "process_exit_watchers": 5,
+          "shim_sockets": 6,
+          "event_waiters": 3
+        },
+        "launchers": [
+          {
+            "runtime": "claude",
+            "command": "claude",
+            "error": null
+          }
+        ],
+        "tmux": {
+          "available": true,
+          "version": "tmux 3.5a",
+          "error": null
+        },
+        "docker": {
+          "cli": {
+            "ready": true,
+            "detail": "Docker version 27.0.0",
+            "error": null
+          },
+          "daemon": {
+            "ready": true,
+            "detail": "27.0.0",
+            "error": null
+          },
+          "manifest_validation": {
+            "ready": true,
+            "detail": "docker manifest inspect is available",
+            "error": null
+          },
+          "isolation": {
+            "supported": true,
+            "default_workspace": "/workspace",
+            "experimental": true
+          }
+        },
+        "log_availability": [
+          {
+            "session_id": "018f6e28-0000-7000-8000-000000000001",
+            "log_availability": {
+              "type": "tmux_pane_snapshot"
+            }
+          }
+        ],
+        "last_probe_sweep": "2023-11-14T22:13:20Z",
+        "recent_lost": [
+          {
+            "session_id": "018f6e28-0000-7000-8000-000000000002",
+            "evidence": "pid_not_alive",
+            "occurred_at": "2023-11-14T22:13:20Z"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "stopping"
+  },
+  {
+    "type": "error",
+    "payload": {
+      "code": "launch_failed",
+      "message": "failed"
+    }
+  },
+  {
+    "type": "cursor_expired",
+    "payload": {
+      "oldest": 7
+    }
+  },
+  {
+    "type": "events",
+    "payload": {
+      "events": [
+        {
+          "type": "lost",
+          "payload": {
+            "session_id": "018f6e28-0000-7000-8000-000000000001",
+            "evidence": "pid_not_alive"
+          }
+        }
+      ],
+      "cursor": 8
+    }
+  }
+]

@@ -1,0 +1,161 @@
+# runtime-matters admin tool registry.
+# This file generates MCP tool schemas, CLI help, README text, skill docs, and
+# typed aliases in rtm-cli.
+
+[tools.rtm_kill_by_pid]
+cli_name = "kill"
+cli_about = "Send an operator signal to a runtime process by pid."
+mcp_description = "Admin escape hatch that signals a runtime process by pid, waits for the grace period, then sends SIGKILL if the process remains alive."
+args_type = "RtmKillByPidArgs"
+response_type = "RtmKillByPidResponse"
+response_description = "Signal delivery outcome for the requested pid."
+
+[[tools.rtm_kill_by_pid.params]]
+name = "pid"
+kind = "integer"
+format = "u32"
+required = true
+cli_flag = "pid"
+cli_help = "Runtime process id to signal."
+mcp_description = "Runtime process id to signal."
+
+[[tools.rtm_kill_by_pid.params]]
+name = "signal"
+kind = "integer"
+format = "i32"
+required = true
+cli_flag = "signal"
+cli_help = "Signal number to send."
+mcp_description = "POSIX signal number to send."
+
+[[tools.rtm_kill_by_pid.params]]
+name = "grace_secs"
+kind = "integer"
+format = "u32"
+required = true
+cli_flag = "grace-secs"
+cli_help = "Seconds to wait before SIGKILL fallback."
+mcp_description = "Seconds to wait before SIGKILL fallback."
+
+[[tools.rtm_kill_by_pid.outputs]]
+name = "pid"
+kind = "integer"
+description = "Process id that was signaled."
+
+[[tools.rtm_kill_by_pid.outputs]]
+name = "signal"
+kind = "integer"
+description = "Signal number sent first."
+
+[[tools.rtm_kill_by_pid.outputs]]
+name = "killed_after_grace"
+kind = "boolean"
+description = "Whether SIGKILL was sent after the grace period."
+
+[tools.rtm_status]
+cli_name = "status"
+cli_about = "List lifecycle rows from rtmd."
+mcp_description = "Return rtmd Lifecycle rows, optionally filtered by session id, session set, runtime, lifecycle state, and updated time."
+args_type = "RtmStatusArgs"
+response_type = "RtmStatusResponse"
+response_description = "Lifecycle rows visible to rtmd."
+
+[[tools.rtm_status.params]]
+name = "session_id"
+kind = "string"
+format = "uuid"
+required = false
+cli_flag = "session-id"
+cli_help = "Filter to one session id."
+mcp_description = "Optional session id filter."
+
+[[tools.rtm_status.params]]
+name = "session_ids"
+kind = "array"
+items_kind = "string"
+items_format = "uuid"
+required = false
+mcp_description = "Optional session id set filter."
+
+[[tools.rtm_status.params]]
+name = "updated_since"
+kind = "string"
+format = "date-time"
+required = false
+cli_flag = "updated-since"
+cli_help = "Filter to lifecycles updated at or after this RFC3339 timestamp."
+mcp_description = "Optional RFC3339 updated_at lower bound."
+
+[[tools.rtm_status.params]]
+name = "runtime"
+kind = "string"
+required = false
+cli_flag = "runtime"
+cli_help = "Filter by runtime kind."
+mcp_description = "Optional runtime kind filter."
+
+[[tools.rtm_status.params]]
+name = "state"
+kind = "string"
+required = false
+cli_flag = "state"
+cli_help = "Filter by lifecycle state."
+mcp_description = "Optional lifecycle state filter."
+
+[[tools.rtm_status.outputs]]
+name = "lifecycles"
+kind = "array"
+items_kind = "object"
+description = "Matching Lifecycle rows."
+
+[tools.rtm_version]
+cli_name = "version"
+cli_about = "Print rtmd version metadata."
+mcp_description = "Return the rtmd package version, build git sha, protocol version, and advertised capabilities."
+args_type = "RtmVersionArgs"
+response_type = "RtmVersionResponse"
+response_description = "Version metadata for the running daemon."
+
+[[tools.rtm_version.outputs]]
+name = "version"
+kind = "string"
+description = "Package version."
+
+[[tools.rtm_version.outputs]]
+name = "git_sha"
+kind = "string"
+description = "Build git sha."
+
+[[tools.rtm_version.outputs]]
+name = "protocol_version"
+kind = "string"
+description = "Runtime protocol compatibility version."
+
+[[tools.rtm_version.outputs]]
+name = "capabilities"
+kind = "array"
+items_kind = "string"
+description = "Stable runtime protocol capability names."
+
+[tools.rtm_watchers]
+cli_name = "watchers"
+cli_about = "Print rtmd watcher counters."
+mcp_description = "Return rtmd operator visibility counters for process exit watchers, pending shim socket waiters, and Events long poll waiters."
+args_type = "RtmWatchersArgs"
+response_type = "RtmWatchersResponse"
+response_description = "Watcher counters for the running daemon."
+
+[[tools.rtm_watchers.outputs]]
+name = "process_exit_watchers"
+kind = "integer"
+description = "Active process exit watchers."
+
+[[tools.rtm_watchers.outputs]]
+name = "shim_sockets"
+kind = "integer"
+description = "Pending shim socket waiters."
+
+[[tools.rtm_watchers.outputs]]
+name = "event_waiters"
+kind = "integer"
+description = "Active Events long poll waiters."

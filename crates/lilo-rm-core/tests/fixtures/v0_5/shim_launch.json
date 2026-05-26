@@ -1,0 +1,1 @@
+{"payload":{"launch":{"argv":["/Users/alphab/.local/bin/claude"],"cwd":"/tmp/rtm","env":[{"key":"RTM","value":"1"},{"key":"HELIOY_SESSION_ID","value":"018f6e28-0000-7000-8000-000000000001"},{"key":"HELIOY_RUNTIME","value":"claude"},{"key":"RTM_SESSION_ID","value":"018f6e28-0000-7000-8000-000000000001"},{"key":"RTM_RUNTIME_KIND","value":"claude"}]}},"type":"shim_launch"}

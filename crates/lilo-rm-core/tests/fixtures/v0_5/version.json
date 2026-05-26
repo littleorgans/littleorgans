@@ -1,0 +1,1 @@
+{"payload":{"version":{"capabilities":["structured_protocol_errors","headless_stdio_log_paths","status_session_set_filter","status_updated_since_filter","typed_nudge_outcomes","validate_target_preflight","events_cursor","events_long_poll","tmux_pane_snapshot"],"git_sha":"782b3e5e19c5","protocol_version":"0.4","version":"0.2.0"}},"type":"version"}
