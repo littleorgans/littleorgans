@@ -130,6 +130,7 @@ fn non_empty_env(name: &str) -> Option<OsString> {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code)]
 mod tests {
     use super::*;
     use std::sync::{Mutex, MutexGuard, OnceLock};

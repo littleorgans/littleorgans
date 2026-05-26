@@ -1,5 +1,3 @@
-#![forbid(unsafe_code)]
-
 //! Runtime filesystem path policy and daemon endpoint modeling.
 //!
 //! Filesystem locations are plain `PathBuf` values. Daemon connection targets

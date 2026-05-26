@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 //! Local littleorgans path policy plus folded runtime path contracts.
 
 mod lilo;
