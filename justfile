@@ -1,3 +1,10 @@
+set shell := ["bash", "-cu"]
+
+LILO_LOCAL_BIN := env("LILO_LOCAL_BIN", env("HOME") / ".cargo/bin/lilo")
+
+default:
+    @just --list
+
 fmt:
     cargo fmt --all
 
