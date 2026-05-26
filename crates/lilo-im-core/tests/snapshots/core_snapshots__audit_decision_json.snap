@@ -1,0 +1,17 @@
+---
+source: crates/im-core/tests/core_snapshots.rs
+expression: "[AuditDecision::Allow, AuditDecision::Deny\n{ reason: \"non-local uid\".to_owned(), }, AuditDecision::Error\n{ message: \"audit sink failed\".to_owned(), },]"
+---
+[
+  {
+    "kind": "allow"
+  },
+  {
+    "kind": "deny",
+    "reason": "non-local uid"
+  },
+  {
+    "kind": "error",
+    "message": "audit sink failed"
+  }
+]

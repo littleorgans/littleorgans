@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/lilo",
+    "crates/lilo-im-core",
     "crates/lilo-common",
     "crates/lilo-paths",
     "tools/xtask",
@@ -13,16 +14,25 @@ edition = "2024"
 authors = ["Stuart Robinson"]
 license = "MIT"
 repository = "https://github.com/littleorgans/littleorgans"
+homepage = "https://github.com/littleorgans/littleorgans"
 rust-version = "1.90"
 
 [workspace.dependencies]
 anyhow = "1.0"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
+insta = { version = "1", features = ["json"] }
+lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
+nix = { version = "0.30", features = ["socket", "user"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tempfile = "3"
 thiserror = "2.0"
+tokio = { version = "1", features = ["macros", "net", "rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+uuid = { version = "1.9", features = ["serde", "v7"] }
 
 [profile.release]
 codegen-units = 1
