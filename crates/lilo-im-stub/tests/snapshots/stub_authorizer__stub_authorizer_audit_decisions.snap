@@ -1,0 +1,6 @@
+---
+source: crates/im-stub/tests/stub_authorizer.rs
+expression: "format_stub_audit_rows(&rows, process_uid)"
+---
+principal=Local(uid=N) action=Spawn decision=Allow denial_reason=<none>
+principal=Local(uid=other) action=Spawn decision=Deny { reason: "non-local uid" } denial_reason=non-local uid

@@ -1,0 +1,25 @@
+[package]
+name = "lilo-im-stub"
+description = "Identity Matters v1 stub: StubAuthorizer that audits decisions without enforcement"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+keywords = ["iam", "authorization", "audit", "principal"]
+categories = ["authentication"]
+
+[lib]
+name = "lilo_im_stub"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+lilo-im-core.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+nix.workspace = true
+tokio.workspace = true

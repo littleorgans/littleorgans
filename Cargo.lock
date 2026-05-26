@@ -438,6 +438,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilo-im-stub"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "insta",
+ "lilo-im-core",
+ "nix",
+ "tokio",
+]
+
+[[package]]
 name = "lilo-paths"
 version = "0.8.0"
 dependencies = [
