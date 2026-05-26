@@ -1,0 +1,28 @@
+[package]
+name = "lilo-runtime-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "lilo_runtime_platform"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+libc.workspace = true
+lilo-rm-core.workspace = true
+tokio.workspace = true
+uuid = { workspace = true, optional = true }
+
+[features]
+test-support = ["uuid"]
+
+[lints]
+workspace = true

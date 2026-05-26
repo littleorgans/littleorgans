@@ -1,0 +1,25 @@
+---
+source: internal/runtime/daemon/src/docker_argv.rs
+assertion_line: 356
+expression: spec.argv
+---
+[
+    "docker",
+    "run",
+    "--rm",
+    "--name",
+    "rtm-00000000-0000-0000-0000-000000000000",
+    "--label",
+    "io.helioy.runtime-matters.session=00000000-0000-0000-0000-000000000000",
+    "--mount",
+    "type=bind,src=/workspace/project,dst=/workspace/project",
+    "--mount",
+    "type=bind,source=/canonical/host/claude,target=/home/agent/.claude,readonly",
+    "--mount",
+    "type=bind,source=/canonical/host/cache,target=/tmp/claude-cache",
+    "--workdir",
+    "/workspace/project",
+    "--init",
+    "runtime-matters-agent:latest",
+    "claude",
+]

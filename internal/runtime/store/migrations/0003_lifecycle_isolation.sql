@@ -1,0 +1,1 @@
+ALTER TABLE lifecycle ADD COLUMN isolation TEXT NOT NULL DEFAULT 'host';

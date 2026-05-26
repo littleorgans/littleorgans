@@ -1,0 +1,21 @@
+[package]
+name = "lilo-runtime-launchers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "lilo_runtime_launchers"
+path = "src/lib.rs"
+
+[dependencies]
+lilo-rm-core.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true
