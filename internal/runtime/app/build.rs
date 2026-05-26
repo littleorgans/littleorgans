@@ -21,7 +21,7 @@ fn main() {
 
     write_generated_sources(&manifest_dir, registry);
     write_skill_doc(&manifest_dir, registry);
-    write_readme(repo_root, registry);
+    write_readme(&repo_root.join("crates/lilo-rm-core/README.md"), registry);
 }
 
 fn emit_cli_version() {
@@ -110,16 +110,15 @@ fn write_skill_doc(manifest_dir: &Path, registry: &ToolRegistry) {
     write_if_changed(&templates_dir.join("SKILL.md"), &skill_doc(registry));
 }
 
-fn write_readme(repo_root: &Path, registry: &ToolRegistry) {
-    let readme_path = repo_root.join("README.md");
-    let readme = fs::read_to_string(&readme_path)
+fn write_readme(readme_path: &Path, registry: &ToolRegistry) {
+    let readme = fs::read_to_string(readme_path)
         .unwrap_or_else(|error| panic!("read {}: {error}", readme_path.display()));
     let section = format!(
         "<!-- rtm-admin-tools:start -->\n{}<!-- rtm-admin-tools:end -->",
         registry.admin_tools_markdown()
     );
     let next = replace_or_append(&readme, &section);
-    write_if_changed(&readme_path, &next);
+    write_if_changed(readme_path, &next);
 }
 
 fn cli_help(registry: &ToolRegistry) -> String {
