@@ -1,0 +1,157 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+expression: tool
+---
+{
+  "description": "List session records known to the session-matters daemon. Supports the shared selector grammar.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and read across all namespaces.",
+        "type": "boolean"
+      },
+      "id": {
+        "description": "Optional session id to load instead of listing.",
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Optional session selector used for matching sessions. Defaults to all.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      },
+      "show_labels": {
+        "description": "Render session labels in human output. JSON output already includes labels.",
+        "type": "boolean"
+      }
+    },
+    "type": "object"
+  },
+  "name": "session_list",
+  "outputSchema": {
+    "properties": {
+      "sessions": {
+        "items": {
+          "properties": {
+            "agent_config": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "created_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "exit_code": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "labels": {
+              "items": {
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "role": {
+              "type": "string"
+            },
+            "runtime": {
+              "enum": [
+                "claude",
+                "codex"
+              ],
+              "type": "string"
+            },
+            "runtime_pid": {
+              "type": "integer"
+            },
+            "runtime_session": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "started_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "state": {
+              "enum": [
+                "SPAWNING",
+                "RUNNING",
+                "TERMINATED",
+                "LOST"
+              ],
+              "type": "string"
+            },
+            "terminated_at": {
+              "format": "date-time",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tmux_pane": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "transcript_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "updated_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "workspace": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "runtime",
+            "role",
+            "workspace",
+            "state",
+            "runtime_pid",
+            "created_at",
+            "started_at",
+            "updated_at"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "sessions"
+    ],
+    "type": "object"
+  }
+}

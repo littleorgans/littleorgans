@@ -1,0 +1,52 @@
+{
+  "description": "Wait until a selector satisfies running, terminated, or count=N.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and read across all namespaces.",
+        "type": "boolean"
+      },
+      "for": {
+        "description": "Condition to wait for: running, terminated, or count=N.",
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Session selector used for matching sessions to observe.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      },
+      "timeout_secs": {
+        "description": "Seconds to wait before timing out. Defaults to 30.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "selector",
+      "for"
+    ],
+    "type": "object"
+  },
+  "name": "wait",
+  "outputSchema": {
+    "properties": {
+      "matched": {
+        "type": "boolean"
+      },
+      "sessions": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "matched",
+      "sessions"
+    ],
+    "type": "object"
+  }
+}

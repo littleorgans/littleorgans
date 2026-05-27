@@ -1,0 +1,46 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+expression: tool
+---
+{
+  "description": "Return the unread mail count for sessions selected by selector without draining mail.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and read across all namespaces.",
+        "type": "boolean"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      }
+    },
+    "required": [
+      "selector"
+    ],
+    "type": "object"
+  },
+  "name": "mail_check",
+  "outputSchema": {
+    "properties": {
+      "counts": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "unread": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "unread"
+    ],
+    "type": "object"
+  }
+}

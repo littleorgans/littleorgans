@@ -1,0 +1,234 @@
+---
+source: internal/session/app/tests/runtime_contract_snapshot_test.rs
+assertion_line: 18
+expression: "serde_json::json!({\n    \"spawn\":\n    RuntimeResponse::Spawned(SpawnedPayload\n    {\n        lifecycle: lifecycle.clone(), event: running_event(session_id),\n        log_dir:\n        Some(\"/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001\".into()),\n        stdout_path:\n        Some(\"/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stdout.log\".into()),\n        stderr_path:\n        Some(\"/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stderr.log\".into()),\n    }), \"status\":\n    RuntimeResponse::Status(StatusPayload\n    { lifecycles: vec![lifecycle.clone()], }), \"kill\":\n    RuntimeResponse::Killed(KilledPayload\n    { outcome: KillOutcome::AlreadyExited, }), \"nudge\":\n    RuntimeResponse::Nudge(NudgePayload\n    {\n        response: NudgeResponse\n        {\n            delivered: false, outcome:\n            NudgeOutcome::Unsupported(NudgeFailureReason::HeadlessLifecycle),\n        },\n    }), \"validate_target\":\n    RuntimeResponse::ValidateTarget(ValidateTargetPayload\n    {\n        response: ValidateTargetResponse\n        {\n            valid: false, outcome: ValidateTargetOutcome::TmuxPaneDead\n            { address: \"agents:0.1\".parse().expect(\"tmux address\"), },\n        },\n    }), \"capture\":\n    RuntimeResponse::Capture(CapturePayload\n    {\n        response:\n        CaptureResponse::Captured(PaneSnapshot\n        {\n            content: \"ready\\n\".to_string(), captured_at_ms: 1_700_000_001_000,\n            scrollback_lines_requested: 500, scrollback_lines_included: 1,\n            pane_history_lines: 42,\n        }),\n    }), \"capture_failed\":\n    RuntimeResponse::Capture(CapturePayload\n    { response: CaptureResponse::Failed(CaptureError::PaneUnavailable), }),\n    \"events\": EventBatch::Events\n    {\n        events:\n        vec![running_event(session_id), RuntimeEvent::Terminated\n        {\n            session_id, exit_code: Some(0), signal: None, evidence:\n            TerminationEvidence::ProcessExit,\n        },], cursor: 8,\n    }, \"cursor_expired\": EventBatch::CursorExpired { oldest: 5 },\n    \"events_response\":\n    RuntimeResponse::Events(EventsPayload\n    {\n        events:\n        vec![RuntimeEvent::Lost\n        { session_id, evidence: LostEvidence::PidNotAlive, }], cursor: 9,\n    }), \"cursor_expired_response\":\n    RuntimeResponse::CursorExpired(CursorExpiredPayload { oldest: 5, }),\n    \"doctor\":\n    RuntimeResponse::Doctor(DoctorPayload\n    { doctor: doctor_payload(session_id), }),\n})"
+---
+{
+  "capture": {
+    "payload": {
+      "response": {
+        "payload": {
+          "captured_at_ms": 1700000001000,
+          "content": "ready\n",
+          "pane_history_lines": 42,
+          "scrollback_lines_included": 1,
+          "scrollback_lines_requested": 500
+        },
+        "status": "captured"
+      }
+    },
+    "type": "capture"
+  },
+  "capture_failed": {
+    "payload": {
+      "response": {
+        "payload": {
+          "type": "pane_unavailable"
+        },
+        "status": "failed"
+      }
+    },
+    "type": "capture"
+  },
+  "cursor_expired": {
+    "CursorExpired": {
+      "oldest": 5
+    }
+  },
+  "cursor_expired_response": {
+    "payload": {
+      "oldest": 5
+    },
+    "type": "cursor_expired"
+  },
+  "doctor": {
+    "payload": {
+      "doctor": {
+        "last_probe_sweep": "2023-11-14T22:13:20Z",
+        "launchers": [],
+        "lifecycles": {
+          "exited": 2,
+          "forking": 0,
+          "lost": 0,
+          "running": 1
+        },
+        "log_availability": [
+          {
+            "log_availability": {
+              "payload": {
+                "stderr_path": "/tmp/rtm/stderr.log",
+                "stdout_path": "/tmp/rtm/stdout.log"
+              },
+              "type": "headless"
+            },
+            "session_id": "018f6e28-0000-7000-8000-000000000001"
+          }
+        ],
+        "recent_lost": [
+          {
+            "evidence": "pid_reuse_detected",
+            "occurred_at": "2023-11-14T22:13:20Z",
+            "session_id": "018f6e28-0000-7000-8000-000000000001"
+          }
+        ],
+        "socket_path": "/tmp/rtm/sock",
+        "sqlite": {
+          "applied": 2,
+          "applied_descriptions": [
+            "lifecycle",
+            "events"
+          ],
+          "pending_descriptions": [],
+          "total": 2
+        },
+        "tmux": {
+          "available": true,
+          "error": null,
+          "version": "tmux 3.5a"
+        },
+        "uptime_secs": 12,
+        "version": {
+          "capabilities": [
+            "structured_protocol_errors",
+            "headless_stdio_log_paths",
+            "status_session_set_filter",
+            "status_updated_since_filter",
+            "typed_nudge_outcomes",
+            "validate_target_preflight",
+            "events_cursor",
+            "events_long_poll",
+            "tmux_pane_snapshot",
+            "kill_outcomes",
+            "spawn_conflicts",
+            "spawn_request_mounts"
+          ],
+          "git_sha": "0123456",
+          "protocol_version": "0.6",
+          "version": "0.6.0"
+        },
+        "watchers": {
+          "event_waiters": 0,
+          "process_exit_watchers": 1,
+          "shim_sockets": 1
+        }
+      }
+    },
+    "type": "doctor"
+  },
+  "events": {
+    "Events": {
+      "cursor": 8,
+      "events": [
+        {
+          "payload": {
+            "runtime_pid": 4242,
+            "session_id": "018f6e28-0000-7000-8000-000000000001",
+            "start_time": "2023-11-14T22:13:20Z"
+          },
+          "type": "running"
+        },
+        {
+          "payload": {
+            "evidence": "process_exit",
+            "exit_code": 0,
+            "session_id": "018f6e28-0000-7000-8000-000000000001",
+            "signal": null
+          },
+          "type": "terminated"
+        }
+      ]
+    }
+  },
+  "events_response": {
+    "payload": {
+      "cursor": 9,
+      "events": [
+        {
+          "payload": {
+            "evidence": "pid_not_alive",
+            "session_id": "018f6e28-0000-7000-8000-000000000001"
+          },
+          "type": "lost"
+        }
+      ]
+    },
+    "type": "events"
+  },
+  "kill": {
+    "payload": {
+      "outcome": "already_exited"
+    },
+    "type": "killed"
+  },
+  "nudge": {
+    "payload": {
+      "response": {
+        "delivered": false,
+        "outcome": {
+          "kind": "unsupported",
+          "reason": "headless_lifecycle"
+        }
+      }
+    },
+    "type": "nudge"
+  },
+  "spawn": {
+    "payload": {
+      "event": {
+        "payload": {
+          "runtime_pid": 4242,
+          "session_id": "018f6e28-0000-7000-8000-000000000001",
+          "start_time": "2023-11-14T22:13:20Z"
+        },
+        "type": "running"
+      },
+      "lifecycle": {
+        "log_availability": {
+          "type": "tmux_pane_snapshot"
+        },
+        "runtime": "claude",
+        "runtime_pid": 4242,
+        "session_id": "018f6e28-0000-7000-8000-000000000001",
+        "shim_pid": 4241,
+        "start_time": "2023-11-14T22:13:20Z",
+        "state": "running",
+        "tmux_pane": "agents:0.1"
+      },
+      "log_dir": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001",
+      "stderr_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stderr.log",
+      "stdout_path": "/tmp/rtm/logs/018f6e28-0000-7000-8000-000000000001/stdout.log"
+    },
+    "type": "spawned"
+  },
+  "status": {
+    "payload": {
+      "lifecycles": [
+        {
+          "log_availability": {
+            "type": "tmux_pane_snapshot"
+          },
+          "runtime": "claude",
+          "runtime_pid": 4242,
+          "session_id": "018f6e28-0000-7000-8000-000000000001",
+          "shim_pid": 4241,
+          "start_time": "2023-11-14T22:13:20Z",
+          "state": "running",
+          "tmux_pane": "agents:0.1"
+        }
+      ]
+    },
+    "type": "status"
+  },
+  "validate_target": {
+    "payload": {
+      "response": {
+        "outcome": {
+          "address": "agents:0.1",
+          "kind": "tmux_pane_dead"
+        },
+        "valid": false
+      }
+    },
+    "type": "validate_target"
+  }
+}

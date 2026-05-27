@@ -1,0 +1,41 @@
+[tools.logs]
+cli_name        = "logs"
+mcp_description = "Read the transcript linked to one selected session."
+cli_about       = "Read linked transcript logs for one session."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["session", "transcript_path", "content"],
+  "properties": {
+    "session": {"type": "object"},
+    "transcript_path": {"type": "string"},
+    "content": {"type": "string"}
+  }
+}
+'''
+
+[[tools.logs.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Selector that must match exactly one session with transcript logs."
+cli_help        = "Selector that must match exactly one session with transcript logs."
+cli_flag        = "selector"
+selector        = true
+
+[[tools.logs.params]]
+name            = "follow"
+type            = "boolean"
+required        = false
+mcp_description = "CLI only: follow appended transcript bytes."
+cli_help        = "Follow appended transcript bytes."
+cli_flag        = "--follow"
+
+[[tools.logs.params]]
+name            = "max_bytes"
+type            = "integer"
+required        = false
+mcp_description = "Maximum bytes to return from the end of the transcript."
+cli_help        = "Maximum bytes to return from the end of the transcript."
+cli_flag        = "--max-bytes"

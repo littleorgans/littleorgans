@@ -1,0 +1,64 @@
+{
+  "description": "Deprecated compatibility alias for session_capture. Capture tmux pane scrollback for one selected session.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and read across all namespaces.",
+        "type": "boolean"
+      },
+      "id": {
+        "description": "Exact session id to capture.",
+        "format": "uuid",
+        "type": "string"
+      },
+      "json": {
+        "description": "Render the captured session and capture result as JSON.",
+        "type": "boolean"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "scrollback_lines": {
+        "description": "Maximum tmux scrollback lines to include. When omitted, runtime-matters uses its default capture depth.",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "type": "object"
+  },
+  "name": "agent_capture",
+  "outputSchema": {
+    "properties": {
+      "capture": {
+        "properties": {
+          "payload": {
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "captured",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "session": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "session",
+      "capture"
+    ],
+    "type": "object"
+  }
+}

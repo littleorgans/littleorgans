@@ -1,0 +1,46 @@
+{
+  "description": "Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "grace_secs": {
+        "description": "Seconds to wait before SIGKILL. Defaults to 5.",
+        "type": "integer"
+      },
+      "selector": {
+        "description": "Session selector used for matching sessions to terminate.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      },
+      "signal": {
+        "description": "Signal to send. Defaults to SIGTERM.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "selector"
+    ],
+    "type": "object"
+  },
+  "name": "session_delete",
+  "outputSchema": {
+    "properties": {
+      "errors": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "sessions": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "sessions",
+      "errors"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,29 @@
+[package]
+name = "lilo-session-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "lilo_session_driver"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+lilo-session-core.workspace = true
+lilo-rm-client.workspace = true
+lilo-rm-core.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

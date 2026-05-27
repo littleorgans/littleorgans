@@ -1,0 +1,40 @@
+[tools.wait]
+cli_name        = "wait"
+mcp_description = "Wait until a selector satisfies running, terminated, or count=N."
+cli_about       = "Wait until a selector satisfies a condition."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["matched", "sessions"],
+  "properties": {
+    "matched": {"type": "boolean"},
+    "sessions": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.wait.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Session selector used for matching sessions to observe."
+cli_help        = "Session selector used for matching sessions to observe."
+cli_flag        = "selector"
+selector        = true
+
+[[tools.wait.params]]
+name            = "for"
+type            = "string"
+required        = true
+mcp_description = "Condition to wait for: running, terminated, or count=N."
+cli_help        = "Condition to wait for: running, terminated, or count=N."
+cli_flag        = "--for"
+
+[[tools.wait.params]]
+name            = "timeout_secs"
+type            = "integer"
+required        = false
+mcp_description = "Seconds to wait before timing out. Defaults to 30."
+cli_help        = "Seconds to wait before timing out. Defaults to 30."
+cli_flag        = "--timeout"

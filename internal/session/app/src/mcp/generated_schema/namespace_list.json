@@ -1,0 +1,41 @@
+{
+  "description": "List namespace records known to the session-matters daemon.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "slug": {
+        "description": "Optional namespace slug to load instead of listing.",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "name": "namespace_list",
+  "outputSchema": {
+    "properties": {
+      "namespaces": {
+        "items": {
+          "properties": {
+            "created_at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "namespace",
+            "created_at"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "namespaces"
+    ],
+    "type": "object"
+  }
+}

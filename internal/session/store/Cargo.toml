@@ -1,0 +1,28 @@
+[package]
+name = "lilo-session-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "lilo_session_store"
+path = "src/lib.rs"
+
+[dependencies]
+chrono.workspace = true
+lilo-session-core.workspace = true
+lilo-rm-core.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
