@@ -25,7 +25,8 @@ pub(crate) async fn nudge(
         context,
         arguments,
         required_selector(arguments, "to")?,
-    )?;
+    )
+    .await?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -57,7 +58,7 @@ pub(crate) async fn logs(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_string(arguments, "id").and_then(selector_from_id))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -94,7 +95,8 @@ pub(crate) async fn wait(
         context,
         arguments,
         required_selector(arguments, "selector")?,
-    )?;
+    )
+    .await?;
     let response = state
         .handle_direct(
             context.clone(),

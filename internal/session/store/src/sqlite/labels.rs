@@ -1,64 +1,76 @@
 use lilo_session_core::{Label, LabelMutation, Session};
-use rusqlite::params;
+use sqlx::Row;
 use uuid::Uuid;
 
 use super::{SessionRowError, SqliteStore};
 
 impl SqliteStore {
-    pub fn apply_label_mutation(
+    pub async fn apply_label_mutation(
         &self,
         id: &Uuid,
         mutation: &LabelMutation,
     ) -> Result<Option<Session>, SessionRowError> {
         match mutation {
-            LabelMutation::Set(label) => self.upsert_label(id, label)?,
-            LabelMutation::Remove { key } => self.remove_label(id, key)?,
+            LabelMutation::Set(label) => self.upsert_label(id, label).await?,
+            LabelMutation::Remove { key } => self.remove_label(id, key).await?,
         }
-        self.get_session(id)
+        self.get_session(id).await
     }
 
-    pub(crate) fn insert_session_labels(
+    pub(crate) async fn insert_session_labels(
         &self,
         id: &Uuid,
         labels: &[Label],
     ) -> Result<(), SessionRowError> {
         for label in labels {
-            self.upsert_label(id, label)?;
+            self.upsert_label(id, label).await?;
         }
         Ok(())
     }
 
-    pub(crate) fn labels_for_session(&self, id: &Uuid) -> Result<Vec<Label>, SessionRowError> {
-        let mut statement = self.connection.prepare(
+    pub(crate) async fn labels_for_session(
+        &self,
+        id: &Uuid,
+    ) -> Result<Vec<Label>, SessionRowError> {
+        let rows = sqlx::query(
             "SELECT key, value
-             FROM labels
+             FROM session_labels
              WHERE session_id = ?1
              ORDER BY key",
-        )?;
-        let rows = statement.query_map([id.to_string()], |row| {
-            Ok(Label {
-                key: row.get("key")?,
-                value: row.get("value")?,
+        )
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(Label {
+                    key: row.try_get("key")?,
+                    value: row.try_get("value")?,
+                })
             })
-        })?;
-        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+            .collect()
     }
 
-    fn upsert_label(&self, id: &Uuid, label: &Label) -> Result<(), SessionRowError> {
-        self.connection.execute(
-            "INSERT INTO labels (session_id, key, value)
-             VALUES (?1, ?2, ?3)
+    async fn upsert_label(&self, id: &Uuid, label: &Label) -> Result<(), SessionRowError> {
+        sqlx::query(
+            "INSERT INTO session_labels (session_id, key, value)
+             VALUES (?, ?, ?)
              ON CONFLICT(session_id, key) DO UPDATE SET value = excluded.value",
-            params![id.to_string(), &label.key, &label.value],
-        )?;
+        )
+        .bind(id.to_string())
+        .bind(&label.key)
+        .bind(&label.value)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    fn remove_label(&self, id: &Uuid, key: &str) -> Result<(), SessionRowError> {
-        self.connection.execute(
-            "DELETE FROM labels WHERE session_id = ?1 AND key = ?2",
-            params![id.to_string(), key],
-        )?;
+    async fn remove_label(&self, id: &Uuid, key: &str) -> Result<(), SessionRowError> {
+        sqlx::query("DELETE FROM session_labels WHERE session_id = ? AND key = ?")
+            .bind(id.to_string())
+            .bind(key)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }

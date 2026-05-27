@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-cli/tests/surface_snapshots.rs
+source: internal/runtime/app/tests/surface_snapshots.rs
+assertion_line: 76
 expression: normalize_doctor(&output_stdout(output))
 ---
 rtmd
@@ -9,7 +10,7 @@ rtmd
   socket              [socket]
   uptime              [uptime]
 sqlite
-  applied migrations  3 of 3 (lifecycle, probe state, lifecycle isolation)
+  applied migrations  1 of 1 (unified schema)
 lifecycles
   forking             0
   running             0

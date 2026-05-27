@@ -1,24 +1,19 @@
-use std::path::{Path, PathBuf};
-
 use chrono::{DateTime, Utc};
 use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Principal, ResourceSpec,
 };
-use rusqlite::types::ToSql;
-use rusqlite::{Connection, Row, params, params_from_iter};
 use serde::Serialize;
+use sqlx::sqlite::SqliteRow;
+use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::config::{audit_db_parent, default_audit_db_path};
-use crate::schema::{AUDIT_MIGRATION_SQL, AUDIT_SCHEMA_VERSION, AUDIT_TABLE, SCHEMA_VERSION_TABLE};
+use crate::schema::AUDIT_TABLE;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("sqlite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
-    #[error("sqlite task join error: {0}")]
-    TaskJoin(#[from] tokio::task::JoinError),
+    Sqlite(#[from] sqlx::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
     #[error("timestamp parse error: {0}")]
@@ -27,8 +22,6 @@ pub enum StoreError {
     Uuid(#[from] uuid::Error),
     #[error("audit query limit too large: {0}")]
     LimitTooLarge(usize),
-    #[error("io error: {0}")]
-    Io(#[from] std::io::Error),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -49,49 +42,41 @@ pub struct AuditTableColumn {
 
 #[derive(Debug, Clone)]
 pub struct SqliteAuditSink {
-    path: PathBuf,
+    pool: SqlitePool,
 }
 
 impl SqliteAuditSink {
-    pub async fn new(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        Self::connect(path).await
+    #[must_use]
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
     }
 
-    pub async fn connect(path: impl AsRef<Path>) -> Result<Self, StoreError> {
-        let path = path.as_ref().to_path_buf();
-        if let Some(parent) = audit_db_parent(&path) {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        with_connection(path.clone(), |_| Ok(())).await?;
-
-        Ok(Self { path })
-    }
-
-    pub async fn connect_default() -> Result<Self, StoreError> {
-        Self::connect(default_audit_db_path()).await
-    }
-
-    pub async fn run_migrations(&self) -> Result<(), StoreError> {
-        with_connection(self.path.clone(), run_audit_migrations).await
+    #[must_use]
+    pub fn with_pool(pool: SqlitePool) -> Self {
+        Self::new(pool)
     }
 
     pub async fn query_audit(&self, filters: AuditFilters) -> Result<Vec<AuditRow>, StoreError> {
-        with_connection(self.path.clone(), move |connection| {
-            query_audit_rows(connection, filters)
-        })
-        .await
+        query_audit_rows(&self.pool, filters).await
     }
 
     pub async fn audit_table_columns(&self) -> Result<Vec<AuditTableColumn>, StoreError> {
-        with_connection(self.path.clone(), query_audit_table_columns).await
+        let sql = format!("PRAGMA table_info({AUDIT_TABLE})");
+        let rows = sqlx::query(&sql).fetch_all(&self.pool).await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(AuditTableColumn {
+                    name: row.try_get("name")?,
+                    data_type: row.try_get("type")?,
+                    not_null: row.try_get::<i64, _>("notnull")? != 0,
+                    primary_key: row.try_get::<i64, _>("pk")? != 0,
+                })
+            })
+            .collect()
     }
 
     async fn insert_audit_row(&self, row: AuditRow) -> Result<(), StoreError> {
-        with_connection(self.path.clone(), move |connection| {
-            insert_audit_row(connection, &row)
-        })
-        .await
+        insert_audit_row(&self.pool, &row).await
     }
 }
 
@@ -119,19 +104,19 @@ struct AuditRecord {
 }
 
 impl AuditRecord {
-    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+    fn from_row(row: &SqliteRow) -> Result<Self, StoreError> {
         Ok(Self {
-            id: row.get("id")?,
-            timestamp: row.get("timestamp")?,
-            principal: row.get("principal")?,
-            action: row.get("action")?,
-            resource: row.get("resource")?,
-            decision: row.get("decision")?,
-            session_ref: row.get("session_ref")?,
-            notes: row.get("notes")?,
-            policy_id: row.get("policy_id")?,
-            evaluation_trace: row.get("evaluation_trace")?,
-            denial_reason: row.get("denial_reason")?,
+            id: row.try_get("id")?,
+            timestamp: row.try_get("timestamp")?,
+            principal: row.try_get("principal")?,
+            action: row.try_get("action")?,
+            resource: row.try_get("resource")?,
+            decision: row.try_get("decision")?,
+            session_ref: row.try_get("session_ref")?,
+            notes: row.try_get("notes")?,
+            policy_id: row.try_get("policy_id")?,
+            evaluation_trace: row.try_get("evaluation_trace")?,
+            denial_reason: row.try_get("denial_reason")?,
         })
     }
 
@@ -152,17 +137,6 @@ impl AuditRecord {
     }
 }
 
-impl AuditTableColumn {
-    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
-        Ok(Self {
-            name: row.get("name")?,
-            data_type: row.get("type")?,
-            not_null: row.get::<_, i64>("notnull")? != 0,
-            primary_key: row.get::<_, i64>("pk")? != 0,
-        })
-    }
-}
-
 fn serialize_json<T: Serialize>(value: &T) -> Result<String, StoreError> {
     serde_json::to_string(value).map_err(Into::into)
 }
@@ -174,160 +148,75 @@ fn parse_optional_uuid(value: Option<String>) -> Result<Option<Uuid>, StoreError
         .map_err(Into::into)
 }
 
-async fn with_connection<T>(
-    path: PathBuf,
-    operation: impl FnOnce(&mut Connection) -> Result<T, StoreError> + Send + 'static,
-) -> Result<T, StoreError>
-where
-    T: Send + 'static,
-{
-    tokio::task::spawn_blocking(move || {
-        let mut connection = Connection::open(path)?;
-        operation(&mut connection)
-    })
-    .await?
-}
-
-fn run_audit_migrations(connection: &mut Connection) -> Result<(), StoreError> {
-    connection.execute_batch(&create_schema_version_table_sql())?;
-    if schema_version_applied(connection, AUDIT_SCHEMA_VERSION)? {
-        return Ok(());
-    }
-
-    let transaction = connection.transaction()?;
-    transaction.execute_batch(AUDIT_MIGRATION_SQL)?;
-    transaction.execute(
-        &insert_schema_version_sql(),
-        params![AUDIT_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-    )?;
-    transaction.commit()?;
-    Ok(())
-}
-
-fn schema_version_applied(connection: &Connection, version: i64) -> Result<bool, StoreError> {
-    let applied = connection.query_row(&schema_version_applied_sql(), params![version], |row| {
-        row.get::<_, i64>(0)
-    })?;
-    Ok(applied != 0)
-}
-
-fn query_audit_rows(
-    connection: &mut Connection,
+async fn query_audit_rows(
+    pool: &SqlitePool,
     filters: AuditFilters,
 ) -> Result<Vec<AuditRow>, StoreError> {
-    let (query, params) = select_audit_sql(filters)?;
-    let mut statement = connection.prepare(&query)?;
-    let records = statement.query_map(
-        params_from_iter(params.iter().map(|param| param.as_ref() as &dyn ToSql)),
-        AuditRecord::from_row,
-    )?;
-    records
-        .map(|record| record?.try_into_audit_row())
-        .collect::<Result<Vec<_>, _>>()
-}
-
-fn query_audit_table_columns(
-    connection: &mut Connection,
-) -> Result<Vec<AuditTableColumn>, StoreError> {
-    let query = audit_table_columns_sql();
-    let mut statement = connection.prepare(&query)?;
-    let columns = statement.query_map([], AuditTableColumn::from_row)?;
-    columns.collect::<Result<Vec<_>, _>>().map_err(Into::into)
-}
-
-fn insert_audit_row(connection: &mut Connection, row: &AuditRow) -> Result<(), StoreError> {
-    let id = row.id.to_string();
-    let timestamp = row.timestamp.to_rfc3339();
-    let principal = serialize_json(&row.principal)?;
-    let action = serialize_json(&row.action)?;
-    let resource = serialize_json(&row.resource)?;
-    let decision = serialize_json(&row.decision)?;
-    let session_ref = row.session_ref.map(|id| id.to_string());
-    let statement = insert_audit_sql();
-
-    connection.execute(
-        &statement,
-        params![
-            id,
-            timestamp,
-            principal,
-            action,
-            resource,
-            decision,
-            session_ref,
-            row.notes.as_deref(),
-            row.policy_id.as_deref(),
-            row.evaluation_trace.as_deref(),
-            row.denial_reason.as_deref(),
-        ],
-    )?;
-    Ok(())
-}
-
-fn create_schema_version_table_sql() -> String {
-    format!(
-        "\
-CREATE TABLE IF NOT EXISTS {SCHEMA_VERSION_TABLE} (
-    version INTEGER NOT NULL PRIMARY KEY,
-    applied_at TEXT NOT NULL
-)"
-    )
-}
-
-fn insert_schema_version_sql() -> String {
-    format!("INSERT OR IGNORE INTO {SCHEMA_VERSION_TABLE} (version, applied_at) VALUES (?1, ?2)")
-}
-
-fn schema_version_applied_sql() -> String {
-    format!("SELECT EXISTS(SELECT 1 FROM {SCHEMA_VERSION_TABLE} WHERE version = ?1)")
-}
-
-fn select_audit_sql(filters: AuditFilters) -> Result<(String, Vec<Box<dyn ToSql>>), StoreError> {
-    let mut conditions = Vec::new();
-    let mut params: Vec<Box<dyn ToSql>> = Vec::new();
-
-    if let Some(principal) = filters.principal {
-        conditions.push("principal = ?");
-        params.push(Box::new(serialize_json(&principal)?));
-    }
-    if let Some(action) = filters.action {
-        conditions.push("action = ?");
-        params.push(Box::new(serialize_json(&action)?));
-    }
-    if let Some(since) = filters.since {
-        conditions.push("timestamp >= ?");
-        params.push(Box::new(since.to_rfc3339()));
-    }
-
-    let mut query = format!(
+    let mut query = QueryBuilder::<Sqlite>::new(format!(
         "\
 SELECT id, timestamp, principal, action, resource, decision, session_ref, notes,
        policy_id, evaluation_trace, denial_reason
-FROM {AUDIT_TABLE}"
-    );
-    if !conditions.is_empty() {
-        query.push_str(" WHERE ");
-        query.push_str(&conditions.join(" AND "));
+FROM {AUDIT_TABLE}",
+    ));
+    let mut has_where = false;
+    if let Some(principal) = filters.principal {
+        push_where(&mut query, &mut has_where);
+        query
+            .push("principal = ")
+            .push_bind(serialize_json(&principal)?);
     }
-    query.push_str(" ORDER BY rowid ASC");
+    if let Some(action) = filters.action {
+        push_where(&mut query, &mut has_where);
+        query.push("action = ").push_bind(serialize_json(&action)?);
+    }
+    if let Some(since) = filters.since {
+        push_where(&mut query, &mut has_where);
+        query.push("timestamp >= ").push_bind(since.to_rfc3339());
+    }
+    query.push(" ORDER BY rowid ASC");
     if let Some(limit) = filters.limit {
         let limit = i64::try_from(limit).map_err(|_| StoreError::LimitTooLarge(limit))?;
-        query.push_str(" LIMIT ?");
-        params.push(Box::new(limit));
+        query.push(" LIMIT ").push_bind(limit);
     }
-    Ok((query, params))
+
+    let rows = query.build().fetch_all(pool).await?;
+    rows.into_iter()
+        .map(|row| AuditRecord::from_row(&row))
+        .map(|record| record.and_then(AuditRecord::try_into_audit_row))
+        .collect()
 }
 
-fn audit_table_columns_sql() -> String {
-    format!("PRAGMA table_info({AUDIT_TABLE})")
-}
-
-fn insert_audit_sql() -> String {
-    format!(
+async fn insert_audit_row(pool: &SqlitePool, row: &AuditRow) -> Result<(), StoreError> {
+    let sql = format!(
         "\
 INSERT INTO {AUDIT_TABLE} (
     id, timestamp, principal, action, resource, decision, session_ref, notes,
     policy_id, evaluation_trace, denial_reason
-) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
-    )
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+
+    sqlx::query(&sql)
+        .bind(row.id.to_string())
+        .bind(row.timestamp.to_rfc3339())
+        .bind(serialize_json(&row.principal)?)
+        .bind(serialize_json(&row.action)?)
+        .bind(serialize_json(&row.resource)?)
+        .bind(serialize_json(&row.decision)?)
+        .bind(row.session_ref.map(|id| id.to_string()))
+        .bind(row.notes.as_deref())
+        .bind(row.policy_id.as_deref())
+        .bind(row.evaluation_trace.as_deref())
+        .bind(row.denial_reason.as_deref())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+fn push_where(query: &mut QueryBuilder<'_, Sqlite>, has_where: &mut bool) {
+    if *has_where {
+        query.push(" AND ");
+    } else {
+        query.push(" WHERE ");
+        *has_where = true;
+    }
 }

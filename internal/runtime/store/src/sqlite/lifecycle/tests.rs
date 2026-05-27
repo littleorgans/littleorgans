@@ -127,7 +127,7 @@ async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
     assert_eq!(counts.lost, 1);
     let migrations = store.migration_state().await.expect("migrations");
     assert_eq!(migrations.applied, migrations.total);
-    assert_eq!(migrations.total, 3);
+    assert_eq!(migrations.total, 1);
     assert_eq!(
         store.last_probe_sweep().await.expect("last sweep"),
         Some(swept_at)
@@ -178,7 +178,7 @@ async fn insert_lost(store: &LifecycleStore, session_id: Uuid, runtime: RuntimeK
 }
 
 async fn set_updated_at(store: &LifecycleStore, session_id: Uuid, updated_at: DateTime<Utc>) {
-    sqlx::query("UPDATE lifecycle SET updated_at = ? WHERE session_id = ?")
+    sqlx::query("UPDATE runtime_lifecycle SET updated_at = ? WHERE session_id = ?")
         .bind(updated_at.to_rfc3339())
         .bind(session_id.to_string())
         .execute(store.pool())

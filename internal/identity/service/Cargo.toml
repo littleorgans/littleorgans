@@ -22,6 +22,8 @@ thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+lilo-db.workspace = true
+lilo-paths.workspace = true
 tempfile.workspace = true
 
 [lints]

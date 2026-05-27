@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -18,7 +19,11 @@ pub struct LiloDb {
 
 impl LiloDb {
     pub async fn open(paths: &LiloPaths) -> Result<Self> {
-        let path = paths.db_path();
+        Self::open_path(paths.db_path()).await
+    }
+
+    pub async fn open_path(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.with_context(|| {
                 format!("failed to create lilo db directory {}", parent.display())
@@ -26,7 +31,7 @@ impl LiloDb {
         }
 
         let options = SqliteConnectOptions::new()
-            .filename(&path)
+            .filename(path)
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
@@ -44,6 +49,10 @@ impl LiloDb {
             .with_context(|| format!("failed to migrate sqlite db {}", path.display()))?;
 
         Ok(Self { pool })
+    }
+
+    pub fn from_pool(pool: SqlitePool) -> Self {
+        Self { pool }
     }
 
     pub fn identity_pool(&self) -> &SqlitePool {

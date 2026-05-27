@@ -37,8 +37,9 @@ impl Drop for RuntimeEventTask {
 
 async fn run_event_loop(state: Arc<DaemonState>, socket_path: PathBuf) -> Result<()> {
     let mut cursor = state
-        .store()?
+        .store()
         .event_cursor()
+        .await
         .context("failed to load runtime event cursor")?;
     let mut backoff = BACKOFF_INITIAL;
 
@@ -102,8 +103,9 @@ pub(crate) async fn handle_batch(
             cursor: next,
         } => {
             state
-                .store()?
+                .store()
                 .apply_runtime_events_and_cursor(&events, next)
+                .await
                 .context("failed to persist runtime events")?;
             *cursor = Some(next);
             Ok(BatchOutcome::Advanced)
@@ -113,10 +115,11 @@ pub(crate) async fn handle_batch(
                 .status(StatusFilter::empty())
                 .await
                 .context("failed to reconcile expired runtime cursor")?;
-            crate::reconcile::reconcile_lifecycles(state, &payload.lifecycles)?;
+            crate::reconcile::reconcile_lifecycles(state, &payload.lifecycles).await?;
             state
-                .store()?
+                .store()
                 .apply_cursor(oldest)
+                .await
                 .context("failed to persist expired runtime cursor")?;
             *cursor = Some(oldest);
             Ok(BatchOutcome::Reconciled)
@@ -159,9 +162,9 @@ mod tests {
     #[tokio::test]
     async fn handle_batch_applies_events_and_advances_cursor() {
         let state = test_state().await;
-        let running = insert_session(&state, SessionState::Spawning);
-        let terminated = insert_session(&state, SessionState::Running);
-        let lost = insert_session(&state, SessionState::Running);
+        let running = insert_session(&state, SessionState::Spawning).await;
+        let terminated = insert_session(&state, SessionState::Running).await;
+        let lost = insert_session(&state, SessionState::Running).await;
         let mut cursor = None;
 
         let outcome = handle_batch(
@@ -194,21 +197,24 @@ mod tests {
 
         assert_eq!(outcome, BatchOutcome::Advanced);
         assert_eq!(cursor, Some(42));
-        assert_eq!(session_state(&state, running), SessionState::Running);
-        assert_eq!(session_state(&state, terminated), SessionState::Terminated);
+        assert_eq!(session_state(&state, running).await, SessionState::Running);
         assert_eq!(
-            session_state(&state, lost),
+            session_state(&state, terminated).await,
+            SessionState::Terminated
+        );
+        assert_eq!(
+            session_state(&state, lost).await,
             SessionState::Lost {
                 evidence: LostEvidence::PidNotAlive
             }
         );
-        assert_eq!(stored_cursor(&state), Some(42));
+        assert_eq!(stored_cursor(&state).await, Some(42));
     }
 
     #[tokio::test]
     async fn handle_batch_reconciles_status_when_cursor_expires() {
         let state = test_state().await;
-        let session_id = insert_session(&state, SessionState::Running);
+        let session_id = insert_session(&state, SessionState::Running).await;
         let socket_dir = tempfile::tempdir().or_panic("socket dir creates");
         let socket_path = socket_dir.path().join("rtmd.sock");
         let server = spawn_status_server(
@@ -240,12 +246,12 @@ mod tests {
         assert_eq!(outcome, BatchOutcome::Reconciled);
         assert_eq!(cursor, Some(9));
         assert_eq!(
-            session_state(&state, session_id),
+            session_state(&state, session_id).await,
             SessionState::Lost {
                 evidence: LostEvidence::PidReuseDetected
             }
         );
-        assert_eq!(stored_cursor(&state), Some(9));
+        assert_eq!(stored_cursor(&state).await, Some(9));
     }
 
     async fn test_state() -> DaemonState {
@@ -253,43 +259,38 @@ mod tests {
         let identity = IdentityClient::connect(&dir.path().join("audit.sqlite"), 42)
             .await
             .or_panic("identity client connects");
-        DaemonState::new(
-            SqliteStore::open_in_memory().or_panic("store opens"),
-            Arc::new(NoopDriver),
-            Arc::new(identity),
-        )
+        let dir = tempfile::tempdir().or_panic("store tempdir creates");
+        let db = lilo_db::LiloDb::open_path(dir.path().join("lilo.db"))
+            .await
+            .or_panic("store db opens");
+        let store = SqliteStore::open(&db);
+        std::mem::forget(dir);
+        DaemonState::new(store, Arc::new(NoopDriver), Arc::new(identity))
     }
 
-    fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
+    async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
         let session = test_session(session_state);
         let session_id = session.id;
         state
             .store
-            .lock()
-            .or_panic("store lock poisoned")
             .insert_session(&session)
+            .await
             .or_panic("session inserts");
         session_id
     }
 
-    fn session_state(state: &DaemonState, session_id: Uuid) -> SessionState {
+    async fn session_state(state: &DaemonState, session_id: Uuid) -> SessionState {
         state
             .store
-            .lock()
-            .or_panic("store lock poisoned")
             .get_session(&session_id)
+            .await
             .or_panic("session loads")
             .or_panic("session exists")
             .state
     }
 
-    fn stored_cursor(state: &DaemonState) -> Option<EventCursor> {
-        state
-            .store
-            .lock()
-            .or_panic("store lock poisoned")
-            .event_cursor()
-            .or_panic("cursor loads")
+    async fn stored_cursor(state: &DaemonState) -> Option<EventCursor> {
+        state.store.event_cursor().await.or_panic("cursor loads")
     }
 
     fn test_session(state: SessionState) -> Session {

@@ -19,10 +19,10 @@ pub async fn reconcile_once(state: &DaemonState) -> Result<Vec<ReconcileFinding>
         .status(StatusFilter::empty())
         .await
         .context("failed to load rtmd lifecycle status")?;
-    reconcile_lifecycles(state, &payload.lifecycles)
+    reconcile_lifecycles(state, &payload.lifecycles).await
 }
 
-pub fn reconcile_lifecycles(
+pub async fn reconcile_lifecycles(
     state: &DaemonState,
     lifecycles: &[Lifecycle],
 ) -> Result<Vec<ReconcileFinding>> {
@@ -30,20 +30,22 @@ pub fn reconcile_lifecycles(
     for lifecycle in lifecycles {
         if let Some(path) = lifecycle_transcript_path(lifecycle) {
             state
-                .store()?
+                .store()
                 .record_transcript_path(&lifecycle.session_id, path, Utc::now())
+                .await
                 .context("failed to persist transcript path")?;
         }
         match lifecycle.state {
             LifecycleState::Forking | LifecycleState::Running => {}
             LifecycleState::Exited(exit) => {
                 state
-                    .store()?
+                    .store()
                     .mark_session_terminated(&lifecycle.session_id, exit.code, Utc::now())
+                    .await
                     .context("failed to mark session terminated")?;
             }
             LifecycleState::Lost(evidence) => {
-                mark_lost(state, lifecycle, evidence)?;
+                mark_lost(state, lifecycle, evidence).await?;
                 findings.push(ReconcileFinding {
                     session_id: lifecycle.session_id.to_string(),
                     evidence: format!("rtmd lifecycle lost: {evidence}"),
@@ -60,10 +62,15 @@ pub fn reconcile_lifecycles(
     Ok(findings)
 }
 
-fn mark_lost(state: &DaemonState, lifecycle: &Lifecycle, evidence: LostEvidence) -> Result<()> {
+async fn mark_lost(
+    state: &DaemonState,
+    lifecycle: &Lifecycle,
+    evidence: LostEvidence,
+) -> Result<()> {
     state
-        .store()?
+        .store()
         .mark_session_lost(&lifecycle.session_id, evidence, Utc::now())
+        .await
         .context("failed to mark session lost")?;
     Ok(())
 }

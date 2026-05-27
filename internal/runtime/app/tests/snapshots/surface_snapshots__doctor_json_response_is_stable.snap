@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-cli/tests/surface_snapshots.rs
+source: internal/runtime/app/tests/surface_snapshots.rs
+assertion_line: 96
 expression: doctor
 ---
 {
@@ -48,14 +49,12 @@ expression: doctor
   "recent_lost": [],
   "socket_path": "[socket]",
   "sqlite": {
-    "applied": 3,
+    "applied": 1,
     "applied_descriptions": [
-      "lifecycle",
-      "probe state",
-      "lifecycle isolation"
+      "unified schema"
     ],
     "pending_descriptions": [],
-    "total": 3
+    "total": 1
   },
   "tmux": {
     "available": "[tmux]",

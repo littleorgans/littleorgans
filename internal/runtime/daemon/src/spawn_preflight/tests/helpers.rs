@@ -66,11 +66,10 @@ async fn test_state_with_docker_config(
 ) -> Arc<ServerState> {
     let temp = std::env::temp_dir().join(format!("rtm-preflight-{}", Uuid::now_v7()));
     std::fs::create_dir_all(&temp).expect("tempdir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let db = lilo_db::LiloDb::open_path(temp.join("rtm.sqlite"))
+        .await
+        .expect("store db");
+    let store = LifecycleStore::open(&db);
     Arc::new(
         ServerState::new(
             DaemonConfig {

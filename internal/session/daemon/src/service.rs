@@ -1,47 +1,46 @@
 use anyhow::{Result, bail};
+use lilo_db::LiloDb;
 use lilo_session_core::SmPaths;
 
-use crate::run_daemon;
+use crate::run_daemon_with_db;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SessionServiceContext {
     paths: SmPaths,
+    db: LiloDb,
 }
 
 impl SessionServiceContext {
-    pub fn new(paths: SmPaths) -> Self {
-        Self { paths }
+    pub fn new(paths: SmPaths, db: LiloDb) -> Self {
+        Self { paths, db }
     }
 
-    pub fn from_env() -> Result<Self> {
-        Ok(Self::new(SmPaths::from_env()?))
+    pub async fn from_env() -> Result<Self> {
+        let paths = SmPaths::from_env()?;
+        let db = LiloDb::open_path(&paths.database).await?;
+        Ok(Self::new(paths, db))
     }
 
     pub fn paths(&self) -> &SmPaths {
         &self.paths
     }
 
-    pub fn into_paths(self) -> SmPaths {
-        self.paths
+    pub fn into_parts(self) -> (SmPaths, LiloDb) {
+        (self.paths, self.db)
     }
 }
 
-impl From<SmPaths> for SessionServiceContext {
-    fn from(paths: SmPaths) -> Self {
-        Self::new(paths)
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SessionService {
     paths: SmPaths,
+    db: LiloDb,
 }
 
 impl SessionService {
     pub fn build(ctx: SessionServiceContext) -> Result<Self> {
-        let paths = ctx.into_paths();
+        let (paths, db) = ctx.into_parts();
         validate_paths(&paths)?;
-        Ok(Self { paths })
+        Ok(Self { paths, db })
     }
 
     pub fn paths(&self) -> &SmPaths {
@@ -49,7 +48,7 @@ impl SessionService {
     }
 
     pub async fn run(self) -> Result<()> {
-        run_daemon(self.paths).await
+        run_daemon_with_db(self.paths, self.db).await
     }
 }
 
@@ -73,15 +72,17 @@ fn validate_paths(paths: &SmPaths) -> Result<()> {
 mod tests {
     use std::path::PathBuf;
 
+    use lilo_db::LiloDb;
     use lilo_session_core::SmPaths;
 
     use super::{SessionService, SessionServiceContext};
 
-    #[test]
-    fn build_preserves_session_paths_for_later_composition() {
+    #[tokio::test]
+    async fn build_preserves_session_paths_for_later_composition() {
         let paths = SmPaths::new(PathBuf::from("/tmp/lilo-session-service-test"));
+        let db = LiloDb::open_path(&paths.database).await.expect("open db");
 
-        let service = SessionService::build(SessionServiceContext::new(paths.clone()))
+        let service = SessionService::build(SessionServiceContext::new(paths.clone(), db))
             .expect("build session service");
 
         assert_eq!(service.paths(), &paths);

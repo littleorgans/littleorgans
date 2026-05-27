@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
+lilo-db.workspace = true
 lilo-paths.workspace = true
 lilo-rm-core.workspace = true
 lilo-runtime-launchers.workspace = true

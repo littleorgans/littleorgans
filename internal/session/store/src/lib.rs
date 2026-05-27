@@ -1,6 +1,5 @@
 #![forbid(unsafe_code)]
 
-pub mod schema;
 pub mod sqlite;
 
 #[cfg(test)]

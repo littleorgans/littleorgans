@@ -1,22 +1,20 @@
-use std::path::PathBuf;
-
 use lilo_im_core::{Action, AuditRow, Authorizer, AuthzResult, Principal, ResourceSpec};
 use lilo_im_store::{AuditFilters, SqliteAuditSink, StoreError};
 use lilo_im_stub::StubAuthorizer;
 
 pub type Result<T> = std::result::Result<T, IdentityServiceError>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct IdentityConfig {
-    pub audit_db_path: PathBuf,
+    pub audit_sink: SqliteAuditSink,
     pub local_uid: u32,
 }
 
 impl IdentityConfig {
     #[must_use]
-    pub fn new(audit_db_path: impl Into<PathBuf>, local_uid: u32) -> Self {
+    pub fn new(audit_sink: SqliteAuditSink, local_uid: u32) -> Self {
         Self {
-            audit_db_path: audit_db_path.into(),
+            audit_sink,
             local_uid,
         }
     }
@@ -35,14 +33,12 @@ pub struct IdentityService {
 }
 
 impl IdentityService {
-    pub async fn build(config: IdentityConfig) -> Result<Self> {
-        let audit_sink = SqliteAuditSink::connect(config.audit_db_path).await?;
-        audit_sink.run_migrations().await?;
-
-        Ok(Self {
-            audit_sink,
+    #[must_use]
+    pub fn build(config: IdentityConfig) -> Self {
+        Self {
+            audit_sink: config.audit_sink,
             local_uid: config.local_uid,
-        })
+        }
     }
 
     #[must_use]

@@ -290,10 +290,7 @@ async fn successful_mutations_write_allow_audit_rows() {
 
     send_read_nudge_delete(&daemon.state, context, sender.id, recipient.id).await;
 
-    let rows =
-        lilo_im_store::query_audit(&daemon.audit_path, lilo_im_store::AuditFilters::default())
-            .await
-            .or_panic("audit query succeeds");
+    let rows = daemon.audit_rows().await;
     let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
     assert_eq!(
         actions,
@@ -343,10 +340,7 @@ async fn denied_mutation_is_audited_without_mutating_store() {
     };
     assert!(message.contains("unknown principal"));
 
-    let rows =
-        lilo_im_store::query_audit(&daemon.audit_path, lilo_im_store::AuditFilters::default())
-            .await
-            .or_panic("audit query succeeds");
+    let rows = daemon.audit_rows().await;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].action, Action::Spawn);
     assert_eq!(
@@ -358,9 +352,8 @@ async fn denied_mutation_is_audited_without_mutating_store() {
     let sessions = daemon
         .state
         .store
-        .lock()
-        .or_panic("store lock poisoned")
         .list_sessions(None)
+        .await
         .or_panic("session list succeeds");
     assert!(sessions.is_empty());
 }

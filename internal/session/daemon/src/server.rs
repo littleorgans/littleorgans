@@ -3,6 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
+use lilo_db::LiloDb;
+use lilo_im_store::SqliteAuditSink;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::RUNTIME_PROTOCOL_VERSION;
 use lilo_session_core::{RpcRequest, RpcResponse, SmEndpoint, SmPaths, rtmd_socket_path};
@@ -16,6 +18,11 @@ use crate::identity_client::{IdentityClient, RequestContext};
 use crate::lifecycle::LifecycleTask;
 
 pub async fn run_daemon(paths: SmPaths) -> Result<()> {
+    let db = LiloDb::open_path(&paths.database).await?;
+    run_daemon_with_db(paths, db).await
+}
+
+pub async fn run_daemon_with_db(paths: SmPaths, db: LiloDb) -> Result<()> {
     fs::create_dir_all(&paths.dir).context("failed to create runtime directory")?;
     let endpoint = SmEndpoint::from_env().context("failed to resolve daemon endpoint")?;
     let rtmd_socket_path = rtmd_socket_path();
@@ -26,11 +33,12 @@ pub async fn run_daemon(paths: SmPaths) -> Result<()> {
         UnixListener::bind(endpoint.as_path()).context("failed to bind daemon socket")?;
     fs::write(&paths.pidfile, std::process::id().to_string()).context("failed to write pidfile")?;
 
-    let store = SqliteStore::open(&paths.database).context("failed to open sqlite store")?;
+    let store = SqliteStore::open(&db);
     let driver = RtmdDriver::new(rtmd_socket_path.clone());
-    let identity = IdentityClient::connect_default()
-        .await
-        .context("failed to initialize identity client")?;
+    let identity = IdentityClient::new(
+        SqliteAuditSink::with_pool(db.identity_pool().clone()),
+        nix::unistd::getuid().as_raw(),
+    );
     let state = Arc::new(
         DaemonState::new(store, Arc::new(driver), Arc::new(identity))
             .with_rtmd_socket_path(rtmd_socket_path.clone()),

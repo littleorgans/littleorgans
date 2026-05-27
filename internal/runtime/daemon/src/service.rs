@@ -1,46 +1,45 @@
 use anyhow::Result;
+use lilo_db::LiloDb;
 
-use crate::{DaemonConfig, run_daemon};
+use crate::{DaemonConfig, server::run_daemon_with_db};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RuntimeServiceContext {
     config: DaemonConfig,
+    db: LiloDb,
 }
 
 impl RuntimeServiceContext {
-    pub fn new(config: DaemonConfig) -> Self {
-        Self { config }
+    pub fn new(config: DaemonConfig, db: LiloDb) -> Self {
+        Self { config, db }
     }
 
-    pub fn from_env() -> Result<Self> {
-        Ok(Self::new(DaemonConfig::from_env()?))
+    pub async fn from_env() -> Result<Self> {
+        let config = DaemonConfig::from_env()?;
+        let db = LiloDb::open_path(&config.store.db_path).await?;
+        Ok(Self::new(config, db))
     }
 
     pub fn config(&self) -> &DaemonConfig {
         &self.config
     }
 
-    pub fn into_config(self) -> DaemonConfig {
-        self.config
+    pub fn into_parts(self) -> (DaemonConfig, LiloDb) {
+        (self.config, self.db)
     }
 }
 
-impl From<DaemonConfig> for RuntimeServiceContext {
-    fn from(config: DaemonConfig) -> Self {
-        Self::new(config)
-    }
-}
-
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RuntimeService {
     config: DaemonConfig,
+    db: LiloDb,
 }
 
 impl RuntimeService {
     pub fn build(ctx: RuntimeServiceContext) -> Result<Self> {
-        let config = ctx.into_config();
+        let (config, db) = ctx.into_parts();
         let _ = config.socket_path()?;
-        Ok(Self { config })
+        Ok(Self { config, db })
     }
 
     pub fn config(&self) -> &DaemonConfig {
@@ -48,7 +47,7 @@ impl RuntimeService {
     }
 
     pub async fn run(self) -> Result<()> {
-        run_daemon(self.config).await
+        run_daemon_with_db(self.config, self.db).await
     }
 }
 
@@ -62,8 +61,8 @@ mod tests {
     use super::{RuntimeService, RuntimeServiceContext};
     use crate::DaemonConfig;
 
-    #[test]
-    fn build_preserves_daemon_config_for_later_composition() {
+    #[tokio::test]
+    async fn build_preserves_daemon_config_for_later_composition() {
         let tempdir = tempfile::tempdir().expect("create tempdir");
         let config = DaemonConfig {
             endpoint: RuntimeEndpoint::unix_socket(tempdir.path().join("rtm.sock")),
@@ -80,7 +79,10 @@ mod tests {
             ),
         };
 
-        let service = RuntimeService::build(RuntimeServiceContext::new(config.clone()))
+        let db = lilo_db::LiloDb::open_path(&config.store.db_path)
+            .await
+            .expect("open lilo db");
+        let service = RuntimeService::build(RuntimeServiceContext::new(config.clone(), db))
             .expect("build runtime service");
 
         assert_eq!(

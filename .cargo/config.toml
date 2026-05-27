@@ -1,2 +1,6 @@
 [alias]
 xtask = "run -p xtask --"
+
+[patch.crates-io]
+lilo-im-core = { path = "crates/lilo-im-core" }
+lilo-im-stub = { path = "crates/lilo-im-stub" }

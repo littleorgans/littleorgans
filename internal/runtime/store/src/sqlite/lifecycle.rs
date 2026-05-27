@@ -1,15 +1,13 @@
-use std::path::PathBuf;
-
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
+use lilo_db::LiloDb;
 use lilo_rm_core::{
     Lifecycle, LifecycleCounts, LifecycleState, MigrationState, RecentLostEvent, StatusFilter,
 };
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Executor, QueryBuilder, Sqlite, SqlitePool};
 use uuid::Uuid;
 
-use crate::{StoreConfig, schema};
+use crate::schema;
 
 mod codec;
 
@@ -25,23 +23,9 @@ pub struct LifecycleStore {
 }
 
 impl LifecycleStore {
-    pub async fn open(config: StoreConfig) -> Result<Self> {
-        if let Some(parent) = config.db_path.parent() {
-            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                format!("failed to create rtm db directory {}", parent.display())
-            })?;
-        }
-        let options = SqliteConnectOptions::new()
-            .filename(&config.db_path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await
-            .with_context(|| format!("failed to open sqlite db {}", config.db_path.display()))?;
-        schema::migrate(&pool).await?;
-        Ok(Self { pool })
+    pub fn open(db: &LiloDb) -> Self {
+        let pool = db.runtime_pool().clone();
+        Self { pool }
     }
 
     pub fn pool(&self) -> &SqlitePool {
@@ -55,7 +39,7 @@ impl LifecycleStore {
         let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
         sqlx::query(
             r"
-            INSERT INTO lifecycle (
+            INSERT INTO runtime_lifecycle (
                 session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
                 tmux_pane, exit_code, exit_signal, lost_evidence, spawned_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -84,7 +68,7 @@ impl LifecycleStore {
         let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
         let result = sqlx::query(
             r"
-            UPDATE lifecycle
+            UPDATE runtime_lifecycle
             SET runtime = ?,
                 isolation = ?,
                 state = ?,
@@ -121,7 +105,7 @@ impl LifecycleStore {
     }
 
     pub async fn delete(&self, session_id: Uuid) -> Result<()> {
-        sqlx::query("DELETE FROM lifecycle WHERE session_id = ?")
+        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
             .bind(session_id.to_string())
             .execute(&self.pool)
             .await
@@ -134,7 +118,7 @@ impl LifecycleStore {
             r"
             SELECT session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
                    tmux_pane, exit_code, exit_signal, lost_evidence
-            FROM lifecycle
+            FROM runtime_lifecycle
             WHERE session_id = ?
             ",
         )
@@ -151,7 +135,7 @@ impl LifecycleStore {
             r"
             SELECT session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
                    tmux_pane, exit_code, exit_signal, lost_evidence
-            FROM lifecycle
+            FROM runtime_lifecycle
             ",
         );
         let mut has_where = false;
@@ -197,7 +181,7 @@ impl LifecycleStore {
             r"
             SELECT session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
                    tmux_pane, exit_code, exit_signal, lost_evidence
-            FROM lifecycle
+            FROM runtime_lifecycle
             WHERE state = 'Running'
             ORDER BY spawned_at
             ",
@@ -216,7 +200,7 @@ impl LifecycleStore {
             r"
             SELECT session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
                    tmux_pane, exit_code, exit_signal, lost_evidence
-            FROM lifecycle
+            FROM runtime_lifecycle
             WHERE state = 'Running' AND tmux_pane = ?
             ORDER BY spawned_at
             LIMIT 1
@@ -233,7 +217,7 @@ impl LifecycleStore {
         let rows = sqlx::query_as::<_, StateCountRow>(
             r"
             SELECT state, COUNT(*) AS count
-            FROM lifecycle
+            FROM runtime_lifecycle
             GROUP BY state
             ",
         )
@@ -259,7 +243,7 @@ impl LifecycleStore {
         let rows = sqlx::query_as::<_, RecentLostRow>(
             r"
             SELECT session_id, lost_evidence, updated_at
-            FROM lifecycle
+            FROM runtime_lifecycle
             WHERE state = 'Lost' AND updated_at >= ?
             ORDER BY updated_at DESC, session_id
             ",
@@ -275,7 +259,7 @@ impl LifecycleStore {
         let value = swept_at.to_rfc3339();
         sqlx::query(
             r"
-            INSERT INTO rtm_metadata (key, value, updated_at)
+            INSERT INTO runtime_metadata (key, value, updated_at)
             VALUES (?, ?, ?)
             ON CONFLICT(key) DO UPDATE SET
                 value = excluded.value,
@@ -295,7 +279,7 @@ impl LifecycleStore {
         let value = sqlx::query_scalar::<_, String>(
             r"
             SELECT value
-            FROM rtm_metadata
+            FROM runtime_metadata
             WHERE key = ?
             ",
         )
@@ -339,14 +323,21 @@ impl LifecycleStore {
 
     pub async fn reset(&self) -> Result<()> {
         self.pool
-            .execute("DELETE FROM lifecycle")
+            .execute("DELETE FROM runtime_lifecycle")
             .await
             .context("failed to reset lifecycle table")?;
         Ok(())
     }
 
-    pub async fn path_open(path: PathBuf) -> Result<Self> {
-        Self::open(StoreConfig { db_path: path }).await
+    #[must_use]
+    pub fn from_pool(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    #[cfg(test)]
+    pub async fn path_open(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let db = LiloDb::open_path(path).await?;
+        Ok(Self::open(&db))
     }
 }
 

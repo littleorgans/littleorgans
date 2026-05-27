@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use lilo_im_core::Principal;
+use lilo_im_core::{AuditRow, Principal};
 use lilo_rm_core::{
     DoctorPayload, LifecycleCounts, MigrationState, RuntimeResponse, RuntimeRpc, TmuxStatus,
     WatcherCounts, read_json_line, version_info, write_json_line,
@@ -228,11 +228,7 @@ impl TestDaemon {
             .await
             .or_panic("identity client connects");
         let driver = Arc::new(MockDriver::new());
-        let state = DaemonState::new(
-            SqliteStore::open_in_memory().or_panic("store opens"),
-            driver.clone(),
-            Arc::new(identity),
-        );
+        let state = DaemonState::new(open_temp_store().await, driver.clone(), Arc::new(identity));
         Self {
             state,
             driver,
@@ -240,6 +236,25 @@ impl TestDaemon {
             dir,
         }
     }
+
+    pub async fn audit_rows(&self) -> Vec<AuditRow> {
+        let db = lilo_db::LiloDb::open_path(&self.audit_path)
+            .await
+            .or_panic("audit db opens");
+        lilo_im_store::query_audit(db.identity_pool(), lilo_im_store::AuditFilters::default())
+            .await
+            .or_panic("audit query succeeds")
+    }
+}
+
+async fn open_temp_store() -> SqliteStore {
+    let dir = tempfile::tempdir().or_panic("store tempdir creates");
+    let db = lilo_db::LiloDb::open_path(dir.path().join("lilo.db"))
+        .await
+        .or_panic("store db opens");
+    let store = SqliteStore::open(&db);
+    std::mem::forget(dir);
+    store
 }
 
 pub async fn spawn_test_session(

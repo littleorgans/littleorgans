@@ -96,7 +96,16 @@ impl DaemonFixture {
     }
 
     pub fn audit_path(&self) -> PathBuf {
-        self.dir.path().join(".im").join("audit.sqlite")
+        self.dir.path().join("sm.db")
+    }
+
+    pub async fn audit_rows(&self) -> Vec<lilo_im_core::AuditRow> {
+        let db = lilo_db::LiloDb::open_path(self.audit_path())
+            .await
+            .or_panic("audit db opens");
+        lilo_im_store::query_audit(db.identity_pool(), lilo_im_store::AuditFilters::default())
+            .await
+            .or_panic("audit query succeeds")
     }
 
     pub fn socket_path(&self) -> PathBuf {

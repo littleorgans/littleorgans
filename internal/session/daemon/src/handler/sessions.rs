@@ -14,11 +14,12 @@ use super::DaemonState;
 use super::target::target_error;
 
 impl DaemonState {
-    pub(super) fn list(&self, request: ListRequest) -> Result<RpcResponse> {
+    pub(super) async fn list(&self, request: ListRequest) -> Result<RpcResponse> {
         let selector = request.selector.unwrap_or_default();
         let sessions = self
-            .store()?
+            .store()
             .list_sessions_by_selector(&selector)
+            .await
             .context("failed to list sessions")?;
 
         Ok(RpcResponse::Listed {
@@ -32,8 +33,9 @@ impl DaemonState {
         request: CaptureRequest,
     ) -> Result<RpcResponse> {
         let session = self
-            .store()?
+            .store()
             .get_session(&request.session_id)
+            .await
             .context("failed to load capture session")?
             .ok_or_else(|| anyhow::anyhow!("unknown capture session: {}", request.session_id))?;
         self.identity
@@ -59,7 +61,7 @@ impl DaemonState {
         context: &RequestContext,
         request: DeleteRequest,
     ) -> Result<RpcResponse> {
-        let targets = self.resolve_selector(&request.selector, "session")?;
+        let targets = self.resolve_selector(&request.selector, "session").await?;
         let mut sessions = Vec::new();
         let mut errors = Vec::new();
         for target in targets {
@@ -79,7 +81,7 @@ impl DaemonState {
         context: &RequestContext,
         request: LabelRequest,
     ) -> Result<RpcResponse> {
-        let targets = self.resolve_selector(&request.selector, "session")?;
+        let targets = self.resolve_selector(&request.selector, "session").await?;
         let mut sessions = Vec::new();
         let mut errors = Vec::new();
         for target in targets {
@@ -105,8 +107,9 @@ impl DaemonState {
         crate::lifecycle::refresh_exits(self).await?;
         let id_string = id.to_string();
         let session = self
-            .store()?
+            .store()
             .get_session(&id)
+            .await
             .context("failed to load session")?
             .with_context(|| format!("unknown session: {id}"))?;
         if session.state == SessionState::Terminated {
@@ -128,6 +131,7 @@ impl DaemonState {
                 )
             })?;
         crate::lifecycle::persist_child_exit(self, exit)
+            .await
             .context("failed to persist terminated session")?
             .with_context(|| format!("unknown session: {id}"))
     }
@@ -145,8 +149,9 @@ impl DaemonState {
                 &session_resource(target_id),
             )
             .await?;
-        self.store()?
+        self.store()
             .apply_label_mutation(&target_id, &request.mutation)
+            .await
             .context("failed to persist label")?
             .with_context(|| format!("unknown session: {target_id}"))
     }

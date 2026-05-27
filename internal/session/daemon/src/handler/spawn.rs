@@ -22,8 +22,8 @@ impl DaemonState {
     ) -> Result<RpcResponse> {
         let id = Uuid::now_v7();
         let location = {
-            let store = self.store()?;
-            normalize_spawn_request(&mut request, &store)?
+            let store = self.store();
+            normalize_spawn_request(&mut request, store).await?
         };
         let agent_config = resolve_agent_config(request.agent_config.as_deref())?;
         let agent_config_path = agent_config
@@ -71,13 +71,15 @@ impl DaemonState {
         };
 
         let namespace_deleted_before_commit = {
-            let store = self.store()?;
+            let store = self.store();
             if store
                 .namespace_exists(&session.namespace)
+                .await
                 .context("failed to revalidate namespace before session commit")?
             {
                 store
                     .insert_session(&session)
+                    .await
                     .context("failed to persist session")?;
                 false
             } else {

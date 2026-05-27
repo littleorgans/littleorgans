@@ -21,6 +21,6 @@ mod store_lock;
 #[path = "../../test_support.rs"]
 mod test_support;
 
-pub use server::run_daemon;
+pub use server::{run_daemon, run_daemon_with_db};
 pub use service::{SessionService, SessionServiceContext};
 pub use socket::send_request;

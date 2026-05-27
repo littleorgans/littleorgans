@@ -93,10 +93,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
             .is_empty()
     );
 
-    let rows =
-        lilo_im_store::query_audit(daemon.audit_path(), lilo_im_store::AuditFilters::default())
-            .await
-            .or_panic("audit query succeeds");
+    let rows = daemon.audit_rows().await;
     let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
     assert_eq!(
         actions,

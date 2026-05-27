@@ -47,7 +47,7 @@ pub(crate) async fn mail_read(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -79,7 +79,7 @@ pub(crate) async fn mail_check(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     mail_count_tool(
         state,
         context,
@@ -97,7 +97,7 @@ pub(crate) async fn mail_stop_check(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     mail_count_tool(
         state,
         context,

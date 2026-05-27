@@ -5,25 +5,21 @@ use lilo_im_core::{
     Action, AuditDecision, AuditRow, AuditSink, Authorizer, AuthzError, Principal, ResourceSpec,
     RuntimeKind,
 };
-use lilo_im_store::schema::RESERVED_AUDIT_COLUMNS;
+use lilo_im_store::schema::{AUDIT_TABLE, RESERVED_AUDIT_COLUMNS};
 use lilo_im_store::{AuditFilters, AuditTableColumn, SqliteAuditSink, query_audit};
 use lilo_im_stub::StubAuthorizer;
+use sqlx::SqlitePool;
 use uuid::Uuid;
 
 #[tokio::test]
 async fn sqlite_sink_persists_authorizer_audit_rows() {
-    let temp_dir = tempfile::tempdir().expect("create audit sqlite temp dir");
-    let db_path = temp_dir.path().join("audit.sqlite");
-    let sink = SqliteAuditSink::connect(&db_path)
-        .await
-        .expect("connect audit sqlite sink");
+    let (_temp_dir, pool) = audit_pool().await;
+    let sink = SqliteAuditSink::with_pool(pool.clone());
 
-    sink.run_migrations().await.expect("run audit migrations");
     let columns = sink
         .audit_table_columns()
         .await
         .expect("read audit table info");
-    sink.run_migrations().await.expect("rerun audit migrations");
     assert_eq!(
         sink.audit_table_columns()
             .await
@@ -50,7 +46,7 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
         assert!(granted.capabilities.is_empty());
     }
 
-    let rows = query_audit(&db_path, AuditFilters::default())
+    let rows = query_audit(&pool, AuditFilters::default())
         .await
         .expect("read audit rows");
     assert_eq!(rows.len(), Action::ALL.len());
@@ -75,7 +71,7 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
         .await;
 
     assert_eq!(denial, Err(AuthzError::UnknownPrincipal));
-    let rows = query_audit(&db_path, AuditFilters::default())
+    let rows = query_audit(&pool, AuditFilters::default())
         .await
         .expect("read audit rows after denial");
     let denied = &rows[Action::ALL.len()];
@@ -91,12 +87,8 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
 
 #[tokio::test]
 async fn query_audit_filters_rows_without_redeclaring_audit_types() {
-    let temp_dir = tempfile::tempdir().expect("create audit sqlite temp dir");
-    let db_path = temp_dir.path().join("audit.sqlite");
-    let sink = SqliteAuditSink::connect(&db_path)
-        .await
-        .expect("connect audit sqlite sink");
-    sink.run_migrations().await.expect("run audit migrations");
+    let (_temp_dir, pool) = audit_pool().await;
+    let sink = SqliteAuditSink::with_pool(pool.clone());
 
     let local_uid = nix::unistd::getuid().as_raw();
     let other_uid = different_uid(local_uid);
@@ -142,7 +134,7 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
         sink.record(row).await.expect("record audit row");
     }
 
-    let all = query_audit(&db_path, AuditFilters::default())
+    let all = query_audit(&pool, AuditFilters::default())
         .await
         .expect("read all audit rows");
     assert_eq!(
@@ -156,7 +148,7 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
     );
 
     let filtered = query_audit(
-        &db_path,
+        &pool,
         AuditFilters {
             principal: Some(Principal::Local(local_uid)),
             action: Some(Action::Spawn),
@@ -168,6 +160,34 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
     .expect("read filtered audit rows");
 
     assert_eq!(filtered, vec![recent_spawn]);
+}
+
+async fn audit_pool() -> (tempfile::TempDir, SqlitePool) {
+    let temp_dir = tempfile::tempdir().expect("create audit sqlite temp dir");
+    let db_path = temp_dir.path().join("audit.sqlite");
+    let pool = SqlitePool::connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
+        .await
+        .expect("connect audit sqlite pool");
+    sqlx::query(&format!(
+        "\
+CREATE TABLE {AUDIT_TABLE} (
+    id TEXT NOT NULL PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    principal TEXT NOT NULL,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    session_ref TEXT NULL,
+    notes TEXT NULL,
+    policy_id TEXT NULL,
+    evaluation_trace TEXT NULL,
+    denial_reason TEXT NULL
+)"
+    ))
+    .execute(&pool)
+    .await
+    .expect("create audit table");
+    (temp_dir, pool)
 }
 
 fn resource() -> ResourceSpec {

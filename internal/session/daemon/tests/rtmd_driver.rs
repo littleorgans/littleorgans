@@ -33,7 +33,7 @@ async fn rtmd_driver_spawn_is_visible_to_sm_and_rtmd() {
         .await
         .or_panic("identity connects");
     let state = DaemonState::new(
-        SqliteStore::open_in_memory().or_panic("store opens"),
+        open_temp_store().await,
         std::sync::Arc::new(RtmdDriver::new(rtmd.socket.clone())),
         std::sync::Arc::new(identity),
     );
@@ -110,10 +110,20 @@ async fn rtmd_state(rtmd: &RtmdHarness, dir: &Path) -> DaemonState {
         .await
         .or_panic("identity connects");
     DaemonState::new(
-        SqliteStore::open_in_memory().or_panic("store opens"),
+        open_temp_store().await,
         std::sync::Arc::new(RtmdDriver::new(rtmd.socket.clone())),
         std::sync::Arc::new(identity),
     )
+}
+
+async fn open_temp_store() -> SqliteStore {
+    let dir = tempfile::tempdir().or_panic("store tempdir creates");
+    let db = lilo_db::LiloDb::open_path(dir.path().join("lilo.db"))
+        .await
+        .or_panic("store db opens");
+    let store = SqliteStore::open(&db);
+    std::mem::forget(dir);
+    store
 }
 
 async fn spawn_session(state: &DaemonState, context: RequestContext, workspace: &Path) -> Session {

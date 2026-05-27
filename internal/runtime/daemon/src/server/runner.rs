@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use lilo_db::LiloDb;
 use lilo_paths::RuntimePathEnv;
 use lilo_runtime_store::LifecycleStore;
 use tokio::{net::UnixListener, sync::broadcast};
@@ -10,8 +11,13 @@ use crate::{handler, reconcile, socket};
 use super::{DaemonConfig, ServerState};
 
 pub async fn run_daemon(config: DaemonConfig) -> Result<()> {
+    let db = LiloDb::open_path(&config.store.db_path).await?;
+    run_daemon_with_db(config, db).await
+}
+
+pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> {
     lilo_runtime_launchers::warm_registry().context("failed to initialize launcher registry")?;
-    let store = LifecycleStore::open(config.store.clone()).await?;
+    let store = LifecycleStore::open(&db);
     let socket_path = config.socket_path()?;
     socket::prepare_socket(socket_path)?;
     let listener = UnixListener::bind(socket_path)

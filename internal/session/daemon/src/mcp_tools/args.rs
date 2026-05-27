@@ -7,31 +7,34 @@ use serde_json::Value;
 use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
-pub(super) fn scoped_optional_selector(
+pub(super) async fn scoped_optional_selector(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
     selector: Option<Selector>,
 ) -> Result<Option<Selector>> {
-    Ok(match read_namespace_scope(state, context, arguments)? {
-        Some((namespace, scope)) => {
-            Some(Selector::scoped_to_namespace(selector, namespace, scope)?)
-        }
-        None => selector,
-    })
+    Ok(
+        match read_namespace_scope(state, context, arguments).await? {
+            Some((namespace, scope)) => {
+                Some(Selector::scoped_to_namespace(selector, namespace, scope)?)
+            }
+            None => selector,
+        },
+    )
 }
 
-pub(super) fn scoped_required_selector(
+pub(super) async fn scoped_required_selector(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
     selector: Selector,
 ) -> Result<Selector> {
-    scoped_optional_selector(state, context, arguments, Some(selector))?
+    scoped_optional_selector(state, context, arguments, Some(selector))
+        .await?
         .ok_or_else(|| anyhow!("required selector was removed by namespace scoping"))
 }
 
-fn read_namespace_scope(
+async fn read_namespace_scope(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
@@ -44,8 +47,9 @@ fn read_namespace_scope(
     }
     if let Some(id) = context.mcp_caller_session_id {
         let session = state
-            .store()?
+            .store()
             .get_session(&id)
+            .await
             .context("failed to load MCP caller session")?;
         if let Some(session) = session {
             return Ok(Some((session.namespace, NamespaceScope::Default)));

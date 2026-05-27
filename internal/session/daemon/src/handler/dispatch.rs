@@ -46,12 +46,16 @@ impl DaemonState {
     ) -> HandlerResult {
         match request {
             RpcRequest::Spawn { request } => response(self.spawn(&context, *request).await, false),
-            RpcRequest::List { request } => response(self.list(request), false),
+            RpcRequest::List { request } => response(self.list(request).await, false),
             RpcRequest::NamespaceCreate { request } => {
-                response(self.create_namespace(request), false)
+                response(self.create_namespace(request).await, false)
             }
-            RpcRequest::NamespaceGet { request } => response(self.get_namespace(request), false),
-            RpcRequest::NamespaceList { request } => response(self.list_namespaces(request), false),
+            RpcRequest::NamespaceGet { request } => {
+                response(self.get_namespace(request).await, false)
+            }
+            RpcRequest::NamespaceList { request } => {
+                response(self.list_namespaces(request).await, false)
+            }
             RpcRequest::NamespaceDelete { request } => {
                 response(self.delete_namespace(context, request).await, false)
             }
@@ -62,9 +66,9 @@ impl DaemonState {
             RpcRequest::MailRead { request } => {
                 response(self.mail_read(&context, request).await, false)
             }
-            RpcRequest::MailCheck { request } => response(self.mail_check(&request), false),
+            RpcRequest::MailCheck { request } => response(self.mail_check(&request).await, false),
             RpcRequest::MailStopCheck { request } => {
-                response(self.mail_stop_check(&request), false)
+                response(self.mail_stop_check(&request).await, false)
             }
             RpcRequest::Nudge { request } => response(self.nudge(&context, request).await, false),
             RpcRequest::Label { request } => response(self.label(&context, request).await, false),

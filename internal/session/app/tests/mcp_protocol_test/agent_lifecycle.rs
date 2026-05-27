@@ -146,10 +146,7 @@ pub(crate) fn assert_agent_delete(mcp: &mut common::McpFixture, id: &str) {
 }
 
 pub(crate) async fn assert_delete_flow_audit(daemon: &DaemonFixture) {
-    let rows =
-        lilo_im_store::query_audit(daemon.audit_path(), lilo_im_store::AuditFilters::default())
-            .await
-            .or_panic("audit query succeeds");
+    let rows = daemon.audit_rows().await;
     let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
     assert_eq!(
         actions,

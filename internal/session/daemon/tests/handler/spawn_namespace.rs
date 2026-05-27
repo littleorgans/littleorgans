@@ -9,7 +9,7 @@ use lilo_session_core::{
 pub(crate) async fn spawn_accepts_new_dir_and_namespace_without_legacy_workspace() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let namespace = create_namespace(&daemon, "alpha");
+    let namespace = create_namespace(&daemon, "alpha").await;
     let dir = daemon.dir.path().display().to_string();
 
     let spawned = daemon
@@ -49,7 +49,7 @@ pub(crate) async fn spawn_accepts_new_dir_and_namespace_without_legacy_workspace
 pub(crate) async fn spawn_prefers_new_dir_when_legacy_workspace_is_also_present() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let namespace = create_namespace(&daemon, "alpha");
+    let namespace = create_namespace(&daemon, "alpha").await;
     let legacy_workspace = tempfile::tempdir().or_panic("legacy workspace creates");
     let dir = daemon.dir.path().display().to_string();
 
@@ -164,22 +164,20 @@ pub(crate) async fn spawn_persists_dir_as_received_without_daemon_canonicalisati
     let session_namespace = daemon
         .state
         .store
-        .lock()
-        .or_panic("store lock poisoned")
         .get_session_namespace(&response.session.id)
+        .await
         .or_panic("session namespace loads")
         .or_panic("session namespace exists");
     assert_eq!(session_namespace.dir.display().to_string(), raw_dir);
 }
 
-pub(crate) fn create_namespace(daemon: &TestDaemon, value: &str) -> Namespace {
+pub(crate) async fn create_namespace(daemon: &TestDaemon, value: &str) -> Namespace {
     let namespace = Namespace::for_create(value).or_panic("namespace validates");
     daemon
         .state
         .store
-        .lock()
-        .or_panic("store lock poisoned")
         .create_namespace(&namespace, Utc::now())
+        .await
         .or_panic("namespace creates");
     namespace
 }

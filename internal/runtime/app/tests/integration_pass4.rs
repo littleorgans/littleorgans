@@ -12,7 +12,7 @@ use common::{
     wait_until_not_alive,
 };
 use lilo_rm_core::StatusFilter;
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
 
 #[test]
@@ -82,11 +82,8 @@ fn spawn(harness: &RtmHarness, session_id: &str, runtime: &str) {
 fn persisted_states(db_path: &Path) -> HashMap<String, String> {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
-        let store = LifecycleStore::open(StoreConfig {
-            db_path: db_path.to_path_buf(),
-        })
-        .await
-        .expect("store");
+        let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
+        let store = LifecycleStore::open(&db);
         store
             .list(&StatusFilter::empty())
             .await

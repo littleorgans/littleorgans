@@ -86,7 +86,7 @@ pub(crate) async fn agent_list(
 ) -> Result<Value> {
     let selector = optional_selector(arguments, "selector")?
         .or_else(|| optional_string(arguments, "id").and_then(|id| selector_from_id(id).ok()));
-    let selector = scoped_optional_selector(state, context, arguments, selector)?;
+    let selector = scoped_optional_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -117,7 +117,7 @@ pub(crate) async fn agent_get(
     let selector = Selector::Id {
         id: uuid::Uuid::parse_str(&id)?,
     };
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -151,9 +151,10 @@ pub(crate) async fn agent_capture(
     arguments: &Value,
 ) -> Result<Value> {
     let selector = selector_from_id(required_string(arguments, "id")?)?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let session_id = state
-        .resolve_selector(&selector, "capture")?
+        .resolve_selector(&selector, "capture")
+        .await?
         .pop()
         .ok_or_else(|| anyhow!("capture selector matched no sessions: {selector}"))?
         .id;

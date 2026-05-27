@@ -12,23 +12,29 @@ use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
 impl DaemonState {
-    pub(crate) fn create_namespace(&self, request: NamespaceCreateRequest) -> Result<RpcResponse> {
+    pub(crate) async fn create_namespace(
+        &self,
+        request: NamespaceCreateRequest,
+    ) -> Result<RpcResponse> {
         let namespace = Namespace::for_create(request.slug)?;
         let record = {
-            let store = self.store()?;
+            let store = self.store();
             let created = if store
                 .namespace_exists(&namespace)
+                .await
                 .context("failed to check namespace")?
             {
                 false
             } else {
                 store
                     .create_namespace(&namespace, Utc::now())
+                    .await
                     .context("failed to create namespace")?;
                 true
             };
             let record = store
                 .list_namespaces()
+                .await
                 .context("failed to list namespaces")?
                 .into_iter()
                 .find(|record| record.namespace == namespace)
@@ -46,10 +52,14 @@ impl DaemonState {
         })
     }
 
-    pub(crate) fn list_namespaces(&self, _request: NamespaceListRequest) -> Result<RpcResponse> {
+    pub(crate) async fn list_namespaces(
+        &self,
+        _request: NamespaceListRequest,
+    ) -> Result<RpcResponse> {
         let namespaces = self
-            .store()?
+            .store()
             .list_namespaces()
+            .await
             .context("failed to list namespaces")?;
 
         Ok(RpcResponse::NamespacesListed {
@@ -57,11 +67,12 @@ impl DaemonState {
         })
     }
 
-    pub(crate) fn get_namespace(&self, request: NamespaceGetRequest) -> Result<RpcResponse> {
+    pub(crate) async fn get_namespace(&self, request: NamespaceGetRequest) -> Result<RpcResponse> {
         let namespace = Namespace::new(request.slug)?;
         let namespace = self
-            .store()?
+            .store()
             .list_namespaces()
+            .await
             .context("failed to list namespaces")?
             .into_iter()
             .find(|record| record.namespace == namespace);
@@ -81,14 +92,14 @@ impl DaemonState {
         self.identity
             .authorize(&context.principal, Action::Kill, &ResourceSpec::default())
             .await?;
-        if !self.namespace_exists(&namespace)? {
+        if !self.namespace_exists(&namespace).await? {
             bail!("unknown namespace: {namespace}");
         }
 
         let sessions = self
             .cascade_terminate_namespace(&context, &namespace)
             .await?;
-        self.remove_namespace_catalog(&namespace)?;
+        self.remove_namespace_catalog(&namespace).await?;
 
         Ok(RpcResponse::NamespaceDeleted {
             response: NamespaceDeleteResponse {
@@ -104,10 +115,11 @@ impl DaemonState {
         namespace: &Namespace,
     ) -> Result<Vec<lilo_session_core::Session>> {
         let targets = self
-            .store()?
+            .store()
             .list_sessions_by_selector(&Selector::Namespace {
                 namespace: namespace.clone(),
             })
+            .await
             .context("failed to list namespace sessions for cascade terminate")?;
         let request = DeleteRequest {
             selector: Selector::Namespace {
@@ -133,19 +145,22 @@ impl DaemonState {
         Ok(sessions)
     }
 
-    fn remove_namespace_catalog(&self, namespace: &Namespace) -> Result<()> {
-        let store = self.store()?;
+    async fn remove_namespace_catalog(&self, namespace: &Namespace) -> Result<()> {
+        let store = self.store();
         let active = store
             .active_session_count_in_namespace(namespace)
+            .await
             .context("failed to verify namespace sessions before catalog removal")?;
         if active > 0 {
             bail!("namespace delete raced with session spawn: {namespace}");
         }
         store
             .delete_sessions_by_namespace(namespace)
+            .await
             .context("failed to remove namespace sessions from catalog")?;
         let removed = store
             .delete_namespace(namespace)
+            .await
             .context("failed to remove namespace catalog entry")?;
         if !removed {
             bail!("unknown namespace: {namespace}");
@@ -153,9 +168,10 @@ impl DaemonState {
         Ok(())
     }
 
-    fn namespace_exists(&self, namespace: &Namespace) -> Result<bool> {
-        self.store()?
+    async fn namespace_exists(&self, namespace: &Namespace) -> Result<bool> {
+        self.store()
             .namespace_exists(namespace)
+            .await
             .context("failed to check namespace")
     }
 }

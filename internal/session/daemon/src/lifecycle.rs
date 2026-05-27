@@ -42,21 +42,28 @@ pub async fn refresh_exits(state: &DaemonState) -> Result<()> {
         .await
         .context("failed to reap children")?
     {
-        persist_child_exit(state, child_exit).context("failed to persist terminated session")?;
+        persist_child_exit(state, child_exit)
+            .await
+            .context("failed to persist terminated session")?;
     }
     Ok(())
 }
 
-pub fn persist_child_exit(state: &DaemonState, child_exit: ChildExit) -> Result<Option<Session>> {
+pub async fn persist_child_exit(
+    state: &DaemonState,
+    child_exit: ChildExit,
+) -> Result<Option<Session>> {
     let id = Uuid::parse_str(&child_exit.session_id).context("invalid session id")?;
     let now = Utc::now();
-    let store = state.store()?;
+    let store = state.store();
     if let Some(transcript_path) = child_exit.transcript_path {
         store
             .record_transcript_path(&id, &transcript_path, now)
+            .await
             .context("failed to persist transcript path")?;
     }
     store
         .mark_session_terminated(&id, child_exit.exit_code, now)
+        .await
         .map_err(Into::into)
 }

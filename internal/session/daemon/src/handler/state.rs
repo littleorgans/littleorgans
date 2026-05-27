@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use lilo_session_core::RpcResponse;
 use lilo_session_driver::SpawnDriver;
@@ -8,7 +8,7 @@ use lilo_session_store::SqliteStore;
 use crate::identity_client::IdentityClient;
 
 pub struct DaemonState {
-    pub store: Mutex<SqliteStore>,
+    pub store: SqliteStore,
     pub driver: Arc<dyn SpawnDriver>,
     pub(crate) identity: Arc<IdentityClient>,
     pub(crate) rtmd_socket_path: Option<PathBuf>,
@@ -26,7 +26,7 @@ impl DaemonState {
         identity: Arc<IdentityClient>,
     ) -> Self {
         Self {
-            store: Mutex::new(store),
+            store,
             driver,
             identity,
             rtmd_socket_path: None,

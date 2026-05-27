@@ -19,7 +19,7 @@ impl DaemonState {
         context: &crate::identity_client::RequestContext,
         request: LogsRequest,
     ) -> Result<RpcResponse> {
-        let session = self.single_session(&request.selector, "logs")?;
+        let session = self.single_session(&request.selector, "logs").await?;
         self.identity
             .authorize(
                 &context.principal,
@@ -60,8 +60,9 @@ impl DaemonState {
         };
         let runtime_matters = self.runtime_doctor().await;
         let sessions = self
-            .store()?
+            .store()
             .list_sessions_by_selector(&Selector::All)
+            .await
             .context("failed to list sessions")?;
         let mut findings = sessions
             .into_iter()
@@ -96,8 +97,9 @@ impl DaemonState {
         let deadline = Instant::now() + Duration::from_secs(request.timeout_secs);
         loop {
             let sessions = self
-                .store()?
+                .store()
                 .list_sessions_by_selector(&request.selector)
+                .await
                 .context("failed to list sessions")?;
             if wait_condition_met(&request.condition, &sessions) {
                 return Ok(wait_response(true, sessions));
@@ -109,8 +111,8 @@ impl DaemonState {
         }
     }
 
-    fn single_session(&self, selector: &Selector, label: &str) -> Result<Session> {
-        let sessions = self.resolve_selector(selector, label)?;
+    async fn single_session(&self, selector: &Selector, label: &str) -> Result<Session> {
+        let sessions = self.resolve_selector(selector, label).await?;
         anyhow::ensure!(
             sessions.len() == 1,
             "{label} selector matched {} sessions; expected exactly one",

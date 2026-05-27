@@ -5,14 +5,15 @@ use uuid::Uuid;
 use super::DaemonState;
 
 impl DaemonState {
-    pub(crate) fn resolve_selector(
+    pub(crate) async fn resolve_selector(
         &self,
         selector: &Selector,
         label: &str,
     ) -> Result<Vec<Session>> {
         let sessions = self
-            .store()?
+            .store()
             .list_sessions_by_selector(selector)
+            .await
             .context("failed to resolve selector")?;
         if !sessions.is_empty() {
             return Ok(sessions);
@@ -25,10 +26,11 @@ impl DaemonState {
         }
     }
 
-    pub(super) fn require_session(&self, id: &Uuid, label: &str) -> Result<()> {
+    pub(super) async fn require_session(&self, id: &Uuid, label: &str) -> Result<()> {
         let exists = self
-            .store()?
+            .store()
             .get_session(id)
+            .await
             .context("failed to load session")?
             .is_some();
         anyhow::ensure!(exists, "unknown {label} session: {id}");

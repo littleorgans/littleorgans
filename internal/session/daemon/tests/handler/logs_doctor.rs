@@ -51,9 +51,8 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
     daemon
         .state
         .store
-        .lock()
-        .or_panic("store lock poisoned")
         .record_transcript_path(&session.id, &transcript, Utc::now())
+        .await
         .or_panic("transcript path records")
         .or_panic("session exists");
 
@@ -95,9 +94,8 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
     daemon
         .state
         .store
-        .lock()
-        .or_panic("store lock poisoned")
         .mark_session_lost(&session.id, LostEvidence::PidNotAlive, chrono::Utc::now())
+        .await
         .or_panic("session marks lost");
     let doctor = daemon
         .state

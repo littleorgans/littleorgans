@@ -173,9 +173,10 @@ impl TestState {
         let store_config = StoreConfig {
             db_path: temp.path().join("rtm.sqlite"),
         };
-        let store = LifecycleStore::open(store_config.clone())
+        let db = lilo_db::LiloDb::open_path(&store_config.db_path)
             .await
-            .expect("store");
+            .expect("store db");
+        let store = LifecycleStore::open(&db);
         let server = ServerState::new(
             DaemonConfig {
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm-test.sock"),

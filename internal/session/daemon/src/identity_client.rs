@@ -1,6 +1,5 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
+use lilo_db::LiloDb;
 use lilo_im_core::{
     Action, Authorizer, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind,
 };
@@ -37,22 +36,21 @@ pub struct IdentityClient {
 }
 
 impl IdentityClient {
-    pub async fn connect_default() -> Result<Self> {
-        Self::connect(lilo_im_store::default_audit_db_path(), local_uid()).await
-    }
-
-    pub async fn connect(path: impl AsRef<Path>, local_uid: u32) -> Result<Self> {
-        let audit_sink = SqliteAuditSink::connect(path)
-            .await
-            .context("failed to connect identity audit sink")?;
-        audit_sink
-            .run_migrations()
-            .await
-            .context("failed to initialize identity audit sink")?;
-        Ok(Self {
+    pub fn new(audit_sink: SqliteAuditSink, local_uid: u32) -> Self {
+        Self {
             audit_sink,
             local_uid,
-        })
+        }
+    }
+
+    pub async fn connect(path: impl AsRef<std::path::Path>, local_uid: u32) -> Result<Self> {
+        let db = LiloDb::open_path(path)
+            .await
+            .context("failed to open identity audit database")?;
+        Ok(Self::new(
+            SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            local_uid,
+        ))
     }
 
     pub async fn authorize(
@@ -96,8 +94,4 @@ fn identity_runtime(runtime: RuntimeKind) -> IdentityRuntimeKind {
         RuntimeKind::Claude => IdentityRuntimeKind::Claude,
         RuntimeKind::Codex => IdentityRuntimeKind::Codex,
     }
-}
-
-fn local_uid() -> u32 {
-    nix::unistd::getuid().as_raw()
 }

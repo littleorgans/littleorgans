@@ -8,7 +8,7 @@ mod termination;
 mod watcher;
 
 pub use config::DaemonConfig;
-pub use runner::run_daemon;
+pub use runner::{run_daemon, run_daemon_with_db};
 
 pub(crate) use state::ServerState;
 
