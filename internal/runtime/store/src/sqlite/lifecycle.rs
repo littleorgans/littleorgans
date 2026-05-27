@@ -350,7 +350,7 @@ impl LifecycleStore {
     }
 }
 
-fn push_where(query: &mut QueryBuilder<Sqlite>, has_where: &mut bool) {
+fn push_where(query: &mut QueryBuilder<'_, Sqlite>, has_where: &mut bool) {
     if *has_where {
         query.push(" AND ");
     } else {
