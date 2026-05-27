@@ -1,10 +1,21 @@
 projects:
+  globFormat: "source-path"
   globs:
-    - "crates/*"
-    - "internal/*/*"
-    - "tools/*"
+    - "crates/*/"
+    - "tools/*/"
   sources:
     littleorgans: "."
+    "internal/identity/service": "internal/identity/service"
+    "internal/runtime/app": "internal/runtime/app"
+    "internal/runtime/daemon": "internal/runtime/daemon"
+    "internal/runtime/launchers": "internal/runtime/launchers"
+    "internal/runtime/platform": "internal/runtime/platform"
+    "internal/runtime/store": "internal/runtime/store"
+    "internal/session/app": "internal/session/app"
+    "internal/session/core": "internal/session/core"
+    "internal/session/daemon": "internal/session/daemon"
+    "internal/session/driver": "internal/session/driver"
+    "internal/session/store": "internal/session/store"
 
 vcs:
   client: "git"

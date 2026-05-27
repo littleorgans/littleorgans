@@ -1,0 +1,47 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+expression: tool
+---
+{
+  "description": "Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "mutation": {
+        "description": "Label mutation as key=value or key-.",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Session selector used for matching sessions to label.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      }
+    },
+    "required": [
+      "selector",
+      "mutation"
+    ],
+    "type": "object"
+  },
+  "name": "agent_label",
+  "outputSchema": {
+    "properties": {
+      "errors": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "sessions": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "sessions",
+      "errors"
+    ],
+    "type": "object"
+  }
+}

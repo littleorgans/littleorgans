@@ -14,6 +14,11 @@ members = [
     "internal/runtime/store",
     "internal/runtime/daemon",
     "internal/runtime/app",
+    "internal/session/core",
+    "internal/session/store",
+    "internal/session/driver",
+    "internal/session/daemon",
+    "internal/session/app",
     "tools/xtask",
 ]
 resolver = "3"
@@ -29,8 +34,12 @@ rust-version = "1.95"
 
 [workspace.dependencies]
 anyhow = "1.0.100"
+async-trait = "0.1"
 chrono = { version = "0.4.42", features = ["clock", "serde"] }
 clap = { version = "4.5.51", features = ["derive"] }
+assert_cmd = "2"
+criterion = "0.5"
+indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1.43.2", features = ["json", "redactions"] }
 libc = "0.2.186"
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
@@ -45,7 +54,12 @@ lilo-runtime-daemon = { path = "internal/runtime/daemon" }
 lilo-runtime-launchers = { path = "internal/runtime/launchers" }
 lilo-runtime-platform = { path = "internal/runtime/platform" }
 lilo-runtime-store = { path = "internal/runtime/store" }
-nix = { version = "0.30", features = ["socket", "user"] }
+lilo-session-app = { path = "internal/session/app" }
+lilo-session-core = { path = "internal/session/core" }
+lilo-session-daemon = { path = "internal/session/daemon" }
+lilo-session-driver = { path = "internal/session/driver" }
+lilo-session-store = { path = "internal/session/store" }
+nix = { version = "0.30", features = ["process", "signal", "socket", "term", "user"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

@@ -1,0 +1,56 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+expression: tool
+---
+{
+  "description": "Read the transcript linked to one selected session.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and read across all namespaces.",
+        "type": "boolean"
+      },
+      "follow": {
+        "description": "CLI only: follow appended transcript bytes.",
+        "type": "boolean"
+      },
+      "max_bytes": {
+        "description": "Maximum bytes to return from the end of the transcript.",
+        "type": "integer"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Selector that must match exactly one session with transcript logs.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      }
+    },
+    "required": [
+      "selector"
+    ],
+    "type": "object"
+  },
+  "name": "logs",
+  "outputSchema": {
+    "properties": {
+      "content": {
+        "type": "string"
+      },
+      "session": {
+        "type": "object"
+      },
+      "transcript_path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "session",
+      "transcript_path",
+      "content"
+    ],
+    "type": "object"
+  }
+}

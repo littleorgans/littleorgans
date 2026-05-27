@@ -1,0 +1,16 @@
+[tools.doctor]
+cli_name        = "doctor"
+mcp_description = "Report session-matters daemon health, LOST sessions, and runtime-matters status."
+cli_about       = "Report session-matters daemon health."
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["status", "runtime", "runtime_matters", "findings"],
+  "properties": {
+    "status": {"type": "string"},
+    "runtime": {"type": "string"},
+    "runtime_matters": {"type": "object"},
+    "findings": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''

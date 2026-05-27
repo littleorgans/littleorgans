@@ -1,0 +1,53 @@
+[package]
+name = "lilo-session-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.dist]
+dist = true
+
+[lib]
+name = "lilo_session_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+lilo-rm-core.workspace = true
+lilo-session-core.workspace = true
+lilo-session-daemon.workspace = true
+nix.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[build-dependencies]
+lilo-session-core.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+chrono.workspace = true
+criterion.workspace = true
+lilo-im-core.workspace = true
+lilo-im-store.workspace = true
+insta.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "hot_path"
+harness = false
+
+[lints]
+workspace = true

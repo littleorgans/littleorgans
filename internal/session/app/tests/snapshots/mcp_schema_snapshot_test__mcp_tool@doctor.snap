@@ -1,0 +1,40 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+assertion_line: 8
+expression: tool
+---
+{
+  "description": "Report session-matters daemon health, LOST sessions, and runtime-matters status.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "name": "doctor",
+  "outputSchema": {
+    "properties": {
+      "findings": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "runtime": {
+        "type": "string"
+      },
+      "runtime_matters": {
+        "type": "object"
+      },
+      "status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "status",
+      "runtime",
+      "runtime_matters",
+      "findings"
+    ],
+    "type": "object"
+  }
+}

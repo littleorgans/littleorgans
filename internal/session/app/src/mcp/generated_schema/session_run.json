@@ -1,0 +1,189 @@
+{
+  "description": "Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "agent_config": {
+        "description": "Agent config name resolved as ~/.agm/<name>/agent.toml, or an explicit agent.toml path.",
+        "type": "string"
+      },
+      "dir": {
+        "description": "Canonical filesystem directory used as the runtime's working directory. The path must be absolute and point to an existing directory.",
+        "type": "string"
+      },
+      "force": {
+        "description": "Preempt an occupied tmux pane when the target pane is already owned by another runtime. Other spawn conflicts remain fatal.",
+        "type": "boolean"
+      },
+      "image": {
+        "description": "Container image for docker isolated runtimes.",
+        "type": "string"
+      },
+      "isolation": {
+        "description": "Runtime isolation policy. Accepted shapes are host, docker, or docker:PROFILE.",
+        "type": "string"
+      },
+      "labels": {
+        "description": "Optional session labels as key=value strings.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "mounts": {
+        "description": "Docker-only bind mounts as HOST:CONTAINER[:ro|:rw]. Repeat to provide multiple mounts. Missing mode defaults to ro.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "namespace": {
+        "description": "Namespace slug for the session. The namespace must already exist before running.",
+        "type": "string"
+      },
+      "role": {
+        "description": "Role label recorded on the session.",
+        "type": "string"
+      },
+      "runtime": {
+        "description": "Runtime command to launch.",
+        "enum": [
+          "claude",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "target": {
+        "description": "Runtime target. Use headless or tmux:SESSION:WINDOW.PANE. Defaults to headless.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "runtime",
+      "role",
+      "dir"
+    ],
+    "type": "object"
+  },
+  "name": "session_run",
+  "outputSchema": {
+    "properties": {
+      "session": {
+        "properties": {
+          "agent_config": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "exit_code": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "value"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "role": {
+            "type": "string"
+          },
+          "runtime": {
+            "enum": [
+              "claude",
+              "codex"
+            ],
+            "type": "string"
+          },
+          "runtime_pid": {
+            "type": "integer"
+          },
+          "runtime_session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "SPAWNING",
+              "RUNNING",
+              "TERMINATED",
+              "LOST"
+            ],
+            "type": "string"
+          },
+          "terminated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tmux_pane": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transcript_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "runtime",
+          "role",
+          "workspace",
+          "state",
+          "runtime_pid",
+          "created_at",
+          "started_at",
+          "updated_at"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "session"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,180 @@
+[tools.session_list]
+cli_name        = "get session"
+mcp_description = "List session records known to the session-matters daemon. Supports the shared selector grammar."
+cli_about       = "List session records, or get one session record by id."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["sessions"],
+  "properties": {
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "runtime", "role", "workspace", "state", "runtime_pid", "created_at", "started_at", "updated_at"],
+        "properties": {
+          "id": {"type": "string", "format": "uuid"},
+          "runtime": {"type": "string", "enum": ["claude", "codex"]},
+          "role": {"type": "string"},
+          "workspace": {"type": "string"},
+          "state": {"type": "string", "enum": ["SPAWNING", "RUNNING", "TERMINATED", "LOST"]},
+          "runtime_pid": {"type": "integer"},
+          "runtime_session": {"type": ["string", "null"]},
+          "transcript_path": {"type": ["string", "null"]},
+          "tmux_pane": {"type": ["string", "null"]},
+          "agent_config": {"type": ["string", "null"]},
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["key", "value"],
+              "properties": {
+                "key": {"type": "string"},
+                "value": {"type": "string"}
+              }
+            }
+          },
+          "created_at": {"type": "string", "format": "date-time"},
+          "started_at": {"type": "string", "format": "date-time"},
+          "terminated_at": {"type": ["string", "null"], "format": "date-time"},
+          "exit_code": {"type": ["integer", "null"]},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}
+'''
+
+[[tools.session_list.params]]
+name            = "id"
+type            = "string"
+required        = false
+mcp_description = "Optional session id to load instead of listing."
+cli_help        = "Optional session id to load instead of listing."
+cli_flag        = "id"
+
+[[tools.session_list.params]]
+name            = "selector"
+type            = "string"
+required        = false
+mcp_description = "Optional session selector used for matching sessions. Defaults to all."
+cli_help        = "Optional session selector used for matching sessions."
+cli_flag        = "--selector"
+selector        = true
+
+[[tools.session_list.params]]
+name            = "show_labels"
+type            = "boolean"
+required        = false
+mcp_description = "Render session labels in human output. JSON output already includes labels."
+cli_help        = "Render session labels in human output. JSON output already includes labels."
+cli_flag        = "--show-labels"
+
+[[tools.session_list.mcp_aliases]]
+name            = "agent_list"
+mcp_description = "Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar."
+
+[tools.session_get]
+cli_name        = "get session"
+mcp_description = "Get one session record by id. The tool returns an error envelope when the id is unknown."
+cli_about       = "Get one session record by id."
+render_cli_help = false
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["session"],
+  "properties": {
+    "session": {
+      "type": "object",
+      "required": ["id", "runtime", "role", "workspace", "state", "runtime_pid", "created_at", "started_at", "updated_at"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "runtime": {"type": "string", "enum": ["claude", "codex"]},
+        "role": {"type": "string"},
+        "workspace": {"type": "string"},
+        "state": {"type": "string", "enum": ["SPAWNING", "RUNNING", "TERMINATED", "LOST"]},
+        "runtime_pid": {"type": "integer"},
+        "runtime_session": {"type": ["string", "null"]},
+        "transcript_path": {"type": ["string", "null"]},
+        "tmux_pane": {"type": ["string", "null"]},
+        "agent_config": {"type": ["string", "null"]},
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "value"],
+            "properties": {
+              "key": {"type": "string"},
+              "value": {"type": "string"}
+            }
+          }
+        },
+        "created_at": {"type": "string", "format": "date-time"},
+        "started_at": {"type": "string", "format": "date-time"},
+        "terminated_at": {"type": ["string", "null"], "format": "date-time"},
+        "exit_code": {"type": ["integer", "null"]},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
+'''
+
+[[tools.session_get.params]]
+name            = "id"
+type            = "string"
+required        = true
+mcp_description = "Session id to load."
+cli_help        = "Session id to load."
+cli_flag        = "id"
+
+[[tools.session_get.mcp_aliases]]
+name            = "agent_get"
+mcp_description = "Deprecated compatibility alias for session_get. Get one session record by id. The tool returns an error envelope when the id is unknown."
+
+[tools.session_delete]
+cli_name        = "delete session"
+mcp_description = "Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period."
+cli_about       = "Terminate daemon owned sessions by selector."
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["sessions", "errors"],
+  "properties": {
+    "sessions": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.session_delete.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Session selector used for matching sessions to terminate."
+cli_help        = "Session selector used for matching sessions to terminate."
+cli_flag        = "selector"
+selector        = true
+
+[[tools.session_delete.params]]
+name            = "signal"
+type            = "string"
+required        = false
+mcp_description = "Signal to send. Defaults to SIGTERM."
+cli_help        = "Signal to send. Defaults to SIGTERM."
+cli_flag        = "--signal"
+
+[[tools.session_delete.params]]
+name            = "grace_secs"
+type            = "integer"
+required        = false
+mcp_description = "Seconds to wait before SIGKILL. Defaults to 5."
+cli_help        = "Seconds to wait before SIGKILL. Defaults to 5."
+cli_flag        = "--grace"
+
+[[tools.session_delete.mcp_aliases]]
+name            = "agent_delete"
+mcp_description = "Deprecated compatibility alias for session_delete. Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period."

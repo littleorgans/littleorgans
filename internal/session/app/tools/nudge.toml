@@ -1,0 +1,32 @@
+[tools.nudge]
+cli_name        = "nudge"
+mcp_description = "Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through rtmd; headless or ended runtimes return typed failure messages."
+cli_about       = "Send an ephemeral nudge to selected sessions."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["nudges", "errors"],
+  "properties": {
+    "nudges": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.nudge.params]]
+name            = "to"
+type            = "string"
+required        = true
+mcp_description = "Recipient selector used for matching sessions."
+cli_help        = "Recipient selector used for matching sessions."
+cli_flag        = "--to"
+selector        = true
+
+[[tools.nudge.params]]
+name            = "content"
+type            = "string"
+required        = true
+mcp_description = "Nudge content."
+cli_help        = "Nudge content."
+cli_flag        = "--content"

@@ -1,0 +1,61 @@
+[tools.namespace_list]
+cli_name        = "get namespace"
+mcp_description = "List namespace records known to the session-matters daemon."
+cli_about       = "List namespace records, or get one namespace record by slug."
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["namespaces"],
+  "properties": {
+    "namespaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["namespace", "created_at"],
+        "properties": {
+          "namespace": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}
+'''
+
+[[tools.namespace_list.params]]
+name            = "slug"
+type            = "string"
+required        = false
+mcp_description = "Optional namespace slug to load instead of listing."
+cli_help        = "Optional namespace slug to load instead of listing."
+cli_flag        = "slug"
+
+[tools.namespace_get]
+cli_name        = "get namespace"
+mcp_description = "Get one namespace record by slug. The tool returns an error envelope when the slug is unknown."
+cli_about       = "Get one namespace record by slug."
+render_cli_help = false
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["namespace"],
+  "properties": {
+    "namespace": {
+      "type": "object",
+      "required": ["namespace", "created_at"],
+      "properties": {
+        "namespace": {"type": "string"},
+        "created_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
+'''
+
+[[tools.namespace_get.params]]
+name            = "slug"
+type            = "string"
+required        = true
+mcp_description = "Namespace slug to load."
+cli_help        = "Namespace slug to load."
+cli_flag        = "slug"

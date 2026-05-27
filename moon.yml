@@ -10,16 +10,21 @@ workspace:
 
 fileGroups:
   sources:
+    - ".config/**/*"
+    - ".moon/**/*"
     - "Cargo.toml"
+    - "Cargo.lock"
+    - "justfile"
     - "rust-toolchain.toml"
-    - "crates/*/Cargo.toml"
-    - "crates/*/src/**/*"
-    - "tools/*/Cargo.toml"
-    - "tools/*/src/**/*"
+    - "crates/**/*"
+    - "internal/**/*"
+    - "tools/**/*"
     - "scripts/**/*"
   tests:
-    - "crates/*/tests/**/*"
-    - "tools/*/tests/**/*"
+    - "crates/**/tests/**/*"
+    - "internal/**/benches/**/*"
+    - "internal/**/tests/**/*"
+    - "tools/**/tests/**/*"
 
 tasks:
   fmt:
@@ -40,6 +45,10 @@ tasks:
 
   clippy:
     command: "cargo clippy --workspace --all-targets -- -D warnings"
+    deps:
+      - "fmt-check"
+      - "check-loc"
+      - "check-provenance"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
@@ -48,13 +57,17 @@ tasks:
 
   build:
     command: "cargo build --workspace"
+    deps:
+      - "clippy"
     inputs:
       - "@globs(sources)"
     options:
       runInCI: "always"
 
   test:
-    command: "cargo test --workspace"
+    command: "cargo nextest run --workspace"
+    deps:
+      - "build"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
@@ -69,10 +82,19 @@ tasks:
     options:
       runInCI: "always"
 
+  check-provenance:
+    command: "./scripts/check-provenance.sh"
+    inputs:
+      - "docs/provenance/imported-repos.md"
+      - "scripts/check-provenance.sh"
+    options:
+      runInCI: "always"
+
   check:
     deps:
       - "fmt-check"
       - "clippy"
       - "check-loc"
+      - "check-provenance"
     options:
       runInCI: false

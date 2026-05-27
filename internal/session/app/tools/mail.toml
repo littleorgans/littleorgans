@@ -1,0 +1,122 @@
+[tools.mail_send]
+cli_name        = "mail send"
+mcp_description = "Send durable mail to sessions selected by selector."
+cli_about       = "Send durable mail to selected sessions."
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["mail"],
+  "properties": {
+    "mail": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.mail_send.params]]
+name            = "to"
+type            = "string"
+required        = true
+mcp_description = "Recipient selector used for matching sessions."
+cli_help        = "Recipient selector used for matching sessions."
+cli_flag        = "--to"
+selector        = true
+
+[[tools.mail_send.params]]
+name            = "from"
+type            = "string"
+required        = false
+mcp_description = "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise smd records the controller sender."
+cli_help        = "Sender session id. Defaults to HELIOY_SESSION_ID when set."
+cli_flag        = "--from"
+
+[[tools.mail_send.params]]
+name            = "content"
+type            = "string"
+required        = true
+mcp_description = "Message content."
+cli_help        = "Message content."
+cli_flag        = "--content"
+
+[tools.mail_read]
+cli_name        = "mail read"
+mcp_description = "Read unread mail for sessions selected by selector. Reads mark messages read unless peek is true."
+cli_about       = "Read unread mail for selected sessions."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["mail"],
+  "properties": {
+    "mail": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.mail_read.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Inbox owner selector used for matching sessions."
+cli_help        = "Inbox owner selector used for matching sessions."
+cli_flag        = "--selector"
+selector        = true
+
+[[tools.mail_read.params]]
+name            = "peek"
+type            = "boolean"
+required        = false
+mcp_description = "Return unread mail without marking it read."
+cli_help        = "Return unread mail without marking it read."
+cli_flag        = "--peek"
+
+[tools.mail_check]
+cli_name        = "mail check"
+mcp_description = "Return the unread mail count for sessions selected by selector without draining mail."
+cli_about       = "Return unread mail count for selected sessions."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["unread"],
+  "properties": {
+    "unread": {"type": "integer"},
+    "counts": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.mail_check.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Inbox owner selector used for matching sessions."
+cli_help        = "Inbox owner selector used for matching sessions."
+cli_flag        = "--selector"
+selector        = true
+
+[tools.mail_stop_check]
+cli_name        = "mail stop-check"
+mcp_description = "Return the unread mail count for stop-hook decisions without draining mail."
+cli_about       = "Check unread mail for stop-hook decisions."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["unread"],
+  "properties": {
+    "unread": {"type": "integer"},
+    "counts": {"type": "array", "items": {"type": "object"}}
+  }
+}
+'''
+
+[[tools.mail_stop_check.params]]
+name            = "selector"
+type            = "string"
+required        = true
+mcp_description = "Inbox owner selector used for matching sessions."
+cli_help        = "Inbox owner selector used for matching sessions."
+cli_flag        = "--selector"
+selector        = true

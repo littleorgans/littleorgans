@@ -7,6 +7,8 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use crate::env::non_empty_path;
+
 pub const RTM_SOCKET_PATH: &str = "RTM_SOCKET_PATH";
 pub const RTM_DB_PATH: &str = "RTM_DB_PATH";
 pub const RTM_HOME: &str = "RTM_HOME";
@@ -244,10 +246,6 @@ fn platform_default_socket_path(env: &RuntimePathEnv) -> Result<PathBuf, Runtime
 #[cfg(not(target_os = "linux"))]
 fn platform_default_socket_path(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
     Ok(home_runtime_dir(env, "rtm socket path")?.join(SOCKET_FILE))
-}
-
-fn non_empty_path(value: Option<&OsString>) -> Option<PathBuf> {
-    value.filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
 fn default_socket_path_label(env: &RuntimePathEnv) -> String {

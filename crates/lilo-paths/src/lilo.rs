@@ -1,8 +1,7 @@
-use std::env;
-use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+use crate::env::env_path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -121,18 +120,12 @@ pub enum LiloPathError {
     EmptyPath,
 }
 
-fn env_path(name: &str) -> Option<PathBuf> {
-    non_empty_env(name).map(PathBuf::from)
-}
-
-fn non_empty_env(name: &str) -> Option<OsString> {
-    env::var_os(name).filter(|value| !value.is_empty())
-}
-
 #[cfg(test)]
 #[allow(unsafe_code)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::ffi::OsString;
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();

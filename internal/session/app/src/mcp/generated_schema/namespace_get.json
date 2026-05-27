@@ -1,0 +1,41 @@
+{
+  "description": "Get one namespace record by slug. The tool returns an error envelope when the slug is unknown.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "slug": {
+        "description": "Namespace slug to load.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "slug"
+    ],
+    "type": "object"
+  },
+  "name": "namespace_get",
+  "outputSchema": {
+    "properties": {
+      "namespace": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "namespace",
+          "created_at"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "namespace"
+    ],
+    "type": "object"
+  }
+}

@@ -43,6 +43,9 @@ jobs:
       - name: Test workspace
         run: cargo test --workspace
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Moon CI
         run: moon ci
 
