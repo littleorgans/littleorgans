@@ -8,6 +8,7 @@ members = [
     "crates/lilo-paths",
     "crates/lilo-rm-core",
     "crates/lilo-rm-client",
+    "internal/db",
     "internal/identity/service",
     "internal/runtime/platform",
     "internal/runtime/launchers",
@@ -45,6 +46,7 @@ libc = "0.2.186"
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
+lilo-db = { path = "internal/db" }
 lilo-identity-service = { path = "internal/identity/service" }
 lilo-paths = { path = "crates/lilo-paths", version = "0.8.0" }
 lilo-rm-client = { path = "crates/lilo-rm-client", version = "0.8.0" }

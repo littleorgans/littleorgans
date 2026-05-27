@@ -1,0 +1,27 @@
+[package]
+name = "lilo-db"
+description = "Internal shared SQLite pool for composed littleorgans daemons"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+name = "lilo_db"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+lilo-paths.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

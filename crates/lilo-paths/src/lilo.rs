@@ -63,6 +63,29 @@ impl LiloPaths {
         self.home.join("logs")
     }
 
+    pub fn agent_config_dir(&self, name: impl fmt::Display) -> PathBuf {
+        self.config_root()
+            .join("session")
+            .join("agents")
+            .join(name.to_string())
+    }
+
+    pub fn namespace_binding(&self) -> PathBuf {
+        self.config_root().join("session").join("namespace")
+    }
+
+    pub fn session_log(&self, id: impl fmt::Display) -> PathBuf {
+        self.logs_root().join("sessions").join(format!("{id}.log"))
+    }
+
+    pub fn runtime_log_dir(&self, id: impl fmt::Display) -> PathBuf {
+        self.logs_root().join("runtimes").join(id.to_string())
+    }
+
+    pub fn lilod_log(&self) -> PathBuf {
+        self.logs_root().join("lilod.log")
+    }
+
     pub fn cache_root(&self) -> PathBuf {
         self.home.join("cache")
     }
@@ -226,7 +249,9 @@ mod tests {
     legacy_env_ignored_test!(rtm_home_is_ignored, "RTM_HOME");
     legacy_env_ignored_test!(rtm_socket_path_is_ignored, "RTM_SOCKET_PATH");
     legacy_env_ignored_test!(sm_home_is_ignored, "SM_HOME");
+    legacy_env_ignored_test!(sm_socket_path_is_ignored, "SM_SOCKET_PATH");
     legacy_env_ignored_test!(sm_db_path_is_ignored, "SM_DB_PATH");
+    legacy_env_ignored_test!(sm_namespace_is_ignored, "SM_NAMESPACE");
     legacy_env_ignored_test!(rtm_db_path_is_ignored, "RTM_DB_PATH");
     legacy_env_ignored_test!(lilo_db_path_is_ignored, "LILO_DB_PATH");
     legacy_env_ignored_test!(agm_home_is_ignored, "AGM_HOME");
@@ -254,6 +279,23 @@ mod tests {
         assert_eq!(paths.run_root(), root.join("run"));
         assert_eq!(paths.data_root(), root.join("data"));
         assert_eq!(paths.logs_root(), root.join("logs"));
+        assert_eq!(
+            paths.agent_config_dir("demo"),
+            root.join("config/session/agents/demo")
+        );
+        assert_eq!(
+            paths.namespace_binding(),
+            root.join("config/session/namespace")
+        );
+        assert_eq!(
+            paths.session_log("019e6900"),
+            root.join("logs/sessions/019e6900.log")
+        );
+        assert_eq!(
+            paths.runtime_log_dir("019e6900"),
+            root.join("logs/runtimes/019e6900")
+        );
+        assert_eq!(paths.lilod_log(), root.join("logs/lilod.log"));
         assert_eq!(paths.cache_root(), root.join("cache"));
         assert_eq!(paths.tmp_root(), root.join("tmp"));
         assert_eq!(paths.socket_path(), root.join("run/lilod.sock"));

@@ -1088,6 +1088,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilo-db"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "lilo-paths",
+ "sqlx",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "lilo-identity-service"
 version = "0.8.0"
 dependencies = [
