@@ -1,6 +1,6 @@
 mod common;
 use common::{LOCAL_UID, TestDaemon, local_context};
-use lilo_rm_core::{CaptureError, CaptureResponse, PaneSnapshot};
+use lilo_rm_core::{CaptureError, CaptureResponse};
 use lilo_session_core::{
     CaptureRequest, IsolationPolicy, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
 };
@@ -40,7 +40,6 @@ async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
     };
     assert_eq!(response.session.tmux_pane, None);
     assert!(response.session.runtime_pid > 0);
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -86,49 +85,9 @@ async fn spawn_rejects_unsupported_target_before_launch() {
 }
 
 #[tokio::test]
-async fn capture_delegates_to_driver_for_selected_session() {
+async fn capture_reports_runtime_headless_failure() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    daemon
-        .driver
-        .set_capture(CaptureResponse::Captured(PaneSnapshot {
-            content: "pane text\n".to_string(),
-            captured_at_ms: 10,
-            scrollback_lines_requested: 20,
-            scrollback_lines_included: 1,
-            pane_history_lines: 1,
-        }));
-    let session = common::spawn_test_session(&daemon, &context, "engineer").await;
-
-    let response = daemon
-        .state
-        .handle(
-            context,
-            SessionRpc::Capture {
-                request: CaptureRequest {
-                    session_id: session.id,
-                    scrollback_lines: Some(20),
-                },
-            },
-        )
-        .await;
-
-    let RpcResponse::Capture { response } = response.response else {
-        panic!("expected capture response");
-    };
-    let CaptureResponse::Captured(snapshot) = response.capture else {
-        panic!("expected captured snapshot");
-    };
-    assert_eq!(snapshot.content, "pane text\n");
-}
-
-#[tokio::test]
-async fn capture_surfaces_pane_unavailable_failure() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
-    let context = local_context();
-    daemon
-        .driver
-        .set_capture(CaptureResponse::Failed(CaptureError::PaneUnavailable));
     let session = common::spawn_test_session(&daemon, &context, "engineer").await;
 
     let response = daemon
@@ -149,7 +108,7 @@ async fn capture_surfaces_pane_unavailable_failure() {
     };
     assert_eq!(
         response.capture,
-        CaptureResponse::Failed(CaptureError::PaneUnavailable)
+        CaptureResponse::Failed(CaptureError::NotATmuxTarget)
     );
 }
 

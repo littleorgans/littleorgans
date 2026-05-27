@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use lilo_runtime_daemon::RuntimeService;
 use lilo_session_core::RpcResponse;
-use lilo_session_driver::SessionDriver;
+use lilo_session_driver::RtmdDriver;
 use lilo_session_store::SqliteStore;
 
 use crate::identity_client::IdentityClient;
 
 pub struct DaemonState {
     pub store: SqliteStore,
-    pub driver: Arc<dyn SessionDriver>,
+    pub(crate) driver: Arc<RtmdDriver>,
     pub(crate) runtime: Arc<RuntimeService>,
     pub(crate) identity: Arc<IdentityClient>,
     pub(crate) rtmd_socket_path: Option<PathBuf>,
@@ -24,7 +24,7 @@ pub struct HandlerResult {
 impl DaemonState {
     pub fn new(
         store: SqliteStore,
-        driver: Arc<dyn SessionDriver>,
+        driver: Arc<RtmdDriver>,
         identity: Arc<IdentityClient>,
         runtime: Arc<RuntimeService>,
     ) -> Self {

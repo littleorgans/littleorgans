@@ -137,7 +137,6 @@ mod tests {
     use crate::test_support::OrPanic as _;
     use std::path::Path;
 
-    use async_trait::async_trait;
     use chrono::Utc;
     use lilo_db::LiloDb;
     use lilo_paths::{LiloHome, LiloPaths};
@@ -149,9 +148,7 @@ mod tests {
     use lilo_session_core::{
         Label, Namespace, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
-    use lilo_session_driver::{
-        CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SessionDriver,
-    };
+    use lilo_session_driver::RtmdDriver;
     use lilo_session_store::SqliteStore;
     use lilo_wire::LilodRpc;
     use tokio::io::BufReader;
@@ -277,7 +274,12 @@ mod tests {
             .or_panic("runtime service builds"),
         );
         std::mem::forget(dir);
-        DaemonState::new(store, Arc::new(NoopDriver), Arc::new(identity), runtime)
+        DaemonState::new(
+            store,
+            Arc::new(RtmdDriver::new(paths.socket_path())),
+            Arc::new(identity),
+            runtime,
+        )
     }
 
     async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
@@ -351,53 +353,5 @@ mod tests {
             .await
             .or_panic("status response writes");
         })
-    }
-
-    struct NoopDriver;
-
-    #[async_trait]
-    impl SessionDriver for NoopDriver {
-        async fn validate_target(&self, _target: &str) -> Result<(), DriverError> {
-            Ok(())
-        }
-
-        async fn capture(
-            &self,
-            _session_id: &str,
-            _scrollback_lines: Option<u32>,
-        ) -> Result<CaptureResult, DriverError> {
-            unreachable!("event tests do not capture through the driver")
-        }
-
-        async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
-            Ok(Vec::new())
-        }
-
-        async fn probe_session(
-            &self,
-            _session_id: &str,
-            _runtime_pid: u32,
-        ) -> Result<DriverProbe, DriverError> {
-            unreachable!("event tests do not probe through the driver")
-        }
-
-        async fn terminate(
-            &self,
-            _session_id: &str,
-            _signal: &str,
-            _grace: Duration,
-        ) -> Result<Option<ChildExit>, DriverError> {
-            Ok(None)
-        }
-
-        async fn nudge(
-            &self,
-            _session_id: &str,
-            _content: &str,
-        ) -> Result<NudgeResult, DriverError> {
-            unreachable!("event tests do not nudge through the driver")
-        }
-
-        fn terminate_all(&self) {}
     }
 }

@@ -5,7 +5,7 @@ use lilo_rm_core::{
     NudgeFailureReason, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse,
     RuntimeRpc, read_json_line, write_json_line,
 };
-use lilo_session_driver::{RtmdDriver, SpawnDriver};
+use lilo_session_driver::RtmdDriver;
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixListener;

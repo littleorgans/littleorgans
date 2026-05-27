@@ -4,7 +4,6 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use async_trait::async_trait;
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
     CaptureRequest, KillOutcome, KillRequest, Lifecycle, LifecycleState, NudgeFailureReason,
@@ -19,8 +18,7 @@ use crate::conv::{
     runtime_spawn_request, spawned_process,
 };
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnDriver, SpawnLaunch,
-    SpawnedProcess,
+    CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnLaunch, SpawnedProcess,
 };
 
 #[derive(Clone, Debug)]
@@ -42,9 +40,8 @@ impl RtmdDriver {
     }
 }
 
-#[async_trait]
-impl SpawnDriver for RtmdDriver {
-    async fn spawn(
+impl RtmdDriver {
+    pub async fn spawn(
         &self,
         session_id: &str,
         launch: &SpawnLaunch,
@@ -56,7 +53,7 @@ impl SpawnDriver for RtmdDriver {
         spawned_process(payload)
     }
 
-    async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
+    pub async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
         match self.client.validate_target(target).await?.outcome {
             ValidateTargetOutcome::Valid => Ok(()),
             ValidateTargetOutcome::InvalidTarget { message } => {
@@ -71,7 +68,7 @@ impl SpawnDriver for RtmdDriver {
         }
     }
 
-    async fn capture(
+    pub async fn capture(
         &self,
         session_id: &str,
         scrollback_lines: Option<u32>,
@@ -88,7 +85,7 @@ impl SpawnDriver for RtmdDriver {
         })
     }
 
-    async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
+    pub async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
         let payload = self.client.status(StatusFilter::empty()).await?;
         let mut terminal_sessions = self.locked_terminal_sessions();
         let mut exits = Vec::new();
@@ -102,7 +99,7 @@ impl SpawnDriver for RtmdDriver {
         Ok(exits)
     }
 
-    async fn probe_session(
+    pub async fn probe_session(
         &self,
         session_id: &str,
         runtime_pid: u32,
@@ -123,7 +120,7 @@ impl SpawnDriver for RtmdDriver {
         lifecycle_to_probe(lifecycle, runtime_pid)
     }
 
-    async fn terminate(
+    pub async fn terminate(
         &self,
         session_id: &str,
         signal: &str,
@@ -157,7 +154,7 @@ impl SpawnDriver for RtmdDriver {
         Ok(exit)
     }
 
-    async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError> {
+    pub async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError> {
         let session_id = parse_session_id(session_id)?;
         let response = self
             .client
@@ -169,7 +166,7 @@ impl SpawnDriver for RtmdDriver {
         Ok(nudge_result(&response.outcome))
     }
 
-    fn terminate_all(&self) {}
+    pub fn terminate_all(&self) {}
 }
 
 impl RtmdDriver {

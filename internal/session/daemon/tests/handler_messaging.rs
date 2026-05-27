@@ -223,38 +223,8 @@ async fn mail_send_skips_terminated_recipients() {
 }
 
 #[tokio::test]
-async fn nudge_delegates_delivery_outcome_from_driver() {
+async fn nudge_reports_runtime_headless_outcome() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
-    let context = local_context();
-    let recipient = spawn_test_session(&daemon, &context, "engineer").await;
-    let nudged = daemon
-        .state
-        .handle(
-            context,
-            SessionRpc::Nudge {
-                request: NudgeRequest {
-                    to: Selector::Id { id: recipient.id },
-                    content: "ping".to_string(),
-                },
-            },
-        )
-        .await;
-
-    let RpcResponse::Nudged { response } = nudged.response else {
-        panic!("expected nudge response");
-    };
-    assert_eq!(response.nudges.len(), 1);
-    assert!(response.nudges[0].delivered);
-    assert_eq!(response.nudges[0].message, "delivered");
-}
-
-#[tokio::test]
-async fn nudge_surfaces_failed_outcome_from_driver() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
-    daemon.driver.set_nudge(lilo_session_driver::NudgeResult {
-        delivered: false,
-        message: "tmux pane is no longer available".to_string(),
-    });
     let context = local_context();
     let recipient = spawn_test_session(&daemon, &context, "engineer").await;
     let nudged = daemon
@@ -277,7 +247,7 @@ async fn nudge_surfaces_failed_outcome_from_driver() {
     assert!(!response.nudges[0].delivered);
     assert_eq!(
         response.nudges[0].message,
-        "tmux pane is no longer available"
+        "headless runtime does not support nudges"
     );
 }
 

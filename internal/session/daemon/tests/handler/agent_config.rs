@@ -55,7 +55,6 @@ pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     );
     assert_eq!(response.session.dir, daemon.dir.path());
     assert!(response.session.runtime_pid > 0);
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]

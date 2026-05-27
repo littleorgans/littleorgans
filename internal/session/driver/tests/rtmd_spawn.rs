@@ -9,7 +9,7 @@ use lilo_rm_core::{
     read_json_line, write_json_line,
 };
 use lilo_session_core::RuntimeKind as SmRuntimeKind;
-use lilo_session_driver::{RtmdDriver, SpawnDriver, SpawnLaunch};
+use lilo_session_driver::{RtmdDriver, SpawnLaunch};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixListener;

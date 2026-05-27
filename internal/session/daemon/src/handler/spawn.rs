@@ -1,11 +1,9 @@
-use std::time::Duration;
-
 use anyhow::{Context, Result};
 use chrono::Utc;
-use lilo_im_core::Action;
+use lilo_im_core::{Action, Principal};
 use lilo_rm_core::{
-    LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, RuntimeResponse, RuntimeRpc, ShellResume,
-    StatusRequest, capture_caller_env, capture_shell_resume,
+    KillRequest, LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, RuntimeResponse, RuntimeRpc,
+    RuntimeSignal, ShellResume, StatusRequest, capture_caller_env, capture_shell_resume,
 };
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
@@ -165,11 +163,16 @@ impl DaemonState {
             self.abort_spawn_intent(intent.session_id, "namespace deleted before session commit")
                 .await?;
             let _ = self
-                .driver
-                .terminate(
-                    &intent.session_id.to_string(),
-                    "SIGTERM",
-                    Duration::from_secs(5),
+                .runtime
+                .handle_rpc(
+                    Principal::Local(nix::unistd::getuid().as_raw()),
+                    RuntimeRpc::Kill {
+                        request: KillRequest {
+                            session_id: intent.session_id,
+                            signal: RuntimeSignal::Term,
+                            grace_secs: 5,
+                        },
+                    },
                 )
                 .await;
             anyhow::bail!(

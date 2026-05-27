@@ -49,7 +49,6 @@ async fn agent_run_unknown_isolation_returns_structured_mcp_error() {
         message.contains("invalid isolation policy kubernetes"),
         "{message}"
     );
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -80,7 +79,6 @@ async fn session_run_mounts_reject_host_isolation() {
             .contains("--mount is docker-only and cannot be used with --isolation host"),
         "{error}"
     );
-    assert!(daemon.driver.launches().is_empty());
 }
 
 async fn assert_run_tool_spawns_session(tool_name: &str) {
@@ -97,7 +95,6 @@ async fn assert_run_tool_spawns_session(tool_name: &str) {
     assert_eq!(session["role"], "engineer");
     assert_eq!(session["dir"], daemon.dir.path().display().to_string());
     assert_eq!(session["runtime"], "claude");
-    assert!(daemon.driver.launches().is_empty());
 }
 
 fn run_arguments(dir: &Path, isolation: &str, image: Option<&str>) -> Value {

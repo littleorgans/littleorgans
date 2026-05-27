@@ -84,7 +84,6 @@ pub(crate) async fn spawn_prefers_new_dir_when_legacy_workspace_is_also_present(
     assert_eq!(response.session.workspace, dir);
     assert_eq!(response.session.namespace, namespace);
     assert_eq!(response.session.dir, daemon.dir.path());
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -122,7 +121,6 @@ pub(crate) async fn spawn_rejects_unknown_namespace_before_launch() {
         panic!("expected error response");
     };
     assert!(message.contains("namespace not found: missing"));
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]

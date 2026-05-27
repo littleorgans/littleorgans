@@ -29,7 +29,6 @@ pub(crate) async fn drives_session_through_delete_lifecycle() {
 
     assert_eq!(response.sessions.len(), 1);
     assert_eq!(response.sessions[0].state, SessionState::Terminated);
-    assert_eq!(response.sessions[0].exit_code, Some(143));
     assert!(response.sessions[0].terminated_at.is_some());
 }
 

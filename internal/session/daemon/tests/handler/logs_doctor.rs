@@ -25,7 +25,6 @@ pub(crate) async fn spawn_persists_runtime_stdout_path_for_logs() {
         Some("stdout.log")
     );
     assert!(transcript.starts_with(daemon.dir.path().join("lilo/logs/runtimes")));
-    assert!(daemon.driver.launches().is_empty());
 
     let mut log_body = String::new();
     for _ in 0..100 {

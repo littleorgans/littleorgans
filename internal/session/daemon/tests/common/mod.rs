@@ -1,10 +1,5 @@
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
-
-use async_trait::async_trait;
 use lilo_db::LiloDb;
 use lilo_im_core::{AuditRow, Principal};
 use lilo_paths::{LiloHome, LiloPaths};
@@ -19,13 +14,12 @@ use lilo_session_core::{
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
-use lilo_session_driver::{
-    CaptureResult, ChildExit, DriverError, DriverProbe, LaunchEnv, NudgeResult, SpawnDriver,
-    SpawnLaunch, SpawnedProcess,
-};
+use lilo_session_driver::{LaunchEnv, RtmdDriver};
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
 use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::io::BufReader;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinHandle;
@@ -37,190 +31,8 @@ pub use shared_test_support::OrPanic;
 
 pub const LOCAL_UID: u32 = 42;
 
-pub struct MockDriver {
-    exits: Mutex<Vec<ChildExit>>,
-    launches: Mutex<Vec<SpawnLaunch>>,
-    probe_verified: Mutex<bool>,
-    spawn_stdout_path: Mutex<Option<PathBuf>>,
-    spawn_tmux_pane: Mutex<Option<String>>,
-    terminate_exit: Mutex<Option<ChildExit>>,
-    capture: Mutex<Option<lilo_rm_core::CaptureResponse>>,
-    nudge: Mutex<NudgeResult>,
-}
-
-impl MockDriver {
-    pub fn new() -> Self {
-        Self {
-            exits: Mutex::new(Vec::new()),
-            launches: Mutex::new(Vec::new()),
-            probe_verified: Mutex::new(true),
-            spawn_stdout_path: Mutex::new(None),
-            spawn_tmux_pane: Mutex::new(None),
-            terminate_exit: Mutex::new(Some(ChildExit {
-                session_id: String::new(),
-                runtime_pid: 42,
-                exit_code: Some(143),
-                transcript_path: None,
-            })),
-            capture: Mutex::new(None),
-            nudge: Mutex::new(NudgeResult {
-                delivered: true,
-                message: "delivered".to_string(),
-            }),
-        }
-    }
-
-    pub fn launches(&self) -> Vec<SpawnLaunch> {
-        self.launches
-            .lock()
-            .or_panic("launches lock poisoned")
-            .clone()
-    }
-
-    pub fn set_probe_verified(&self, verified: bool) {
-        *self.probe_verified.lock().or_panic("probe lock poisoned") = verified;
-    }
-
-    pub fn set_spawn_stdout_path(&self, path: PathBuf) {
-        *self
-            .spawn_stdout_path
-            .lock()
-            .or_panic("spawn stdout path lock poisoned") = Some(path);
-    }
-
-    pub fn set_spawn_tmux_pane(&self, pane: &str) {
-        *self
-            .spawn_tmux_pane
-            .lock()
-            .or_panic("spawn tmux pane lock poisoned") = Some(pane.to_string());
-    }
-
-    pub fn set_capture(&self, response: lilo_rm_core::CaptureResponse) {
-        *self.capture.lock().or_panic("capture lock poisoned") = Some(response);
-    }
-
-    pub fn set_nudge(&self, result: NudgeResult) {
-        *self.nudge.lock().or_panic("nudge lock poisoned") = result;
-    }
-
-    pub fn set_terminate_exit(&self, exit: Option<ChildExit>) {
-        *self
-            .terminate_exit
-            .lock()
-            .or_panic("terminate exit lock poisoned") = exit;
-    }
-}
-
-#[async_trait]
-impl SpawnDriver for MockDriver {
-    async fn spawn(
-        &self,
-        _session_id: &str,
-        launch: &SpawnLaunch,
-    ) -> Result<SpawnedProcess, DriverError> {
-        self.launches
-            .lock()
-            .or_panic("launches lock poisoned")
-            .push(launch.clone());
-        Ok(SpawnedProcess {
-            runtime_pid: 42,
-            log_dir: None,
-            stdout_path: self
-                .spawn_stdout_path
-                .lock()
-                .or_panic("spawn stdout path lock poisoned")
-                .clone(),
-            stderr_path: None,
-            tmux_pane: self
-                .spawn_tmux_pane
-                .lock()
-                .or_panic("spawn tmux pane lock poisoned")
-                .clone(),
-        })
-    }
-
-    async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
-        match target {
-            "headless" | "tmux:test:0.0" => Ok(()),
-            other if other.starts_with("tmux:dead:") => Err(DriverError::TmuxPaneDead(
-                other.trim_start_matches("tmux:").to_string(),
-            )),
-            other if other.starts_with("ssh:") => {
-                Err(DriverError::UnsupportedTarget(other.to_string()))
-            }
-            other => Err(DriverError::InvalidTarget(other.to_string())),
-        }
-    }
-
-    async fn capture(
-        &self,
-        _session_id: &str,
-        _scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, DriverError> {
-        let response = self
-            .capture
-            .lock()
-            .or_panic("capture lock poisoned")
-            .clone()
-            .unwrap_or(lilo_rm_core::CaptureResponse::Failed(
-                lilo_rm_core::CaptureError::NotATmuxTarget,
-            ));
-        Ok(CaptureResult { response })
-    }
-
-    async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
-        Ok(self
-            .exits
-            .lock()
-            .or_panic("exits lock poisoned")
-            .drain(..)
-            .collect())
-    }
-
-    async fn probe_session(
-        &self,
-        _session_id: &str,
-        _runtime_pid: u32,
-    ) -> Result<DriverProbe, DriverError> {
-        let verified = *self.probe_verified.lock().or_panic("probe lock poisoned");
-        Ok(DriverProbe {
-            verified,
-            evidence: if verified {
-                "verified".to_string()
-            } else {
-                "probe failed".to_string()
-            },
-            transcript_path: None,
-        })
-    }
-
-    async fn terminate(
-        &self,
-        session_id: &str,
-        _signal: &str,
-        _grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError> {
-        Ok(self
-            .terminate_exit
-            .lock()
-            .or_panic("terminate exit lock poisoned")
-            .clone()
-            .map(|exit| ChildExit {
-                session_id: session_id.to_string(),
-                ..exit
-            }))
-    }
-
-    async fn nudge(&self, _session_id: &str, _content: &str) -> Result<NudgeResult, DriverError> {
-        Ok(self.nudge.lock().or_panic("nudge lock poisoned").clone())
-    }
-
-    fn terminate_all(&self) {}
-}
-
 pub struct TestDaemon {
     pub state: DaemonState,
-    pub driver: Arc<MockDriver>,
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
     runtime_socket_task: JoinHandle<()>,
@@ -230,7 +42,6 @@ impl TestDaemon {
     pub async fn new(local_uid: u32) -> Self {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
         warm_runtime_launchers_with_fake_runtime();
-        let driver = Arc::new(MockDriver::new());
         let paths = LiloPaths::new(
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
@@ -251,12 +62,12 @@ impl TestDaemon {
                 .or_panic("runtime service builds"),
         );
         let runtime_socket_path = paths.socket_path();
+        let driver = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
-        let state = DaemonState::new(store, driver.clone(), Arc::new(identity), runtime)
+        let state = DaemonState::new(store, driver, Arc::new(identity), runtime)
             .with_rtmd_socket_path(runtime_socket_path);
         Self {
             state,
-            driver,
             audit_path,
             dir,
             runtime_socket_task,

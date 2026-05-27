@@ -1,11 +1,8 @@
-use std::path::PathBuf;
-use std::time::Duration;
-
-use async_trait::async_trait;
 use lilo_rm_client::ClientError;
 pub use lilo_rm_core::LaunchEnv;
 use lilo_rm_core::{CaptureResponse, IsolationPolicy, MountSpec, ShellResume, SpawnConflictKind};
 use lilo_session_core::RuntimeKind;
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,117 +83,4 @@ pub struct NudgeResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureResult {
     pub response: CaptureResponse,
-}
-
-#[async_trait]
-pub trait SpawnDriver: Send + Sync {
-    async fn spawn(
-        &self,
-        session_id: &str,
-        launch: &SpawnLaunch,
-    ) -> Result<SpawnedProcess, DriverError>;
-
-    async fn validate_target(&self, target: &str) -> Result<(), DriverError>;
-
-    async fn capture(
-        &self,
-        session_id: &str,
-        scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, DriverError>;
-
-    async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError>;
-
-    async fn probe_session(
-        &self,
-        session_id: &str,
-        runtime_pid: u32,
-    ) -> Result<DriverProbe, DriverError>;
-
-    async fn terminate(
-        &self,
-        session_id: &str,
-        signal: &str,
-        grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError>;
-
-    async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError>;
-
-    fn terminate_all(&self);
-}
-
-#[async_trait]
-pub trait SessionDriver: Send + Sync {
-    async fn validate_target(&self, target: &str) -> Result<(), DriverError>;
-
-    async fn capture(
-        &self,
-        session_id: &str,
-        scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, DriverError>;
-
-    async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError>;
-
-    async fn probe_session(
-        &self,
-        session_id: &str,
-        runtime_pid: u32,
-    ) -> Result<DriverProbe, DriverError>;
-
-    async fn terminate(
-        &self,
-        session_id: &str,
-        signal: &str,
-        grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError>;
-
-    async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError>;
-
-    fn terminate_all(&self);
-}
-
-#[async_trait]
-impl<T> SessionDriver for T
-where
-    T: SpawnDriver + ?Sized,
-{
-    async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
-        SpawnDriver::validate_target(self, target).await
-    }
-
-    async fn capture(
-        &self,
-        session_id: &str,
-        scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, DriverError> {
-        SpawnDriver::capture(self, session_id, scrollback_lines).await
-    }
-
-    async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
-        SpawnDriver::reap_exited(self).await
-    }
-
-    async fn probe_session(
-        &self,
-        session_id: &str,
-        runtime_pid: u32,
-    ) -> Result<DriverProbe, DriverError> {
-        SpawnDriver::probe_session(self, session_id, runtime_pid).await
-    }
-
-    async fn terminate(
-        &self,
-        session_id: &str,
-        signal: &str,
-        grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError> {
-        SpawnDriver::terminate(self, session_id, signal, grace).await
-    }
-
-    async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError> {
-        SpawnDriver::nudge(self, session_id, content).await
-    }
-
-    fn terminate_all(&self) {
-        SpawnDriver::terminate_all(self);
-    }
 }

@@ -44,7 +44,6 @@ pub(crate) async fn spawn_launch_uses_runtime_service_without_driver_fallback() 
     );
     assert_eq!(response.session.dir, daemon.dir.path());
     assert!(response.session.runtime_pid > 0);
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -56,5 +55,4 @@ pub(crate) async fn spawn_launch_cwd_is_request_workspace() {
     assert_eq!(session.workspace, daemon.dir.path().display().to_string());
     assert_eq!(session.dir, daemon.dir.path());
     assert!(session.runtime_pid > 0);
-    assert!(daemon.driver.launches().is_empty());
 }
