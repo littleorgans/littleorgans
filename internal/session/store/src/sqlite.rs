@@ -26,11 +26,6 @@ impl SqliteStore {
     }
 
     #[must_use]
-    pub fn from_pool(pool: SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    #[must_use]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }

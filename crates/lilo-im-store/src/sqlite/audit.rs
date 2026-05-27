@@ -47,13 +47,8 @@ pub struct SqliteAuditSink {
 
 impl SqliteAuditSink {
     #[must_use]
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    #[must_use]
     pub fn with_pool(pool: SqlitePool) -> Self {
-        Self::new(pool)
+        Self { pool }
     }
 
     pub async fn query_audit(&self, filters: AuditFilters) -> Result<Vec<AuditRow>, StoreError> {
