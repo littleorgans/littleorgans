@@ -9,3 +9,5 @@ Phase 1 records the pre-migration source repositories without importing their so
 | session | `git@github.com:littleorgans/session-matters.git` | `main` | `3a2af7ed65fffbf9080d0c5f770c8ae9edb79716` | `v0.2.8` |
 
 Runtime architecture source artifacts at the frozen SHA included `runtime-matters/MAP.md` and `runtime-matters/PROJECT.md`. Phase 3/W4 merged them into `docs/architecture/runtime.md`.
+
+Session architecture source artifacts from the Phase 4 source import included `session-matters/MAP.md` and `session-matters/PROJECT.md`. Phase 4/W3 merged them into `docs/architecture/session.md`.
