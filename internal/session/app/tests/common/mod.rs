@@ -35,6 +35,7 @@ impl DaemonFixture {
         let mut rtmd = Command::new(&rtm)
             .arg("daemon")
             .arg("start")
+            .env_remove("CLAUDE_CONFIG_DIR")
             .env("RTM_SOCKET_PATH", &rtm_socket)
             .env("RTM_DB_PATH", dir.path().join("rtm.sqlite"))
             .env("RTM_HOME", dir.path().join("rtm-home"))
@@ -48,6 +49,7 @@ impl DaemonFixture {
         let mut command = Command::new(sm_bin());
         command
             .arg("__smd")
+            .env_remove("CLAUDE_CONFIG_DIR")
             .env("SM_HOME", dir.path())
             .env("HOME", dir.path())
             .env("RTM_SOCKET_PATH", &rtm_socket)
@@ -104,6 +106,7 @@ impl DaemonFixture {
     pub fn command(&self) -> Command {
         let mut command = Command::new(sm_bin());
         command
+            .env_remove("CLAUDE_CONFIG_DIR")
             .env("SM_HOME", self.dir.path())
             .env("HOME", self.dir.path());
         command
