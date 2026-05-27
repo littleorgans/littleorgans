@@ -15,6 +15,7 @@ fn namespace_scope_applies_to_selector_consuming_cli_surfaces() {
 
 struct ScopeFixture {
     daemon: common::DaemonFixture,
+    _runtime_path: tempfile::TempDir,
     alpha_dir: PathBuf,
     beta_dir: PathBuf,
     alpha_id: String,
@@ -37,6 +38,7 @@ fn scoped_sessions() -> ScopeFixture {
 
     ScopeFixture {
         daemon,
+        _runtime_path: runtime_path,
         alpha_dir,
         beta_dir,
         alpha_id,
@@ -174,7 +176,7 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm mail send executes");
     assert_success("sm mail send", &mail_default);
-    assert_line_count(&mail_default.stdout, 1);
+    assert_stdout_line_count("sm mail send", &mail_default, 1);
 
     let mail_all = daemon
         .command()
@@ -183,7 +185,7 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm mail send -A executes");
     assert_success("sm mail send -A", &mail_all);
-    assert_line_count(&mail_all.stdout, 2);
+    assert_stdout_line_count("sm mail send -A", &mail_all, 2);
 
     let nudge_default = daemon
         .command()
@@ -324,12 +326,15 @@ fn assert_contains(output: &std::process::Output, needle: &str) {
     );
 }
 
-fn assert_line_count(bytes: &[u8], expected: usize) {
-    let lines = String::from_utf8_lossy(bytes)
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .count();
-    assert_eq!(lines, expected);
+fn assert_stdout_line_count(command: &str, output: &std::process::Output, expected: usize) {
+    let lines = nonempty_line_count(&output.stdout);
+    assert_eq!(
+        lines,
+        expected,
+        "{command}\nstdout:\n{}\nstderr:\n{}",
+        stdout(output),
+        stderr(output)
+    );
 }
 
 fn assert_total_line_count(output: &std::process::Output, expected: usize) {

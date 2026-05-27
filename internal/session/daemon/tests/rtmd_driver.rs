@@ -24,10 +24,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn rtmd_driver_spawn_is_visible_to_sm_and_rtmd() {
-    let Some(rtm) = rtm_binary() else {
-        eprintln!("skipping rtmd integration test; set RTM_TEST_BIN to an rtm binary");
-        return;
-    };
+    let rtm = rtm_binary();
     let temp = tempfile::tempdir().or_panic("tempdir");
     write_fake_runtime(temp.path(), "claude");
     let mut rtmd = RtmdHarness::start(&rtm, temp.path());
@@ -69,10 +66,7 @@ async fn rtmd_driver_spawn_is_visible_to_sm_and_rtmd() {
 
 #[tokio::test]
 async fn rtmd_driver_delete_signalled_session_marks_terminated() {
-    let Some(rtm) = rtm_binary() else {
-        eprintln!("skipping rtmd integration test; set RTM_TEST_BIN to an rtm binary");
-        return;
-    };
+    let rtm = rtm_binary();
     let temp = tempfile::tempdir().or_panic("tempdir");
     write_fake_runtime(temp.path(), "claude");
     let mut rtmd = RtmdHarness::start(&rtm, temp.path());
@@ -93,10 +87,7 @@ async fn rtmd_driver_delete_signalled_session_marks_terminated() {
 
 #[tokio::test]
 async fn rtmd_driver_delete_already_exited_session_marks_terminated() {
-    let Some(rtm) = rtm_binary() else {
-        eprintln!("skipping rtmd integration test; set RTM_TEST_BIN to an rtm binary");
-        return;
-    };
+    let rtm = rtm_binary();
     let temp = tempfile::tempdir().or_panic("tempdir");
     write_fake_runtime(temp.path(), "claude");
     let mut rtmd = RtmdHarness::start(&rtm, temp.path());
@@ -303,21 +294,9 @@ async fn wait_for_log_content(path: &Path) -> String {
     panic!("runtime log did not receive content at {}", path.display());
 }
 
-fn rtm_binary() -> Option<PathBuf> {
+fn rtm_binary() -> PathBuf {
     std::env::var_os("RTM_TEST_BIN")
-        .map(PathBuf::from)
-        .or_else(|| {
-            let sibling = helioy_root().join("runtime-matters/target/debug/rtm");
-            sibling.exists().then_some(sibling)
-        })
-}
-
-fn helioy_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(4)
-        .or_panic("workspace has helioy root ancestor")
-        .to_path_buf()
+        .map_or_else(|| assert_cmd::cargo::cargo_bin("rtm"), PathBuf::from)
 }
 
 fn write_fake_runtime(dir: &Path, name: &str) {

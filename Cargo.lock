@@ -1301,6 +1301,7 @@ name = "lilo-session-daemon"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "async-trait",
  "chrono",
  "lilo-im-core",

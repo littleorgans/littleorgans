@@ -236,19 +236,7 @@ fn rtm_bin() -> PathBuf {
     if let Some(path) = std::env::var_os("RTM_TEST_BIN") {
         return PathBuf::from(path);
     }
-    let sibling = helioy_root().join("runtime-matters/target/debug/rtm");
-    if sibling.exists() {
-        return sibling;
-    }
-    PathBuf::from("rtm")
-}
-
-fn helioy_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(4)
-        .or_panic("workspace has helioy root ancestor")
-        .to_path_buf()
+    assert_cmd::cargo::cargo_bin("rtm")
 }
 
 fn test_path(prefix: Option<&Path>) -> std::ffi::OsString {
