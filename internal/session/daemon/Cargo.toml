@@ -14,6 +14,8 @@ name = "lilo_session_daemon"
 path = "src/lib.rs"
 
 [dependencies]
+lilo-paths.workspace = true
+lilo-wire.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 lilo-db.workspace = true

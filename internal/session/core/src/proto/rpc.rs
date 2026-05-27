@@ -13,7 +13,7 @@ use super::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum RpcRequest {
+pub enum SessionRpc {
     Spawn { request: Box<SpawnRequest> },
     List { request: ListRequest },
     NamespaceCreate { request: NamespaceCreateRequest },

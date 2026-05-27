@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use lilo_session_core::{MailCheckRequest, RpcRequest, RpcResponse, Selector};
+use lilo_session_core::{MailCheckRequest, RpcResponse, Selector, SessionRpc};
 use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
@@ -74,7 +74,7 @@ fn run_rpc_round_trip(
     daemon: &common::DaemonFixture,
     session_id: Uuid,
 ) -> usize {
-    let request = RpcRequest::MailCheck {
+    let request = SessionRpc::MailCheck {
         request: MailCheckRequest {
             selector: Selector::Id { id: session_id },
         },

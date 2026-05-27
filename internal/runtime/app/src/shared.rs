@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
+use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::{
     EventBatch, EventCursor, EventsRequest, RuntimeResponse, RuntimeRpc, StatusFilter,
@@ -10,7 +11,7 @@ use lilo_rm_core::{
 use uuid::Uuid;
 
 pub fn socket_path() -> Result<PathBuf> {
-    lilo_runtime_daemon::socket::socket_path_from_env()
+    Ok(LiloPaths::new(LiloHome::from_env()?).socket_path())
 }
 
 pub async fn request(socket_path: &Path, rpc: RuntimeRpc) -> Result<RuntimeResponse> {

@@ -2,7 +2,7 @@ use chrono::Utc;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context};
 use lilo_session_core::{
-    IsolationPolicy, Namespace, RpcRequest, RpcResponse, RuntimeKind, SpawnRequest,
+    IsolationPolicy, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
 };
 
 #[tokio::test]
@@ -16,7 +16,7 @@ pub(crate) async fn spawn_accepts_new_dir_and_namespace_without_legacy_workspace
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -57,7 +57,7 @@ pub(crate) async fn spawn_prefers_new_dir_when_legacy_workspace_is_also_present(
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -97,7 +97,7 @@ pub(crate) async fn spawn_rejects_unknown_namespace_before_launch() {
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -137,7 +137,7 @@ pub(crate) async fn spawn_persists_dir_as_received_without_daemon_canonicalisati
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),

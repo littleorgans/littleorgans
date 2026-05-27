@@ -1,9 +1,14 @@
-use anyhow::Result;
+use std::sync::Arc;
+
+use crate::server::{DaemonConfig, ServerState};
+use crate::{handler, reconcile};
+use anyhow::{Context, Result};
 use lilo_db::LiloDb;
+use lilo_im_core::Principal;
+use lilo_rm_core::{RuntimeResponse, RuntimeRpc};
+use lilo_runtime_store::LifecycleStore;
+use tokio::sync::broadcast;
 
-use crate::{DaemonConfig, server::run_daemon_with_db};
-
-#[derive(Clone)]
 pub struct RuntimeServiceContext {
     config: DaemonConfig,
     db: LiloDb,
@@ -29,65 +34,89 @@ impl RuntimeServiceContext {
     }
 }
 
-#[derive(Clone)]
 pub struct RuntimeService {
     config: DaemonConfig,
-    db: LiloDb,
+    state: Arc<ServerState>,
+    shutdown_tx: broadcast::Sender<()>,
 }
 
 impl RuntimeService {
-    pub fn build(ctx: RuntimeServiceContext) -> Result<Self> {
+    pub async fn build(ctx: RuntimeServiceContext) -> Result<Self> {
         let (config, db) = ctx.into_parts();
+        lilo_runtime_launchers::warm_registry()
+            .context("failed to initialize launcher registry")?;
+        let store = LifecycleStore::open(&db);
         let _ = config.socket_path()?;
-        Ok(Self { config, db })
+        let state = Arc::new(ServerState::new(config.clone(), store)?);
+        reconcile::reconcile_startup(Arc::clone(&state), &reconcile::SystemProcessProbe).await?;
+        let (shutdown_tx, _) = broadcast::channel(8);
+        tokio::spawn(reconcile::run_periodic(
+            Arc::clone(&state),
+            reconcile::SystemProcessProbe,
+            shutdown_tx.subscribe(),
+            config.reconcile,
+        ));
+        Ok(Self {
+            config,
+            state,
+            shutdown_tx,
+        })
     }
 
     pub fn config(&self) -> &DaemonConfig {
         &self.config
     }
 
-    pub async fn run(self) -> Result<()> {
-        run_daemon_with_db(self.config, self.db).await
+    pub async fn handle_rpc(&self, _principal: Principal, rpc: RuntimeRpc) -> RuntimeResponse {
+        let response = handler::handle_rpc(rpc, Arc::clone(&self.state)).await;
+        if matches!(response, RuntimeResponse::Stopping) {
+            let _ = self.shutdown_tx.send(());
+        }
+        response
+    }
+
+    pub fn subscribe_shutdown(&self) -> broadcast::Receiver<()> {
+        self.shutdown_tx.subscribe()
+    }
+}
+
+impl Drop for RuntimeService {
+    fn drop(&mut self) {
+        let _ = self.shutdown_tx.send(());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use lilo_paths::RuntimeEndpoint;
-    use lilo_runtime_store::StoreConfig;
-
-    use crate::{ReconcileConfig, docker_preflight::DockerPreflightConfig};
-
     use super::{RuntimeService, RuntimeServiceContext};
-    use crate::DaemonConfig;
+    use crate::{DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig};
+    use lilo_db::LiloDb;
+    use lilo_paths::{LiloHome, LiloPaths};
+    use lilo_runtime_store::StoreConfig;
 
     #[tokio::test]
     async fn build_preserves_daemon_config_for_later_composition() {
-        let tempdir = tempfile::tempdir().expect("create tempdir");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
         let config = DaemonConfig {
-            endpoint: RuntimeEndpoint::unix_socket(tempdir.path().join("rtm.sock")),
-            shim_path: tempdir.path().join("rtm-shim"),
-            log_root: tempdir.path().join("logs"),
+            endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
+            shim_path: dir.path().join("shim"),
+            log_root: paths.logs_root(),
             store: StoreConfig {
-                db_path: tempdir.path().join("rtm.db"),
+                db_path: paths.db_path(),
             },
             reconcile: ReconcileConfig::default(),
-            docker_preflight: DockerPreflightConfig::new(
-                "runtime-matters-agent:latest",
-                false,
-                false,
-            ),
+            docker_preflight: DockerPreflightConfig::default(),
         };
+        let db = LiloDb::open(&paths).await.expect("db");
 
-        let db = lilo_db::LiloDb::open_path(&config.store.db_path)
-            .await
-            .expect("open lilo db");
         let service = RuntimeService::build(RuntimeServiceContext::new(config.clone(), db))
-            .expect("build runtime service");
+            .await
+            .expect("service builds");
 
         assert_eq!(
-            service.config().socket_path().expect("service socket path"),
-            config.socket_path().expect("config socket path")
+            service.config().socket_path().expect("socket"),
+            config.socket_path().expect("socket")
         );
     }
 }

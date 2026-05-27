@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, launch_env, local_context};
 use lilo_session_core::{
-    IsolationPolicy, ListRequest, RpcRequest, RpcResponse, RuntimeKind, Selector, SpawnRequest,
+    IsolationPolicy, ListRequest, RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest,
 };
 
 #[tokio::test]
@@ -21,7 +21,7 @@ pub(crate) async fn agent_config_env_reaches_spawn_driver() {
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -85,7 +85,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -117,7 +117,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
         .state
         .handle(
             context,
-            RpcRequest::List {
+            SessionRpc::List {
                 request: ListRequest {
                     selector: Some(Selector::Id {
                         id: response.session.id,

@@ -14,6 +14,7 @@ use lilo_rm_core::{
     RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnedPayload, StatusFilter, StatusPayload,
     ValidateTargetRequest, ValidateTargetResponse, VersionPayload, read_json_line, write_json_line,
 };
+use lilo_wire::LilodRpc;
 use thiserror::Error;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
@@ -271,7 +272,7 @@ async fn request_on_stream(
     rpc: RuntimeRpc,
 ) -> Result<RuntimeResponse, ClientError> {
     let (read_half, mut write_half) = stream.into_split();
-    write_json_line(&mut write_half, &rpc).await?;
+    write_json_line(&mut write_half, &LilodRpc::Runtime(rpc)).await?;
 
     let mut reader = BufReader::new(read_half);
     match read_json_line(&mut reader).await? {

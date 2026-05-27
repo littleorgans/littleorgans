@@ -122,8 +122,7 @@ fn spawn_runtime(harness: &RtmHarness, session_id: &str) -> String {
 
 fn kill_with_format(harness: &RtmHarness, session_id: &str, format: &str) -> Output {
     Command::new(harness.rtm_path())
-        .env("RTM_SOCKET_PATH", harness.socket_path())
-        .env("RTM_DB_PATH", harness.db_path())
+        .env("LILO_SOCKET_PATH", harness.socket_path())
         .arg("kill")
         .arg(session_id)
         .arg("--format")

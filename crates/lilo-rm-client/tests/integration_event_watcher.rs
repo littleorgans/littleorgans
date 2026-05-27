@@ -12,6 +12,7 @@ use lilo_runtime_daemon::{
     DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig, run_daemon,
 };
 use lilo_runtime_store::StoreConfig;
+use lilo_wire::LilodRpc;
 use serde_json::json;
 use tokio::io::BufReader;
 use tokio::net::{UnixListener, UnixStream};
@@ -222,7 +223,10 @@ fn mock_version_client(protocol_version: &str) -> (RuntimeClient, JoinHandle<()>
         let (stream, _) = listener.accept().await.expect("accept client");
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
-        let rpc: RuntimeRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let envelope: LilodRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let LilodRpc::Runtime(rpc) = envelope else {
+            panic!("expected runtime rpc");
+        };
         assert_eq!(rpc, RuntimeRpc::Version);
         write_json_line(
             &mut write_half,
@@ -243,7 +247,10 @@ async fn next_request(builder: lilo_rm_client::EventWatcherBuilder) -> EventsReq
         let (stream, _) = listener.accept().await.expect("accept client");
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
-        let rpc: RuntimeRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let envelope: LilodRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let LilodRpc::Runtime(rpc) = envelope else {
+            panic!("expected runtime rpc");
+        };
         let RuntimeRpc::Events { request } = rpc else {
             panic!("expected events rpc");
         };

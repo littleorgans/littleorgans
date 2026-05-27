@@ -9,7 +9,7 @@ pub const SESSION_RUN_ROLE_HELP: &str = "Role label recorded on the session.";
 #[rustfmt::skip]
 pub const SESSION_RUN_DIR_HELP: &str = "Filesystem directory used as the runtime's working directory. Relative paths resolve against the current shell cwd; the path must exist.";
 #[rustfmt::skip]
-pub const SESSION_RUN_NAMESPACE_HELP: &str = "Namespace slug for the session. Overrides SM_NAMESPACE and the user namespace context.";
+pub const SESSION_RUN_NAMESPACE_HELP: &str = "Namespace slug for the session. Overrides the user namespace context.";
 #[rustfmt::skip]
 pub const SESSION_RUN_LABELS_HELP: &str = "Session label as key=value.";
 #[rustfmt::skip]

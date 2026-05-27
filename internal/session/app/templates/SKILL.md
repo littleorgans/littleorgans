@@ -110,7 +110,7 @@ Examples:
 
 ## Session Control Workflow
 
-Start runtime-matters with `rtm daemon start` before `smd`; session-matters requires runtime-matters protocol 0.6 or newer.
+Start `lilo daemon start`; lilod composes session and runtime handling behind one local socket.
 Use `session_run` to run a local session through the session-matters daemon.
 Use `session_list` to inspect live and terminated sessions.
 Use `session_get` before acting on one session id.

@@ -13,6 +13,7 @@ use lilo_rm_core::{
     ValidateTargetResponse, VersionInfo, VersionPayload, WatcherCounts, read_json_line,
     write_json_line,
 };
+use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixListener;
 use tokio::task::JoinHandle;
@@ -36,7 +37,10 @@ fn mock_response(
         let (stream, _) = listener.accept().await.expect("accept client");
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
-        let rpc: RuntimeRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let envelope: LilodRpc = read_json_line(&mut reader).await.expect("read rpc");
+        let LilodRpc::Runtime(rpc) = envelope else {
+            panic!("expected runtime rpc");
+        };
         assert_eq!(rpc, expected_rpc);
         write_json_line(&mut write_half, &response)
             .await

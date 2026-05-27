@@ -1,3 +1,4 @@
+pub mod daemon;
 pub mod doctor;
 
 use std::ffi::OsString;
@@ -6,7 +7,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
 
-use self::doctor::DoctorCommand;
+use self::{daemon::DaemonCli, doctor::DoctorCommand};
 
 const HELP_TEMPLATE: &str = "\
 {about-with-newline}
@@ -66,9 +67,13 @@ impl Cli {
         self.output
     }
 
-    pub fn run(&self) -> Result<(), Diagnostic> {
-        match &self.command {
+    pub async fn run(self) -> Result<(), Diagnostic> {
+        match self.command {
             Command::Doctor(command) => command.run(self.output),
+            Command::Daemon(command) => command.run(self.output).await,
+            Command::RuntimeShim(args) => lilo_runtime_app::cli::shim::run(args)
+                .await
+                .map_err(Diagnostic::from),
             command => Err(command.not_implemented()),
         }
     }
@@ -113,9 +118,9 @@ pub enum Command {
     Runtime(PlaceholderArgs),
     Session(PlaceholderArgs),
     Identity(PlaceholderArgs),
-    Daemon(PlaceholderArgs),
-    #[command(name = "__runtime-shim", hide = true)]
-    RuntimeShim(PlaceholderArgs),
+    Daemon(DaemonCli),
+    #[command(name = "__shim", hide = true)]
+    RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs),
 }
 
 impl Command {
@@ -164,7 +169,7 @@ mod tests {
 
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
-        assert!(!help.contains("__runtime-shim"));
+        assert!(!help.contains("__shim"));
     }
 
     #[test]
@@ -197,12 +202,12 @@ mod tests {
         assert_eq!(cli.output(), Output::Json);
     }
 
-    #[test]
-    fn placeholder_commands_accept_future_arguments() {
+    #[tokio::test]
+    async fn placeholder_commands_accept_future_arguments() {
         let cli = Cli::try_parse_from(["lilo", "runtime", "spawn", "--raw"])
             .expect("parse future runtime args");
 
-        let error = cli.run().expect_err("runtime is not implemented");
+        let error = cli.run().await.expect_err("runtime is not implemented");
 
         assert_eq!(error.exit_code, lilo_common::exit_codes::DOMAIN);
         assert!(error.message.contains("runtime is not yet implemented"));

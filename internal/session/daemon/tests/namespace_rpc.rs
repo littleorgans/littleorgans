@@ -4,7 +4,7 @@ use common::OrPanic as _;
 use common::{LOCAL_UID, TestDaemon, local_context};
 use lilo_session_core::{
     IsolationPolicy, Namespace, NamespaceCreateRequest, NamespaceDeleteRequest,
-    NamespaceGetRequest, NamespaceListRequest, RpcRequest, RpcResponse, RuntimeKind, Selector,
+    NamespaceGetRequest, NamespaceListRequest, RpcResponse, RuntimeKind, Selector, SessionRpc,
     SpawnRequest,
 };
 use lilo_session_daemon::identity_client::RequestContext;
@@ -18,7 +18,7 @@ async fn namespace_create_get_and_list_are_idempotent() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceCreate {
+            SessionRpc::NamespaceCreate {
                 request: NamespaceCreateRequest {
                     slug: "alpha".to_string(),
                 },
@@ -35,7 +35,7 @@ async fn namespace_create_get_and_list_are_idempotent() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceCreate {
+            SessionRpc::NamespaceCreate {
                 request: NamespaceCreateRequest {
                     slug: "alpha".to_string(),
                 },
@@ -52,7 +52,7 @@ async fn namespace_create_get_and_list_are_idempotent() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceGet {
+            SessionRpc::NamespaceGet {
                 request: NamespaceGetRequest {
                     slug: "alpha".to_string(),
                 },
@@ -75,7 +75,7 @@ async fn namespace_create_get_and_list_are_idempotent() {
         .state
         .handle(
             context,
-            RpcRequest::NamespaceList {
+            SessionRpc::NamespaceList {
                 request: NamespaceListRequest::default(),
             },
         )
@@ -103,7 +103,7 @@ async fn namespace_create_rejects_reserved_and_bad_slugs() {
             .state
             .handle(
                 context.clone(),
-                RpcRequest::NamespaceCreate {
+                SessionRpc::NamespaceCreate {
                     request: NamespaceCreateRequest {
                         slug: slug.to_string(),
                     },
@@ -126,7 +126,7 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(spawn_request(
                     daemon.dir.path().display().to_string(),
                     Namespace::new("alpha").or_panic("namespace validates"),
@@ -143,7 +143,7 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceCreate {
+            SessionRpc::NamespaceCreate {
                 request: NamespaceCreateRequest {
                     slug: "alpha".to_string(),
                 },
@@ -155,7 +155,7 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(spawn_request(
                     daemon.dir.path().display().to_string(),
                     Namespace::new("alpha").or_panic("namespace validates"),
@@ -179,7 +179,7 @@ async fn namespace_delete_terminates_and_removes_namespace_sessions() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(spawn_request(
                     daemon.dir.path().display().to_string(),
                     Namespace::new("alpha").or_panic("namespace validates"),
@@ -196,7 +196,7 @@ async fn namespace_delete_terminates_and_removes_namespace_sessions() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceDelete {
+            SessionRpc::NamespaceDelete {
                 request: NamespaceDeleteRequest {
                     namespace: Namespace::new("alpha").or_panic("namespace validates"),
                 },
@@ -214,7 +214,7 @@ async fn namespace_delete_terminates_and_removes_namespace_sessions() {
         .state
         .handle(
             context,
-            RpcRequest::List {
+            SessionRpc::List {
                 request: lilo_session_core::ListRequest {
                     selector: Some(Selector::Namespace {
                         namespace: Namespace::new("alpha").or_panic("namespace validates"),
@@ -242,7 +242,7 @@ async fn namespace_delete_rejects_default_and_unknown_namespaces() {
             .state
             .handle(
                 context.clone(),
-                RpcRequest::NamespaceDelete {
+                SessionRpc::NamespaceDelete {
                     request: NamespaceDeleteRequest {
                         namespace: Namespace::new(namespace).or_panic("namespace validates"),
                     },
@@ -261,7 +261,7 @@ async fn create_namespace(daemon: &TestDaemon, context: &RequestContext, slug: &
         .state
         .handle(
             context.clone(),
-            RpcRequest::NamespaceCreate {
+            SessionRpc::NamespaceCreate {
                 request: NamespaceCreateRequest {
                     slug: slug.to_string(),
                 },

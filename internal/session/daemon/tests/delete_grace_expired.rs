@@ -1,7 +1,7 @@
 mod common;
 
 use common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
-use lilo_session_core::{DeleteRequest, RpcRequest, RpcResponse, Selector};
+use lilo_session_core::{DeleteRequest, RpcResponse, Selector, SessionRpc};
 
 #[tokio::test]
 async fn delete_reports_grace_expired_when_driver_returns_no_exit() {
@@ -14,7 +14,7 @@ async fn delete_reports_grace_expired_when_driver_returns_no_exit() {
         .state
         .handle(
             context,
-            RpcRequest::Delete {
+            SessionRpc::Delete {
                 request: DeleteRequest {
                     selector: Selector::Id { id: session.id },
                     signal: "SIGTERM".to_string(),

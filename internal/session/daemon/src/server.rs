@@ -7,7 +7,7 @@ use lilo_db::LiloDb;
 use lilo_im_store::SqliteAuditSink;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::RUNTIME_PROTOCOL_VERSION;
-use lilo_session_core::{RpcRequest, RpcResponse, SmEndpoint, SmPaths, rtmd_socket_path};
+use lilo_session_core::{RpcResponse, SessionRpc, SmEndpoint, SmPaths, rtmd_socket_path};
 use lilo_session_driver::RtmdDriver;
 use lilo_session_store::SqliteStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -89,7 +89,7 @@ async fn handle_connection(mut stream: UnixStream, state: &DaemonState) -> Resul
         .await
         .context("failed to read request")?;
 
-    let result = match serde_json::from_slice::<RpcRequest>(&request_bytes) {
+    let result = match serde_json::from_slice::<SessionRpc>(&request_bytes) {
         Ok(request) => state.handle(RequestContext::new(principal), request).await,
         Err(error) => crate::handler::HandlerResult {
             response: RpcResponse::Error {

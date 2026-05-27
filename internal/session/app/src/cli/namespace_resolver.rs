@@ -24,7 +24,7 @@ pub enum NamespaceResolutionWarning {
 
 #[derive(Debug, thiserror::Error)]
 pub enum NamespaceResolutionError {
-    #[error("invalid SM_NAMESPACE value: {source}")]
+    #[error("invalid namespace value: {source}")]
     InvalidEnv {
         #[source]
         source: NamespaceError,
@@ -56,7 +56,7 @@ pub fn resolve_namespace_dir(
     resolve_namespace_dir_with_paths(
         start_dir.as_ref(),
         explicit_namespace,
-        std::env::var_os("SM_NAMESPACE"),
+        None,
         SmPaths::from_env(),
     )
 }
@@ -261,7 +261,7 @@ mod tests {
         );
 
         assert!(matches!(error, NamespaceResolutionError::InvalidEnv { .. }));
-        assert!(error.to_string().contains("invalid SM_NAMESPACE value"));
+        assert!(error.to_string().contains("invalid namespace value"));
     }
 
     #[test]

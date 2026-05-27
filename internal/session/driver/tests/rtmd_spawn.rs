@@ -10,6 +10,7 @@ use lilo_rm_core::{
 };
 use lilo_session_core::RuntimeKind as SmRuntimeKind;
 use lilo_session_driver::{RtmdDriver, SpawnDriver, SpawnLaunch};
+use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixListener;
 use uuid::Uuid;
@@ -53,7 +54,10 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
             let (stream, _) = listener.accept().await.or_panic("accept client");
             let (read_half, mut write_half) = stream.into_split();
             let mut reader = BufReader::new(read_half);
-            let rpc: RuntimeRpc = read_json_line(&mut reader).await.or_panic("read rpc");
+            let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read rpc");
+            let LilodRpc::Runtime(rpc) = envelope else {
+                panic!("expected runtime rpc");
+            };
             let RuntimeRpc::Spawn { request } = rpc else {
                 panic!("expected spawn rpc");
             };

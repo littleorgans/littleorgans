@@ -151,6 +151,7 @@ mod tests {
         SpawnedProcess,
     };
     use lilo_session_store::SqliteStore;
+    use lilo_wire::LilodRpc;
     use tokio::io::BufReader;
     use tokio::net::UnixListener;
     use uuid::Uuid;
@@ -326,9 +327,12 @@ mod tests {
             let (stream, _) = listener.accept().await.or_panic("client connects");
             let (reader, mut writer) = stream.into_split();
             let mut reader = BufReader::new(reader);
-            let _: lilo_rm_core::RuntimeRpc = read_json_line(&mut reader)
+            let envelope: LilodRpc = read_json_line(&mut reader)
                 .await
                 .or_panic("status request reads");
+            let LilodRpc::Runtime(_) = envelope else {
+                panic!("expected runtime rpc");
+            };
             write_json_line(
                 &mut writer,
                 &RuntimeResponse::Status(StatusPayload { lifecycles }),

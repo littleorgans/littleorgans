@@ -1,11 +1,9 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
-use crate::cli::daemon::DaemonCommand;
 use crate::generated::cli_help;
 
 pub mod capture;
-pub mod daemon;
 pub mod doctor;
 pub mod events;
 pub mod initdb;
@@ -30,10 +28,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    Daemon {
-        #[command(subcommand)]
-        command: DaemonCommand,
-    },
     #[command(about = "Spawn a runtime process for a session.")]
     Spawn(spawn::SpawnArgs),
     #[command(about = "Signal a runtime session by id, or a process by pid.")]
@@ -76,7 +70,6 @@ pub struct DoctorArgs {
 impl Cli {
     pub async fn run(self) -> Result<()> {
         match self.command {
-            Command::Daemon { command } => command.run().await,
             Command::Spawn(args) => spawn::run(args).await,
             Command::Kill(args) => kill::run(args).await,
             Command::Nudge(args) => nudge::run(args).await,

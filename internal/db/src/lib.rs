@@ -66,6 +66,10 @@ impl LiloDb {
     pub fn runtime_pool(&self) -> &SqlitePool {
         &self.pool
     }
+
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
 }
 
 #[cfg(test)]

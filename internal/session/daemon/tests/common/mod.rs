@@ -11,8 +11,8 @@ use lilo_rm_core::{
     WatcherCounts, read_json_line, version_info, write_json_line,
 };
 use lilo_session_core::{
-    IsolationPolicy, Label, MailCheckRequest, RpcRequest, RpcResponse, RuntimeKind, Selector,
-    Session, SpawnRequest,
+    IsolationPolicy, Label, MailCheckRequest, RpcResponse, RuntimeKind, Selector, Session,
+    SessionRpc, SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
@@ -21,6 +21,7 @@ use lilo_session_driver::{
     SpawnLaunch, SpawnedProcess,
 };
 use lilo_session_store::SqliteStore;
+use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixListener;
 use tokio::task::JoinHandle;
@@ -275,7 +276,7 @@ pub async fn spawn_test_session_with_labels(
         .state
         .handle(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: role.to_string(),
@@ -305,7 +306,7 @@ pub async fn mail_count(state: &DaemonState, context: RequestContext, session_id
     let response = state
         .handle(
             context,
-            RpcRequest::MailCheck {
+            SessionRpc::MailCheck {
                 request: MailCheckRequest {
                     selector: Selector::Id { id: session_id },
                 },
@@ -356,7 +357,10 @@ async fn read_rtmd_rpc(listener: &UnixListener) -> (RuntimeRpc, tokio::net::unix
     let (stream, _) = listener.accept().await.or_panic("accept rtmd client");
     let (read_half, write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
-    let rpc = read_json_line(&mut reader).await.or_panic("read rtmd rpc");
+    let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read rtmd rpc");
+    let LilodRpc::Runtime(rpc) = envelope else {
+        panic!("expected runtime rpc");
+    };
     (rpc, write_half)
 }
 

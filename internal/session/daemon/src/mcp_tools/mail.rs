@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use lilo_session_core::{
-    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcRequest,
-    RpcResponse, tool_success,
+    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcResponse,
+    SessionRpc, tool_success,
 };
 use serde_json::{Value, json};
 
@@ -21,7 +21,7 @@ pub(crate) async fn mail_send(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::MailSend {
+            SessionRpc::MailSend {
                 request: MailSendRequest {
                     from: optional_string(arguments, "from").map(ToString::to_string),
                     to: required_selector(arguments, "to")?,
@@ -51,7 +51,7 @@ pub(crate) async fn mail_read(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::MailRead {
+            SessionRpc::MailRead {
                 request: MailReadRequest {
                     selector,
                     peek: optional_bool(arguments, "peek").unwrap_or(false),
@@ -83,7 +83,7 @@ pub(crate) async fn mail_check(
     mail_count_tool(
         state,
         context,
-        RpcRequest::MailCheck {
+        SessionRpc::MailCheck {
             request: MailCheckRequest { selector },
         },
     )
@@ -101,7 +101,7 @@ pub(crate) async fn mail_stop_check(
     mail_count_tool(
         state,
         context,
-        RpcRequest::MailStopCheck {
+        SessionRpc::MailStopCheck {
             request: MailStopCheckRequest { selector },
         },
     )
@@ -111,7 +111,7 @@ pub(crate) async fn mail_stop_check(
 async fn mail_count_tool(
     state: &DaemonState,
     context: &RequestContext,
-    request: RpcRequest,
+    request: SessionRpc,
 ) -> Result<Value> {
     match state.handle_direct(context.clone(), request).await.response {
         RpcResponse::MailChecked { response } => {

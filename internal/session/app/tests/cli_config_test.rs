@@ -66,14 +66,14 @@ fn set_context_uses_home_fallback_when_sm_home_is_unset() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["config", "set-context", "fallback"])
-        .env_remove("SM_HOME")
+        .env_remove("LILO_HOME")
         .env("HOME", home.path())
-        .env("SM_SOCKET_PATH", daemon.socket_path())
+        .env("LILO_SOCKET_PATH", daemon.socket_path())
         .output()
         .or_panic("sm config set-context fallback executes");
 
     assert_success("sm config set-context fallback", &output);
-    assert_eq!(binding_contents(&home.path().join(".sm")), "fallback\n");
+    assert_eq!(binding_contents(&home.path().join(".lilo")), "fallback\n");
 }
 
 #[test]
@@ -107,18 +107,25 @@ fn set_context_overwrites_binding_atomically() {
 
 #[test]
 fn set_context_daemon_unreachable_does_not_write() {
-    let sm_home = tempfile::tempdir().or_panic("sm home tempdir");
+    let sm_home = tempfile::tempdir().or_panic("lilo home tempdir");
 
     let output = Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["config", "set-context", "default"])
-        .env("SM_HOME", sm_home.path())
+        .env("LILO_HOME", sm_home.path())
         .env("HOME", sm_home.path())
         .output()
         .or_panic("sm config set-context default executes");
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("failed to connect"));
-    assert!(!sm_home.path().join("namespace").exists());
+    assert!(
+        !sm_home
+            .path()
+            .join("config")
+            .join("session")
+            .join("namespace")
+            .exists()
+    );
 }
 
 fn create_namespace(daemon: &common::DaemonFixture, name: &str) {
@@ -131,7 +138,8 @@ fn create_namespace(daemon: &common::DaemonFixture, name: &str) {
 }
 
 fn binding_contents(dir: &std::path::Path) -> String {
-    std::fs::read_to_string(dir.join("namespace")).or_panic("binding file reads")
+    std::fs::read_to_string(dir.join("config").join("session").join("namespace"))
+        .or_panic("binding file reads")
 }
 
 fn assert_success(command: &str, output: &Output) {

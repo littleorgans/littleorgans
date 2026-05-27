@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 
 use crate::LiloPathError;
 use crate::env::non_empty_path;
+use crate::lilo::{LiloHome, LiloPaths};
 
-pub use crate::runtime::{HOME, RTM_SOCKET_PATH, XDG_RUNTIME_DIR};
+use crate::runtime::{HOME, XDG_RUNTIME_DIR};
 
 pub const SM_HOME: &str = "SM_HOME";
 pub const SM_DB_PATH: &str = "SM_DB_PATH";
@@ -25,7 +26,7 @@ pub struct SmPaths {
 
 impl SmPaths {
     pub fn from_env() -> Result<Self, SmPathsError> {
-        Self::resolve(&SmPathsEnv::from_process())
+        Ok(Self::from_lilo_paths(&lilo_paths_from_env()?))
     }
 
     pub fn resolve(env: &SmPathsEnv) -> Result<Self, SmPathsError> {
@@ -52,6 +53,15 @@ impl SmPaths {
             dir,
         }
     }
+
+    fn from_lilo_paths(paths: &LiloPaths) -> Self {
+        Self {
+            dir: paths.config_root().join("session"),
+            pidfile: paths.pid_path(),
+            database: paths.db_path(),
+            log: paths.lilod_log(),
+        }
+    }
 }
 
 #[non_exhaustive]
@@ -62,7 +72,7 @@ pub enum SmEndpoint {
 
 impl SmEndpoint {
     pub fn from_env() -> Result<Self, SmPathsError> {
-        Self::resolve(&SmPathsEnv::from_process())
+        Ok(Self::unix_socket(lilo_paths_from_env()?.socket_path()))
     }
 
     pub fn resolve(env: &SmPathsEnv) -> Result<Self, SmPathsError> {
@@ -117,11 +127,11 @@ pub struct SmPathsEnv {
 impl SmPathsEnv {
     pub fn from_process() -> Self {
         Self {
-            sm_home: env::var_os(SM_HOME),
-            sm_db_path: env::var_os(SM_DB_PATH),
-            sm_log_path: env::var_os(SM_LOG_PATH),
-            sm_socket_path: env::var_os(SM_SOCKET_PATH),
-            rtm_socket_path: env::var_os(RTM_SOCKET_PATH),
+            sm_home: None,
+            sm_db_path: None,
+            sm_log_path: None,
+            sm_socket_path: None,
+            rtm_socket_path: None,
             xdg_runtime_dir: env::var_os(XDG_RUNTIME_DIR),
             home: env::var_os(HOME),
         }
@@ -179,7 +189,10 @@ pub type SmPathsError = LiloPathError;
 
 #[must_use]
 pub fn rtmd_socket_path() -> PathBuf {
-    rtmd_socket_path_from(&SmPathsEnv::from_process())
+    lilo_paths_from_env().map_or_else(
+        |_| PathBuf::from(".lilo").join("run").join("lilod.sock"),
+        |paths| paths.socket_path(),
+    )
 }
 
 #[must_use]
@@ -196,6 +209,10 @@ fn sm_home_dir(env: &SmPathsEnv) -> Result<PathBuf, SmPathsError> {
     non_empty_path(env.sm_home.as_ref())
         .or_else(|| non_empty_path(env.home.as_ref()).map(|home| home.join(".sm")))
         .ok_or(SmPathsError::MissingHome)
+}
+
+fn lilo_paths_from_env() -> Result<LiloPaths, SmPathsError> {
+    Ok(LiloPaths::new(LiloHome::from_env()?))
 }
 
 #[cfg(test)]

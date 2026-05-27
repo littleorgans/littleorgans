@@ -2,7 +2,7 @@ use crate::common::{
     LOCAL_UID, OrPanic as _, TestDaemon, launch_env, local_context, spawn_test_session,
 };
 use lilo_session_core::{
-    IsolationPolicy, MountSpec, Namespace, RpcRequest, RpcResponse, RuntimeKind, SpawnRequest,
+    IsolationPolicy, MountSpec, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
 };
 
 #[tokio::test]
@@ -26,7 +26,7 @@ pub(crate) async fn spawn_launch_fields_reach_spawn_driver() {
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),

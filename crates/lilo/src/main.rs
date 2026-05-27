@@ -9,15 +9,20 @@ use crate::cli::Cli;
 
 pub const VERSION: &str = env!("LILO_CLI_VERSION");
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
     let cli = Cli::parse();
+    let output = cli.output();
 
-    match logging::init_logging().and_then(|()| cli.run()) {
+    match match logging::init_logging() {
+        Ok(()) => cli.run().await,
+        Err(error) => Err(error),
+    } {
         // Exit codes are `i32` to align with `Diagnostic.exit_code`, but fit
         // in `u8` by construction; fall back to 1 (`INTERNAL`) defensively.
         Ok(()) => ExitCode::from(u8::try_from(exit_codes::SUCCESS).unwrap_or(1)),
         Err(diagnostic) => {
-            cli.output().write_diagnostic(&diagnostic);
+            output.write_diagnostic(&diagnostic);
             ExitCode::from(u8::try_from(diagnostic.exit_code).unwrap_or(1))
         }
     }

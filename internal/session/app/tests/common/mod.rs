@@ -14,9 +14,7 @@ pub use shared_test_support::OrPanic;
 pub struct DaemonFixture {
     pub dir: tempfile::TempDir,
     child: Child,
-    rtmd: Child,
-    rtm: PathBuf,
-    rtm_socket: PathBuf,
+    lilo_socket: PathBuf,
 }
 
 impl DaemonFixture {
@@ -30,29 +28,15 @@ impl DaemonFixture {
 
     fn start_with_path_prefix(path_prefix: Option<&Path>) -> Self {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let rtm_socket = dir.path().join("rtm.sock");
-        let rtm = rtm_bin();
-        let mut rtmd = Command::new(&rtm)
+        let lilo_socket = dir.path().join("lilod.sock");
+        let mut command = Command::new(lilo_bin());
+        command
             .arg("daemon")
             .arg("start")
             .env_remove("CLAUDE_CONFIG_DIR")
-            .env("RTM_SOCKET_PATH", &rtm_socket)
-            .env("RTM_DB_PATH", dir.path().join("rtm.sqlite"))
-            .env("RTM_HOME", dir.path().join("rtm-home"))
-            .env("PATH", test_path(path_prefix))
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .or_panic("rtmd starts");
-        wait_for_path_socket(&rtm_socket, &mut rtmd);
-
-        let mut command = Command::new(sm_bin());
-        command
-            .arg("__smd")
-            .env_remove("CLAUDE_CONFIG_DIR")
-            .env("SM_HOME", dir.path())
+            .env("LILO_HOME", dir.path())
+            .env("LILO_SOCKET_PATH", &lilo_socket)
             .env("HOME", dir.path())
-            .env("RTM_SOCKET_PATH", &rtm_socket)
             .env("PATH", test_path(path_prefix));
         let mut child = command
             .stdin(Stdio::null())
@@ -60,13 +44,11 @@ impl DaemonFixture {
             .stderr(Stdio::null())
             .spawn()
             .or_panic("daemon starts");
-        wait_for_socket(dir.path(), &mut child);
+        wait_for_path_socket(&lilo_socket, &mut child);
         Self {
             dir,
             child,
-            rtmd,
-            rtm,
-            rtm_socket,
+            lilo_socket,
         }
     }
 
@@ -96,7 +78,7 @@ impl DaemonFixture {
     }
 
     pub fn audit_path(&self) -> PathBuf {
-        self.dir.path().join("sm.db")
+        self.dir.path().join("data").join("lilo.db")
     }
 
     pub async fn audit_rows(&self) -> Vec<lilo_im_core::AuditRow> {
@@ -109,14 +91,15 @@ impl DaemonFixture {
     }
 
     pub fn socket_path(&self) -> PathBuf {
-        self.dir.path().join("sock")
+        self.lilo_socket.clone()
     }
 
     pub fn command(&self) -> Command {
         let mut command = Command::new(sm_bin());
         command
             .env_remove("CLAUDE_CONFIG_DIR")
-            .env("SM_HOME", self.dir.path())
+            .env("LILO_HOME", self.dir.path())
+            .env("LILO_SOCKET_PATH", &self.lilo_socket)
             .env("HOME", self.dir.path());
         command
     }
@@ -133,20 +116,22 @@ impl DaemonFixture {
 
     fn stop(&mut self) {
         let _ = self
-            .command()
+            .lilo_command()
             .args(["daemon", "stop"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
         let _ = self.child.wait();
-        let _ = Command::new(&self.rtm)
-            .args(["daemon", "stop"])
-            .env("RTM_SOCKET_PATH", &self.rtm_socket)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        let _ = self.rtmd.kill();
-        let _ = self.rtmd.wait();
+    }
+
+    fn lilo_command(&self) -> Command {
+        let mut command = Command::new(lilo_bin());
+        command
+            .env_remove("CLAUDE_CONFIG_DIR")
+            .env("LILO_HOME", self.dir.path())
+            .env("LILO_SOCKET_PATH", &self.lilo_socket)
+            .env("HOME", self.dir.path());
+        command
     }
 }
 
@@ -195,15 +180,10 @@ impl Drop for McpFixture {
 }
 
 pub fn sm_bin() -> PathBuf {
-    if let Some(path) = std::env::var_os("SM_BENCH_BIN") {
+    if let Some(path) = std::env::var_os("LILO_BENCH_BIN") {
         return PathBuf::from(path);
     }
     assert_cmd::cargo::cargo_bin("sm")
-}
-
-fn wait_for_socket(dir: &Path, child: &mut Child) {
-    let socket = dir.join("sock");
-    wait_for_path_socket(&socket, child);
 }
 
 fn wait_for_path_socket(socket: &Path, child: &mut Child) {
@@ -244,11 +224,11 @@ pub fn write_fake_command(dir: &Path, command: &str, script: &str) {
     }
 }
 
-fn rtm_bin() -> PathBuf {
-    if let Some(path) = std::env::var_os("RTM_TEST_BIN") {
+fn lilo_bin() -> PathBuf {
+    if let Some(path) = std::env::var_os("LILO_TEST_BIN") {
         return PathBuf::from(path);
     }
-    assert_cmd::cargo::cargo_bin("rtm")
+    assert_cmd::cargo::cargo_bin("lilo")
 }
 
 fn test_path(prefix: Option<&Path>) -> std::ffi::OsString {

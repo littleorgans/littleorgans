@@ -8,9 +8,9 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 
-use super::docker;
 use super::output::{output_stdout, parse_status_field};
 use super::process::terminate_process;
+use super::{docker, workspace_bin};
 
 pub const FAKE_RUNTIME_READY: &str = "rtm fake runtime ready";
 
@@ -20,6 +20,7 @@ pub struct RtmHarness {
     db: PathBuf,
     rtm_home: PathBuf,
     rtm: PathBuf,
+    lilo: PathBuf,
     daemon: Child,
     reconcile_env: Vec<(&'static str, String)>,
     start_outside_tmux: bool,
@@ -61,17 +62,17 @@ impl RtmHarness {
         start_outside_tmux: bool,
     ) -> Self {
         let temp = TempDir::new().expect("temp dir");
-        let socket = temp.path().join("rtm.sock");
-        let db = temp.path().join("rtm.sqlite");
-        let rtm_home = temp.path().join("rtm-home");
+        let socket = temp.path().join("lilod.sock");
+        let rtm_home = temp.path().join("lilo-home");
+        let db = rtm_home.join("data").join("lilo.db");
         write_fake_runtime(temp.path(), "claude");
         write_fake_runtime(temp.path(), "codex");
         docker::write_fake_cli(temp.path());
-        let rtm = default_rtm_path();
+        let rtm = workspace_bin("rtm");
+        let lilo = workspace_bin("lilo");
         let mut daemon = start_daemon(
-            &rtm,
+            &lilo,
             &socket,
-            &db,
             &rtm_home,
             temp.path(),
             &reconcile_env,
@@ -84,6 +85,7 @@ impl RtmHarness {
             db,
             rtm_home,
             rtm,
+            lilo,
             daemon,
             reconcile_env,
             start_outside_tmux,
@@ -224,9 +226,8 @@ impl RtmHarness {
 
     pub fn start_rtmd(&mut self) {
         self.daemon = start_daemon(
-            &self.rtm,
+            &self.lilo,
             &self.socket,
-            &self.db,
             &self.rtm_home,
             self.temp.path(),
             &self.reconcile_env,
@@ -236,7 +237,10 @@ impl RtmHarness {
     }
 
     pub fn stop_rtmd(&mut self) {
-        stop_daemon(&self.rtm, &self.socket, &mut self.daemon);
+        let _ = self.daemon.kill();
+        wait_for_child(&mut self.daemon);
+        let _ = std::fs::remove_file(&self.socket);
+        let _ = std::fs::remove_file(self.rtm_home.join("run").join("lilod.pid"));
     }
 
     pub fn db_path(&self) -> &Path {
@@ -261,13 +265,14 @@ impl RtmHarness {
 
     pub fn stop(mut self) {
         self.cleanup_processes();
-        stop_daemon(&self.rtm, &self.socket, &mut self.daemon);
+        stop_daemon(&self.lilo, &self.socket, &self.rtm_home, &mut self.daemon);
     }
 
     fn rtm_command(&self) -> Command {
         let mut command = Command::new(&self.rtm);
-        command.env("RTM_SOCKET_PATH", &self.socket);
-        command.env("RTM_DB_PATH", &self.db);
+        command
+            .env("LILO_SOCKET_PATH", &self.socket)
+            .env("LILO_HOME", &self.rtm_home);
         command
     }
 
@@ -317,11 +322,11 @@ impl RtmHarness {
 impl Drop for RtmHarness {
     fn drop(&mut self) {
         self.cleanup_processes();
-        let _ = Command::new(&self.rtm)
+        let _ = Command::new(&self.lilo)
             .arg("daemon")
             .arg("stop")
-            .env("RTM_SOCKET_PATH", &self.socket)
-            .env("RTM_DB_PATH", &self.db)
+            .env("LILO_SOCKET_PATH", &self.socket)
+            .env("LILO_HOME", &self.rtm_home)
             .output();
         let _ = self.daemon.kill();
         let _ = self.daemon.wait();
@@ -344,21 +349,19 @@ fn write_fake_runtime(dir: &Path, name: &str) -> PathBuf {
 }
 
 fn start_daemon(
-    rtm: &Path,
+    lilo: &Path,
     socket: &Path,
-    db: &Path,
-    rtm_home: &Path,
+    lilo_home: &Path,
     fake_bin_dir: &Path,
     reconcile_env: &[(&'static str, String)],
     start_outside_tmux: bool,
 ) -> Child {
-    let mut command = Command::new(rtm);
+    let mut command = Command::new(lilo);
     command
         .arg("daemon")
         .arg("start")
-        .env("RTM_SOCKET_PATH", socket)
-        .env("RTM_DB_PATH", db)
-        .env("RTM_HOME", rtm_home)
+        .env("LILO_SOCKET_PATH", socket)
+        .env("LILO_HOME", lilo_home)
         .env("PATH", test_path(fake_bin_dir))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -402,11 +405,12 @@ fn wait_for_socket(socket: &Path, daemon: &mut Child) {
     );
 }
 
-fn stop_daemon(rtm: &Path, socket: &Path, daemon: &mut Child) {
-    let output = Command::new(rtm)
+fn stop_daemon(lilo: &Path, socket: &Path, lilo_home: &Path, daemon: &mut Child) {
+    let output = Command::new(lilo)
         .arg("daemon")
         .arg("stop")
-        .env("RTM_SOCKET_PATH", socket)
+        .env("LILO_SOCKET_PATH", socket)
+        .env("LILO_HOME", lilo_home)
         .output()
         .expect("daemon stop");
     assert!(
@@ -442,18 +446,4 @@ fn wait_for_child(child: &mut Child) {
     }
     let _ = child.kill();
     panic!("daemon did not exit");
-}
-
-fn default_rtm_path() -> PathBuf {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_rtm") {
-        return PathBuf::from(path);
-    }
-
-    let current = std::env::current_exe().expect("current exe");
-    let dir = current.parent().expect("executable parent");
-    let candidate_dir = match dir.file_name().and_then(|name| name.to_str()) {
-        Some("deps" | "examples") => dir.parent().expect("target profile dir"),
-        _ => dir,
-    };
-    candidate_dir.join(format!("rtm{}", std::env::consts::EXE_SUFFIX))
 }

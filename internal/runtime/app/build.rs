@@ -26,9 +26,9 @@ fn main() {
 
 fn emit_cli_version() {
     emit_git_rerun_directives();
-    println!("cargo:rerun-if-env-changed=RTM_GIT_SHA");
+    println!("cargo:rerun-if-env-changed=LILO_GIT_SHA");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
-    println!("cargo:rerun-if-env-changed=RTM_VERSION_INCLUDE_GIT_SHA");
+    println!("cargo:rerun-if-env-changed=LILO_VERSION_INCLUDE_GIT_SHA");
 
     let package_version = std::env::var("CARGO_PKG_VERSION")
         .unwrap_or_else(|error| panic!("CARGO_PKG_VERSION set: {error}"));
@@ -85,7 +85,7 @@ fn git_path(rel: &str) -> Option<String> {
 
 fn include_git_sha() -> bool {
     matches!(
-        std::env::var("RTM_VERSION_INCLUDE_GIT_SHA").as_deref(),
+        std::env::var("LILO_VERSION_INCLUDE_GIT_SHA").as_deref(),
         Ok("1" | "true" | "yes")
     )
 }
@@ -95,7 +95,7 @@ fn build_git_sha() -> Option<String> {
 }
 
 fn explicit_git_sha() -> Option<String> {
-    std::env::var("RTM_GIT_SHA")
+    std::env::var("LILO_GIT_SHA")
         .ok()
         .and_then(|sha| short_sha(&sha))
         .or_else(|| {

@@ -7,7 +7,8 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::env::non_empty_path;
+use crate::env::{env_path, non_empty_path};
+use crate::lilo::{LILO_HOME_ENV, LILO_SOCKET_PATH_ENV, LiloHome, LiloPaths};
 
 pub const RTM_SOCKET_PATH: &str = "RTM_SOCKET_PATH";
 pub const RTM_DB_PATH: &str = "RTM_DB_PATH";
@@ -63,10 +64,10 @@ pub struct RuntimePathEnv {
 impl RuntimePathEnv {
     pub fn from_process() -> Self {
         Self {
-            socket_path: std::env::var_os(RTM_SOCKET_PATH),
-            db_path: std::env::var_os(RTM_DB_PATH),
-            rtm_home: std::env::var_os(RTM_HOME),
-            shim_path: std::env::var_os(RTM_SHIM_PATH),
+            socket_path: std::env::var_os(LILO_SOCKET_PATH_ENV),
+            db_path: None,
+            rtm_home: None,
+            shim_path: None,
             xdg_runtime_dir: std::env::var_os(XDG_RUNTIME_DIR),
             home: std::env::var_os(HOME),
         }
@@ -138,7 +139,9 @@ pub enum RuntimePathError {
 }
 
 pub fn runtime_endpoint_from_env() -> Result<RuntimeEndpoint, RuntimePathError> {
-    runtime_endpoint(&RuntimePathEnv::from_process())
+    Ok(RuntimeEndpoint::unix_socket(
+        lilo_paths_from_env()?.socket_path(),
+    ))
 }
 
 pub fn runtime_endpoint(env: &RuntimePathEnv) -> Result<RuntimeEndpoint, RuntimePathError> {
@@ -146,7 +149,7 @@ pub fn runtime_endpoint(env: &RuntimePathEnv) -> Result<RuntimeEndpoint, Runtime
 }
 
 pub fn unix_socket_path_from_env() -> Result<PathBuf, RuntimePathError> {
-    unix_socket_path(&RuntimePathEnv::from_process())
+    Ok(lilo_paths_from_env()?.socket_path())
 }
 
 pub fn unix_socket_path(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
@@ -177,7 +180,7 @@ pub fn display_unix_socket_path(path: &Path, env: &RuntimePathEnv) -> String {
 }
 
 pub fn db_path_from_env() -> Result<PathBuf, RuntimePathError> {
-    db_path(&RuntimePathEnv::from_process())
+    Ok(lilo_paths_from_env()?.db_path())
 }
 
 pub fn db_path(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
@@ -189,7 +192,7 @@ pub fn db_path(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
 }
 
 pub fn log_root_from_env() -> Result<PathBuf, RuntimePathError> {
-    log_root(&RuntimePathEnv::from_process())
+    Ok(lilo_paths_from_env()?.logs_root().join("runtimes"))
 }
 
 pub fn log_root(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
@@ -198,6 +201,18 @@ pub fn log_root(env: &RuntimePathEnv) -> Result<PathBuf, RuntimePathError> {
 
 pub fn event_log_path(data_dir: &Path) -> PathBuf {
     data_dir.join(EVENT_LOG_FILE)
+}
+
+fn lilo_paths_from_env() -> Result<LiloPaths, RuntimePathError> {
+    let root = env_path(LILO_HOME_ENV)
+        .or_else(|| env_path(HOME).map(|home| home.join(".lilo")))
+        .ok_or(RuntimePathError::MissingHome {
+            context: "lilo home",
+        })?;
+    let home = LiloHome::from_path(root).map_err(|_| RuntimePathError::MissingHome {
+        context: "lilo home",
+    })?;
+    Ok(LiloPaths::new(home))
 }
 
 pub fn shim_path_from_env() -> Result<PathBuf, RuntimePathError> {

@@ -2,7 +2,7 @@ use std::fs;
 
 use anyhow::{Context, Result, bail};
 use lilo_session_core::{
-    DeleteRequest, Namespace, NamespaceDeleteRequest, RpcRequest, RpcResponse, SmEndpoint, SmPaths,
+    DeleteRequest, Namespace, NamespaceDeleteRequest, RpcResponse, SessionRpc, SmEndpoint, SmPaths,
 };
 
 use crate::cli::cli_def::{DeleteArgs, DeleteNamespaceArgs, DeleteResource, DeleteSessionArgs};
@@ -20,7 +20,7 @@ async fn delete_session(args: DeleteSessionArgs) -> Result<()> {
     let endpoint = SmEndpoint::from_env()?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Delete {
+        &SessionRpc::Delete {
             request: DeleteRequest {
                 selector: required_scoped_selector(&args.selector, &args.scope)?,
                 signal: args.signal,
@@ -54,7 +54,7 @@ async fn delete_namespace(args: DeleteNamespaceArgs) -> Result<()> {
     let endpoint = SmEndpoint::from_env()?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::NamespaceDelete {
+        &SessionRpc::NamespaceDelete {
             request: NamespaceDeleteRequest {
                 namespace: namespace.clone(),
             },
@@ -113,7 +113,7 @@ fn clear_binding_if_matches(namespace: &Namespace) -> Result<bool> {
 
 fn fail_binding_clear_for_tests() -> Result<()> {
     #[cfg(debug_assertions)]
-    if std::env::var_os("SM_FAULT_NAMESPACE_BINDING_CLEAR").is_some() {
+    if std::env::var_os("LILO_FAULT_NAMESPACE_BINDING_CLEAR").is_some() {
         bail!("fault injected while clearing namespace binding");
     }
     Ok(())

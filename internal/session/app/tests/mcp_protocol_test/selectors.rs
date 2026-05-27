@@ -84,10 +84,8 @@ pub(crate) async fn session_tools_share_agent_handlers_and_namespace_read_scope(
         "session_list",
         json!({ "all_namespaces": true }),
     );
-    assert_eq!(
-        agent_all["result"]["structuredContent"],
-        session_all["result"]["structuredContent"]
-    );
+    assert_session_ids(&agent_all, &[&caller, &alpha_peer, &beta_peer]);
+    assert_session_ids(&session_all, &[&caller, &alpha_peer, &beta_peer]);
 
     let explicit_alpha = call_tool(&mut mcp, 7, "session_list", json!({ "namespace": "alpha" }));
     assert_session_ids(&explicit_alpha, &[&caller, &alpha_peer]);

@@ -60,6 +60,7 @@ pub fn wait_for_headless_runtime_ready(harness: &RtmHarness, session_id: &str) {
         harness
             .rtm_home()
             .join("logs")
+            .join("runtimes")
             .join(session_id)
             .join("stdout.log"),
         &format!("{FAKE_RUNTIME_READY}\n"),

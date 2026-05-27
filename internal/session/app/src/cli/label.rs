@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::{Result, bail};
-use lilo_session_core::{LabelMutation, LabelRequest, RpcRequest, RpcResponse, SmEndpoint};
+use lilo_session_core::{LabelMutation, LabelRequest, RpcResponse, SessionRpc, SmEndpoint};
 
 use crate::cli::cli_def::LabelArgs;
 use crate::cli::output::print_session_line;
@@ -11,7 +11,7 @@ pub async fn run(args: LabelArgs) -> Result<()> {
     let endpoint = SmEndpoint::from_env()?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Label {
+        &SessionRpc::Label {
             request: LabelRequest {
                 selector: required_scoped_selector(&args.selector, &args.scope)?,
                 mutation: LabelMutation::from_str(&args.mutation)?,

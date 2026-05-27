@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use lilo_session_core::{McpBridgeRequest, RpcRequest, RpcResponse, SmEndpoint, SmPaths};
+use lilo_session_core::{McpBridgeRequest, RpcResponse, SessionRpc, SmEndpoint, SmPaths};
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 use crate::mcp::transport::write_line;
@@ -16,7 +16,7 @@ pub async fn run_stdio_bridge(_paths: SmPaths) -> Result<()> {
         }
         let response = lilo_session_daemon::send_request(
             &endpoint,
-            &RpcRequest::McpBridge {
+            &SessionRpc::McpBridge {
                 request: McpBridgeRequest {
                     line,
                     caller_session_id: std::env::var("HELIOY_SESSION_ID").ok(),

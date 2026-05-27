@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use lilo_paths::RuntimeEndpoint;
+use lilo_paths::{LiloPaths, RuntimeEndpoint};
 use lilo_runtime_store::StoreConfig;
 use uuid::Uuid;
 
@@ -24,6 +24,19 @@ impl DaemonConfig {
             shim_path: lilo_paths::shim_path_from_env()?,
             log_root: lilo_paths::log_root_from_env()?,
             store: StoreConfig::from_env()?,
+            reconcile: reconcile::ReconcileConfig::from_env()?,
+            docker_preflight: DockerPreflightConfig::from_env(),
+        })
+    }
+
+    pub fn from_lilo_paths(paths: &LiloPaths) -> Result<Self> {
+        Ok(Self {
+            endpoint: RuntimeEndpoint::unix_socket(paths.socket_path()),
+            shim_path: lilo_paths::shim_path_from_env()?,
+            log_root: paths.logs_root().join("runtimes"),
+            store: StoreConfig {
+                db_path: paths.db_path(),
+            },
             reconcile: reconcile::ReconcileConfig::from_env()?,
             docker_preflight: DockerPreflightConfig::from_env(),
         })

@@ -82,7 +82,7 @@ expression: doctor
     "version": "[version]"
   },
   "watchers": {
-    "event_waiters": 0,
+    "event_waiters": "[count]",
     "process_exit_watchers": "[count]",
     "shim_sockets": "[count]"
   }

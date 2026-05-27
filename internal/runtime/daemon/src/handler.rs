@@ -8,6 +8,7 @@ use lilo_rm_core::{
     ShimLaunchPayload, SpawnedPayload, StatusPayload, ValidateTargetPayload, VersionPayload,
     WatchersPayload, clamped_event_wait_ms, read_json_line, write_json_line,
 };
+use lilo_wire::LilodRpc;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::broadcast;
@@ -29,13 +30,17 @@ pub(crate) async fn handle_connection(
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
 
-    let response = match read_json_line::<_, RuntimeRpc>(&mut reader).await {
-        Ok(rpc) => {
+    let response = match read_json_line::<_, LilodRpc>(&mut reader).await {
+        Ok(LilodRpc::Runtime(rpc)) => {
             let Some(response) = handle_rpc_or_disconnect(rpc, state, &mut reader).await? else {
                 return Ok(());
             };
             response
         }
+        Ok(LilodRpc::Session(_)) => RuntimeResponse::error(
+            lilo_rm_core::ErrorCode::ProtocolMismatch,
+            "session RPC sent to runtime handler",
+        ),
         Err(error) => protocol_error_response(&error),
     };
     let should_stop = matches!(response, RuntimeResponse::Stopping);
@@ -83,7 +88,7 @@ where
     }
 }
 
-async fn handle_rpc(rpc: RuntimeRpc, state: Arc<ServerState>) -> RuntimeResponse {
+pub(crate) async fn handle_rpc(rpc: RuntimeRpc, state: Arc<ServerState>) -> RuntimeResponse {
     let error_context = error_context(&rpc);
     match handle_rpc_result(rpc, state).await {
         Ok(response) => response,

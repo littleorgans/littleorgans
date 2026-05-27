@@ -1027,10 +1027,18 @@ dependencies = [
 name = "lilo"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "clap",
  "lilo-common",
+ "lilo-paths",
+ "lilo-runtime-app",
+ "lilo-session-app",
+ "lilo-session-core",
+ "lilo-session-daemon",
+ "nix",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1130,6 +1138,7 @@ dependencies = [
  "lilo-rm-core",
  "lilo-runtime-daemon",
  "lilo-runtime-store",
+ "lilo-wire",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -1167,6 +1176,7 @@ dependencies = [
  "lilo-runtime-daemon",
  "lilo-runtime-platform",
  "lilo-runtime-store",
+ "lilo-wire",
  "serde",
  "serde_json",
  "tempfile",
@@ -1184,11 +1194,13 @@ dependencies = [
  "chrono",
  "insta",
  "lilo-db",
+ "lilo-im-core",
  "lilo-paths",
  "lilo-rm-core",
  "lilo-runtime-launchers",
  "lilo-runtime-platform",
  "lilo-runtime-store",
+ "lilo-wire",
  "serde",
  "serde_json",
  "tempfile",
@@ -1246,14 +1258,19 @@ dependencies = [
  "lilo-db",
  "lilo-im-core",
  "lilo-im-store",
+ "lilo-paths",
  "lilo-rm-core",
+ "lilo-runtime-daemon",
  "lilo-session-core",
  "lilo-session-daemon",
+ "lilo-wire",
  "nix",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-util",
+ "tracing",
  "uuid",
 ]
 
@@ -1284,11 +1301,13 @@ dependencies = [
  "lilo-im-core",
  "lilo-im-store",
  "lilo-im-stub",
+ "lilo-paths",
  "lilo-rm-client",
  "lilo-rm-core",
  "lilo-session-core",
  "lilo-session-driver",
  "lilo-session-store",
+ "lilo-wire",
  "nix",
  "serde",
  "serde_json",
@@ -1306,6 +1325,7 @@ dependencies = [
  "lilo-rm-client",
  "lilo-rm-core",
  "lilo-session-core",
+ "lilo-wire",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1325,6 +1345,15 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "lilo-wire"
+version = "0.8.0"
+dependencies = [
+ "lilo-rm-core",
+ "lilo-session-core",
+ "serde",
 ]
 
 [[package]]
@@ -2415,6 +2444,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
 dependencies = [
  "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.7.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-sink",
  "pin-project-lite",
  "tokio",
 ]

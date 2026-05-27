@@ -9,6 +9,7 @@ members = [
     "crates/lilo-rm-core",
     "crates/lilo-rm-client",
     "internal/db",
+    "internal/wire",
     "internal/identity/service",
     "internal/runtime/platform",
     "internal/runtime/launchers",
@@ -47,6 +48,7 @@ lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
 lilo-db = { path = "internal/db" }
+lilo-wire = { path = "internal/wire" }
 lilo-identity-service = { path = "internal/identity/service" }
 lilo-paths = { path = "crates/lilo-paths", version = "0.8.0" }
 lilo-rm-client = { path = "crates/lilo-rm-client", version = "0.8.0" }
@@ -80,6 +82,7 @@ tokio = { version = "1.48.0", features = [
     "sync",
     "time",
 ] }
+tokio-util = "0.7"
 toml = "0.8.23"
 tracing = "0.1.41"
 # `json` feature retained beyond the runtime-matters baseline because

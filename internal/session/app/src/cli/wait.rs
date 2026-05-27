@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use lilo_session_core::{
-    RpcRequest, RpcResponse, Selector, SmEndpoint, WaitCondition, WaitRequest,
+    RpcResponse, Selector, SessionRpc, SmEndpoint, WaitCondition, WaitRequest,
 };
 
 use crate::cli::cli_def::WaitArgs;
@@ -13,7 +13,7 @@ pub async fn run(args: WaitArgs) -> Result<()> {
     let condition = WaitCondition::from_str(&args.condition)?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Wait {
+        &SessionRpc::Wait {
             request: WaitRequest {
                 selector: Selector::from_str(&args.selector)?,
                 condition,

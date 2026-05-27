@@ -5,8 +5,8 @@ use crate::env::env_path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-const LILO_HOME_ENV: &str = "LILO_HOME";
-const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
+pub(crate) const LILO_HOME_ENV: &str = "LILO_HOME";
+pub(crate) const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
 const HOME_ENV: &str = "HOME";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

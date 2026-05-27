@@ -18,7 +18,7 @@ lifecycles
   lost                0
 process exit watchers 0
 shim sockets          0
-event waiters         0
+event waiters         [count]
 launchers
   claude              [command]
   codex               [command]

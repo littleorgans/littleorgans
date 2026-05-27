@@ -5,7 +5,7 @@ use crate::common::{
     spawn_test_session,
 };
 use lilo_session_core::{
-    DoctorRequest, LogsRequest, LostEvidence, RpcRequest, RpcResponse, Selector, WaitCondition,
+    DoctorRequest, LogsRequest, LostEvidence, RpcResponse, Selector, SessionRpc, WaitCondition,
     WaitRequest,
 };
 
@@ -27,7 +27,7 @@ pub(crate) async fn spawn_persists_driver_stdout_path_for_logs() {
         .state
         .handle(
             context,
-            RpcRequest::Logs {
+            SessionRpc::Logs {
                 request: LogsRequest {
                     selector: Selector::Id { id: session.id },
                     max_bytes: None,
@@ -60,7 +60,7 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Logs {
+            SessionRpc::Logs {
                 request: LogsRequest {
                     selector: Selector::Id { id: session.id },
                     max_bytes: None,
@@ -77,7 +77,7 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Wait {
+            SessionRpc::Wait {
                 request: WaitRequest {
                     selector: Selector::Id { id: session.id },
                     condition: WaitCondition::Running,
@@ -101,7 +101,7 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
         .state
         .handle(
             context,
-            RpcRequest::Doctor {
+            SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
         )
@@ -127,7 +127,7 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
     let doctor = state
         .handle(
             context,
-            RpcRequest::Doctor {
+            SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
         )
@@ -161,7 +161,7 @@ pub(crate) async fn doctor_reports_runtime_matters_unavailable() {
     let doctor = state
         .handle(
             context,
-            RpcRequest::Doctor {
+            SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
         )

@@ -35,9 +35,9 @@ pub use proto::{
     MailStopCheckResponse, MailUnreadCount, McpBridgeRequest, McpBridgeResponse,
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceDeleteRequest,
     NamespaceDeleteResponse, NamespaceGetRequest, NamespaceGetResponse, NamespaceListRequest,
-    NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcRequest, RpcResponse,
-    RuntimeDoctorReport, ShutdownResponse, SpawnRequest, SpawnResponse, TargetError, WaitCondition,
-    WaitRequest, WaitResponse,
+    NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcResponse,
+    RuntimeDoctorReport, SessionRpc, ShutdownResponse, SpawnRequest, SpawnResponse, TargetError,
+    WaitCondition, WaitRequest, WaitResponse,
 };
 pub use types::{
     Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailStatus,

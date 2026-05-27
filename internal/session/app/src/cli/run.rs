@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget};
 use lilo_session_core::{
-    Label, Namespace, RpcRequest, RpcResponse, SmEndpoint, SpawnRequest,
+    Label, Namespace, RpcResponse, SessionRpc, SmEndpoint, SpawnRequest,
     agent_config_uses_home_prefix, is_agent_config_path_like, normalize_agent_config_request,
 };
 
@@ -64,7 +64,7 @@ async fn spawn_session(
     };
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Spawn {
+        &SessionRpc::Spawn {
             request: Box::new(SpawnRequest {
                 runtime: args.runtime,
                 role: args.role,
@@ -247,24 +247,21 @@ mod tests {
     // Rust 2024 marks process env mutation unsafe. The lock keeps these env
     // changes scoped and serial for namespace resolution tests.
     #[allow(unsafe_code)]
-    fn with_isolated_namespace_env<T>(sm_home: PathBuf, test: impl FnOnce() -> T) -> T {
+    fn with_isolated_namespace_env<T>(lilo_home: PathBuf, test: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .or_panic("env lock");
-        let original_sm_home = std::env::var_os("SM_HOME");
-        let original_sm_namespace = std::env::var_os("SM_NAMESPACE");
+        let original_lilo_home = std::env::var_os("LILO_HOME");
 
         // SAFETY: ENV_LOCK serializes namespace tests, so no other thread reads
-        // or writes SM_HOME / SM_NAMESPACE concurrently; originals are restored
+        // or writes LILO_HOME concurrently; originals are restored
         // before the guard drops.
         unsafe {
-            std::env::set_var("SM_HOME", sm_home);
-            std::env::remove_var("SM_NAMESPACE");
+            std::env::set_var("LILO_HOME", lilo_home);
         }
         let result = test();
-        restore_env("SM_HOME", original_sm_home);
-        restore_env("SM_NAMESPACE", original_sm_namespace);
+        restore_env("LILO_HOME", original_lilo_home);
         result
     }
 

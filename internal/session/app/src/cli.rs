@@ -1,7 +1,6 @@
 pub mod capture;
 pub mod cli_def;
 pub mod config;
-pub mod daemon;
 pub mod delete;
 pub mod doctor;
 pub mod generated_help;

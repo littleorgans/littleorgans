@@ -103,7 +103,7 @@ fn mcp_responses_are_stable() {
     let tools = mcp_json(&harness, request(2, "tools/list", json!({})));
     let status = call_tool(&harness, 3, "rtm_status", json!({}));
     let mut version = call_tool(&harness, 4, "rtm_version", json!({}));
-    let watchers = call_tool(&harness, 5, "rtm_watchers", json!({}));
+    let mut watchers = call_tool(&harness, 5, "rtm_watchers", json!({}));
 
     let session_id = Uuid::now_v7().to_string();
     let spawn = spawn_ok(&harness, &session_id, "claude");
@@ -119,6 +119,7 @@ fn mcp_responses_are_stable() {
         }),
     );
     normalize_mcp_payload_text(&mut version);
+    normalize_mcp_payload_text(&mut watchers);
     normalize_mcp_payload_text(&mut kill);
     let mut snapshot = json!({
         "initialize": initialize,
@@ -186,6 +187,8 @@ fn normalize_doctor(output: &str) -> String {
                 "tmux                  [availability]".to_owned()
             } else if trimmed.starts_with("last probe sweep") {
                 "last probe sweep      [timestamp]".to_owned()
+            } else if trimmed.starts_with("event waiters") {
+                "event waiters         [count]".to_owned()
             } else {
                 line.to_owned()
             }

@@ -5,7 +5,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use lilo_session_core::{LogsRequest, RpcRequest, RpcResponse, Selector, SmEndpoint};
+use lilo_session_core::{LogsRequest, RpcResponse, Selector, SessionRpc, SmEndpoint};
 
 use crate::cli::cli_def::LogsArgs;
 
@@ -13,7 +13,7 @@ pub async fn run(args: LogsArgs) -> Result<()> {
     let endpoint = SmEndpoint::from_env()?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Logs {
+        &SessionRpc::Logs {
             request: LogsRequest {
                 selector: Selector::from_str(&args.selector)?,
                 max_bytes: args.max_bytes,

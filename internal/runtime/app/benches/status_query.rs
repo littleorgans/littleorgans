@@ -38,7 +38,7 @@ fn main() {
 }
 
 fn sample_count() -> usize {
-    std::env::var("RTM_BENCH_SAMPLES")
+    std::env::var("LILO_BENCH_SAMPLES")
         .ok()
         .and_then(|value| value.parse().ok())
         .filter(|value| *value > 0)

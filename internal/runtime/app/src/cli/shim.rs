@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
+use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     LaunchSpec, RuntimeExit, RuntimeSignal, ShellResume, ShimExit, ShimLaunchRequest, ShimReady,
 };
@@ -32,7 +33,7 @@ pub async fn run(args: ShimArgs) -> Result<()> {
 
 pub fn run_for_session_blocking(session_id: Uuid) -> Result<()> {
     ignore_user_interrupts()?;
-    let socket_path = lilo_runtime_daemon::socket::socket_path_from_env()?;
+    let socket_path = LiloPaths::new(LiloHome::from_env()?).socket_path();
     let launch_request = ShimLaunchRequest { session_id };
     let launch = reconnecting("ShimLaunch", || {
         lilo_runtime_daemon::shim_socket::request_launch_blocking(
@@ -122,7 +123,7 @@ fn shell_resume_command(resume: &ShellResume) -> Result<Command> {
 ///
 /// `env_clear()` is called first so the runtime starts from an empty env,
 /// then `launch.env` is layered on top. Without this, the runtime would
-/// inherit the shim's bootstrap env (`RTM_SOCKET_PATH`) and the daemon's
+/// inherit the shim's bootstrap env (`LILO_SOCKET_PATH`) and the daemon's
 /// process env, defeating the denylist applied at capture time. `LaunchSpec.env`
 /// is the authoritative source of truth for the runtime.
 fn apply_launch_env_cwd(command: &mut Command, launch: &LaunchSpec) {

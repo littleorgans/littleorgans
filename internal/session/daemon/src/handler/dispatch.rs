@@ -1,6 +1,6 @@
 use anyhow::Result;
 use lilo_im_core::{Action, ResourceSpec};
-use lilo_session_core::{McpBridgeResponse, RpcRequest, RpcResponse, ShutdownResponse};
+use lilo_session_core::{McpBridgeResponse, RpcResponse, SessionRpc, ShutdownResponse};
 use uuid::Uuid;
 
 use crate::identity_client::RequestContext;
@@ -8,9 +8,9 @@ use crate::identity_client::RequestContext;
 use super::{DaemonState, HandlerResult};
 
 impl DaemonState {
-    pub async fn handle(&self, context: RequestContext, request: RpcRequest) -> HandlerResult {
+    pub async fn handle(&self, context: RequestContext, request: SessionRpc) -> HandlerResult {
         match request {
-            RpcRequest::McpBridge { request } => {
+            SessionRpc::McpBridge { request } => {
                 let context = match request.caller_session_id.as_deref() {
                     Some(raw) => match Uuid::parse_str(raw) {
                         Ok(id) => context.with_mcp_caller_session_id(id),
@@ -42,49 +42,49 @@ impl DaemonState {
     pub(crate) async fn handle_direct(
         &self,
         context: RequestContext,
-        request: RpcRequest,
+        request: SessionRpc,
     ) -> HandlerResult {
         match request {
-            RpcRequest::Spawn { request } => response(self.spawn(&context, *request).await, false),
-            RpcRequest::List { request } => response(self.list(request).await, false),
-            RpcRequest::NamespaceCreate { request } => {
+            SessionRpc::Spawn { request } => response(self.spawn(&context, *request).await, false),
+            SessionRpc::List { request } => response(self.list(request).await, false),
+            SessionRpc::NamespaceCreate { request } => {
                 response(self.create_namespace(request).await, false)
             }
-            RpcRequest::NamespaceGet { request } => {
+            SessionRpc::NamespaceGet { request } => {
                 response(self.get_namespace(request).await, false)
             }
-            RpcRequest::NamespaceList { request } => {
+            SessionRpc::NamespaceList { request } => {
                 response(self.list_namespaces(request).await, false)
             }
-            RpcRequest::NamespaceDelete { request } => {
+            SessionRpc::NamespaceDelete { request } => {
                 response(self.delete_namespace(context, request).await, false)
             }
-            RpcRequest::Delete { request } => response(self.delete(&context, request).await, false),
-            RpcRequest::MailSend { request } => {
+            SessionRpc::Delete { request } => response(self.delete(&context, request).await, false),
+            SessionRpc::MailSend { request } => {
                 response(self.mail_send(&context, request).await, false)
             }
-            RpcRequest::MailRead { request } => {
+            SessionRpc::MailRead { request } => {
                 response(self.mail_read(&context, request).await, false)
             }
-            RpcRequest::MailCheck { request } => response(self.mail_check(&request).await, false),
-            RpcRequest::MailStopCheck { request } => {
+            SessionRpc::MailCheck { request } => response(self.mail_check(&request).await, false),
+            SessionRpc::MailStopCheck { request } => {
                 response(self.mail_stop_check(&request).await, false)
             }
-            RpcRequest::Nudge { request } => response(self.nudge(&context, request).await, false),
-            RpcRequest::Label { request } => response(self.label(&context, request).await, false),
-            RpcRequest::Logs { request } => response(self.logs(&context, request).await, false),
-            RpcRequest::Capture { request } => {
+            SessionRpc::Nudge { request } => response(self.nudge(&context, request).await, false),
+            SessionRpc::Label { request } => response(self.label(&context, request).await, false),
+            SessionRpc::Logs { request } => response(self.logs(&context, request).await, false),
+            SessionRpc::Capture { request } => {
                 response(self.capture(&context, request).await, false)
             }
-            RpcRequest::Doctor { request } => response(self.doctor(&context, request).await, false),
-            RpcRequest::Wait { request } => response(self.wait(request).await, false),
-            RpcRequest::McpBridge { .. } => response(
+            SessionRpc::Doctor { request } => response(self.doctor(&context, request).await, false),
+            SessionRpc::Wait { request } => response(self.wait(request).await, false),
+            SessionRpc::McpBridge { .. } => response(
                 Err(anyhow::anyhow!(
                     "nested MCP bridge requests are not supported"
                 )),
                 false,
             ),
-            RpcRequest::Shutdown => response(self.shutdown(&context).await, true),
+            SessionRpc::Shutdown => response(self.shutdown(&context).await, true),
         }
     }
 

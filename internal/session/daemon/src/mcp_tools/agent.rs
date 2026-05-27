@@ -4,7 +4,7 @@ use std::str::FromStr;
 use anyhow::{Result, anyhow};
 use lilo_session_core::{
     CaptureRequest, DeleteRequest, IsolationPolicy, LabelMutation, LabelRequest, ListRequest,
-    RpcRequest, RpcResponse, RuntimeKind, Selector, SpawnRequest, normalize_agent_config_request,
+    RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest, normalize_agent_config_request,
     tool_success,
 };
 use serde_json::{Value, json};
@@ -49,7 +49,7 @@ pub(crate) async fn agent_run(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime,
                     role,
@@ -90,7 +90,7 @@ pub(crate) async fn agent_list(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::List {
+            SessionRpc::List {
                 request: ListRequest { selector },
             },
         )
@@ -121,7 +121,7 @@ pub(crate) async fn agent_get(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::List {
+            SessionRpc::List {
                 request: ListRequest {
                     selector: Some(selector),
                 },
@@ -161,7 +161,7 @@ pub(crate) async fn agent_capture(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Capture {
+            SessionRpc::Capture {
                 request: CaptureRequest {
                     session_id,
                     scrollback_lines: optional_u64(arguments, "scrollback_lines")
@@ -196,7 +196,7 @@ pub(crate) async fn agent_delete(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Delete {
+            SessionRpc::Delete {
                 request: DeleteRequest {
                     selector,
                     signal,
@@ -228,7 +228,7 @@ pub(crate) async fn agent_label(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Label {
+            SessionRpc::Label {
                 request: LabelRequest { selector, mutation },
             },
         )

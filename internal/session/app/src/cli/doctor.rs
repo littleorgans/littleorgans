@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use lilo_rm_core::CliOutput;
-use lilo_session_core::{DoctorRequest, RpcRequest, RpcResponse, RuntimeDoctorReport, SmEndpoint};
+use lilo_session_core::{DoctorRequest, RpcResponse, RuntimeDoctorReport, SessionRpc, SmEndpoint};
 
 use crate::cli::cli_def::DoctorArgs;
 
@@ -8,7 +8,7 @@ pub async fn run(_args: DoctorArgs) -> Result<()> {
     let endpoint = SmEndpoint::from_env()?;
     let response = lilo_session_daemon::send_request(
         &endpoint,
-        &RpcRequest::Doctor {
+        &SessionRpc::Doctor {
             request: DoctorRequest::default(),
         },
     )

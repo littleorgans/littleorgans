@@ -1,6 +1,7 @@
 mod common;
 
 use common::OrPanic as _;
+use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -8,11 +9,12 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use lilo_im_core::Principal;
+use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::{Lifecycle, LifecycleState, StatusFilter};
 use lilo_session_core::{
-    DeleteRequest, IsolationPolicy, LogsRequest, RpcRequest, RpcResponse, RuntimeKind, Selector,
-    Session, SessionState, SpawnRequest,
+    DeleteRequest, IsolationPolicy, LogsRequest, RpcResponse, RuntimeKind, Selector, Session,
+    SessionRpc, SessionState, SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
@@ -130,7 +132,7 @@ async fn spawn_session(state: &DaemonState, context: RequestContext, workspace: 
     let result = state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "engineer".to_string(),
@@ -165,7 +167,7 @@ async fn delete_session(
     let deleted = state
         .handle(
             context,
-            RpcRequest::Delete {
+            SessionRpc::Delete {
                 request: DeleteRequest {
                     selector: Selector::Id { id },
                     signal: "SIGTERM".to_string(),
@@ -189,7 +191,7 @@ async fn logs_session(state: &DaemonState, context: RequestContext, id: Uuid) ->
     let logs = state
         .handle(
             context,
-            RpcRequest::Logs {
+            SessionRpc::Logs {
                 request: LogsRequest {
                     selector: Selector::Id { id },
                     max_bytes: None,
@@ -204,40 +206,40 @@ async fn logs_session(state: &DaemonState, context: RequestContext, id: Uuid) ->
 }
 
 struct RtmdHarness {
-    rtm: PathBuf,
+    lilo: PathBuf,
     socket: PathBuf,
+    home: PathBuf,
     child: Child,
 }
 
 impl RtmdHarness {
-    fn start(rtm: &Path, dir: &Path) -> Self {
-        let socket = dir.join("rtm.sock");
-        let db = dir.join("rtm.sqlite");
-        let home = dir.join("rtm-home");
-        let mut child = Command::new(rtm)
+    fn start(lilo: &Path, dir: &Path) -> Self {
+        let home = dir.join("lilo-home");
+        let paths = LiloPaths::new(LiloHome::from_path(home.clone()).or_panic("lilo home"));
+        let socket = paths.socket_path();
+        let mut child = Command::new(lilo)
             .arg("daemon")
             .arg("start")
-            .env("RTM_SOCKET_PATH", &socket)
-            .env("RTM_DB_PATH", &db)
-            .env("RTM_HOME", &home)
+            .env("LILO_HOME", &home)
             .env("PATH", test_path(dir))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .or_panic("rtmd starts");
+            .or_panic("lilod starts");
         wait_for_socket(&socket, &mut child);
         Self {
-            rtm: rtm.to_path_buf(),
+            lilo: lilo.to_path_buf(),
             socket,
+            home,
             child,
         }
     }
 
     fn stop(&mut self) {
-        let _ = Command::new(&self.rtm)
+        let _ = Command::new(&self.lilo)
             .arg("daemon")
             .arg("stop")
-            .env("RTM_SOCKET_PATH", &self.socket)
+            .env("LILO_HOME", &self.home)
             .output();
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -305,8 +307,8 @@ async fn wait_for_log_content(path: &Path) -> String {
 }
 
 fn rtm_binary() -> PathBuf {
-    std::env::var_os("RTM_TEST_BIN")
-        .map_or_else(|| assert_cmd::cargo::cargo_bin("rtm"), PathBuf::from)
+    std::env::var_os("LILO_TEST_BIN")
+        .map_or_else(|| assert_cmd::cargo::cargo_bin("lilo"), PathBuf::from)
 }
 
 fn write_fake_runtime(dir: &Path, name: &str) {
@@ -336,10 +338,13 @@ fn wait_for_socket(socket: &Path, child: &mut Child) {
         if UnixStream::connect(socket).is_ok() {
             return;
         }
-        assert!(
-            child.try_wait().or_panic("rtmd try_wait").is_none(),
-            "rtmd exited before socket appeared"
-        );
+        if child.try_wait().or_panic("rtmd try_wait").is_some() {
+            let mut stderr = String::new();
+            if let Some(mut pipe) = child.stderr.take() {
+                let _ = pipe.read_to_string(&mut stderr);
+            }
+            panic!("lilod exited before socket appeared: {stderr}");
+        }
         std::thread::sleep(Duration::from_millis(25));
     }
     panic!("rtmd socket never appeared at {}", socket.display());

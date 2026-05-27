@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 use lilo_session_core::{
-    DoctorRequest, LogsRequest, NudgeRequest, RpcRequest, RpcResponse, WaitCondition, WaitRequest,
+    DoctorRequest, LogsRequest, NudgeRequest, RpcResponse, SessionRpc, WaitCondition, WaitRequest,
     tool_success,
 };
 use serde_json::{Value, json};
@@ -30,7 +30,7 @@ pub(crate) async fn nudge(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Nudge {
+            SessionRpc::Nudge {
                 request: NudgeRequest {
                     to,
                     content: required_string(arguments, "content")?.to_string(),
@@ -62,7 +62,7 @@ pub(crate) async fn logs(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Logs {
+            SessionRpc::Logs {
                 request: LogsRequest {
                     selector,
                     max_bytes: optional_u64(arguments, "max_bytes"),
@@ -100,7 +100,7 @@ pub(crate) async fn wait(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Wait {
+            SessionRpc::Wait {
                 request: WaitRequest {
                     selector,
                     condition,
@@ -127,7 +127,7 @@ pub(crate) async fn doctor(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Doctor {
+            SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
         )

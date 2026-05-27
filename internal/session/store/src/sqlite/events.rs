@@ -50,12 +50,14 @@ async fn apply_runtime_event(
                  started_at = ?,
                  updated_at = ?
              WHERE id = ?
-               AND state IN ('SPAWNING', 'RUNNING')",
+               AND state IN ('SPAWNING', 'RUNNING')
+               AND (state = 'SPAWNING' OR runtime_pid != ?)",
         )
         .bind(runtime_pid)
         .bind(start_time.to_rfc3339())
         .bind(Utc::now().to_rfc3339())
         .bind(session_id.to_string())
+        .bind(runtime_pid)
         .execute(&mut **transaction)
         .await?
         .rows_affected(),
@@ -213,6 +215,43 @@ mod tests {
         assert_eq!(
             store.event_cursor().await.or_panic("cursor loads"),
             Some(42)
+        );
+    }
+
+    #[tokio::test]
+    async fn duplicate_running_event_keeps_existing_running_session_timestamps() {
+        let (_dir, store) = SqliteStore::open_temp().await;
+        let session = test_session();
+        let original_started_at = session.started_at;
+        let original_updated_at = session.updated_at;
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
+
+        store
+            .apply_runtime_events_and_cursor(
+                &[RuntimeEvent::Running {
+                    session_id: session.id,
+                    runtime_pid: session.runtime_pid,
+                    start_time: original_started_at + chrono::Duration::seconds(10),
+                }],
+                43,
+            )
+            .await
+            .or_panic("events apply");
+
+        let updated = store
+            .get_session(&session.id)
+            .await
+            .or_panic("session loads")
+            .or_panic("session exists");
+        assert_eq!(updated.runtime_pid, session.runtime_pid);
+        assert_eq!(updated.started_at, original_started_at);
+        assert_eq!(updated.updated_at, original_updated_at);
+        assert_eq!(
+            store.event_cursor().await.or_panic("cursor loads"),
+            Some(43)
         );
     }
 

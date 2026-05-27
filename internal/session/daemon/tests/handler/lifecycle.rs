@@ -1,6 +1,6 @@
 use crate::common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
 use lilo_session_core::{
-    DeleteRequest, Label, LabelMutation, LabelRequest, RpcRequest, RpcResponse, Selector,
+    DeleteRequest, Label, LabelMutation, LabelRequest, RpcResponse, Selector, SessionRpc,
     SessionState,
 };
 
@@ -14,7 +14,7 @@ pub(crate) async fn drives_session_through_delete_lifecycle() {
         .state
         .handle(
             context,
-            RpcRequest::Delete {
+            SessionRpc::Delete {
                 request: DeleteRequest {
                     selector: Selector::Id { id: spawned.id },
                     signal: "SIGTERM".to_string(),
@@ -42,7 +42,7 @@ pub(crate) async fn delete_unknown_id_uses_session_noun() {
         .state
         .handle(
             local_context(),
-            RpcRequest::Delete {
+            SessionRpc::Delete {
                 request: DeleteRequest {
                     selector: Selector::Id { id },
                     signal: "SIGTERM".to_string(),
@@ -66,7 +66,7 @@ pub(crate) async fn label_empty_selector_uses_session_noun() {
         .state
         .handle(
             local_context(),
-            RpcRequest::Label {
+            SessionRpc::Label {
                 request: LabelRequest {
                     selector: Selector::All,
                     mutation: LabelMutation::Set(Label {

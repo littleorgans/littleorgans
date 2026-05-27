@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::Duration;
 
-use common::{output_stdout, wait_until};
+use common::{output_stdout, wait_until, workspace_bin};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -277,25 +277,31 @@ fn assert_success(output: Output, label: &str) -> String {
 
 struct RtmEnv {
     socket: PathBuf,
-    db: PathBuf,
     home: PathBuf,
 }
 
 impl RtmEnv {
     fn new(dir: &Path) -> Self {
+        let home = dir.join("lilo-home");
         Self {
-            socket: dir.join("rtm.sock"),
-            db: dir.join("rtm.sqlite"),
-            home: dir.join("rtm-home"),
+            socket: dir.join("lilod.sock"),
+            home,
         }
     }
 
     fn rtm_command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_rtm"));
+        let mut command = Command::new(workspace_bin("rtm"));
         command
-            .env("RTM_SOCKET_PATH", &self.socket)
-            .env("RTM_DB_PATH", &self.db)
-            .env("RTM_HOME", &self.home);
+            .env("LILO_SOCKET_PATH", &self.socket)
+            .env("LILO_HOME", &self.home);
+        command
+    }
+
+    fn lilo_command(&self) -> Command {
+        let mut command = Command::new(workspace_bin("lilo"));
+        command
+            .env("LILO_SOCKET_PATH", &self.socket)
+            .env("LILO_HOME", &self.home);
         command
     }
 }
@@ -309,14 +315,14 @@ impl<'a> RtmDaemon<'a> {
     fn start(env: &'a RtmEnv) -> Self {
         assert_not_running(env);
         let child = env
-            .rtm_command()
+            .lilo_command()
             .args(["daemon", "start"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("rtm daemon start");
+            .expect("lilo daemon start");
         wait_until(Duration::from_secs(5), || env.socket.exists().then_some(()))
-            .unwrap_or_else(|| panic!("rtmd socket was not created; daemon={child:?}"));
+            .unwrap_or_else(|| panic!("lilod socket was not created; daemon={child:?}"));
         Self {
             env,
             child: Some(child),
@@ -326,15 +332,15 @@ impl<'a> RtmDaemon<'a> {
     fn stop(&mut self) {
         let output = self
             .env
-            .rtm_command()
+            .lilo_command()
             .args(["daemon", "stop"])
             .output()
-            .expect("rtm daemon stop");
-        assert_success(output, "rtm daemon stop");
+            .expect("lilo daemon stop");
+        assert_success(output, "lilo daemon stop");
         wait_until(Duration::from_secs(5), || {
             (!self.env.socket.exists()).then_some(())
         })
-        .unwrap_or_else(|| panic!("rtmd socket still exists at {}", self.env.socket.display()));
+        .unwrap_or_else(|| panic!("lilod socket still exists at {}", self.env.socket.display()));
         wait_for_child(self.child.take().expect("daemon child"));
     }
 }
@@ -349,10 +355,10 @@ impl Drop for RtmDaemon<'_> {
 
 fn assert_not_running(env: &RtmEnv) {
     let output = env
-        .rtm_command()
+        .lilo_command()
         .args(["daemon", "status"])
         .output()
-        .expect("rtm daemon status");
+        .expect("lilo daemon status");
     let stdout = output_stdout(output);
     assert!(
         stdout.contains("not running"),
