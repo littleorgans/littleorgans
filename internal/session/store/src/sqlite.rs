@@ -3,6 +3,7 @@ mod labels;
 mod mail;
 mod namespaces;
 mod sessions;
+mod spawn_intents;
 mod time;
 
 use lilo_db::LiloDb;
@@ -11,6 +12,9 @@ use sqlx::SqlitePool;
 pub use mail::MailRowError;
 pub use namespaces::{NamespaceRecord, NamespaceRowError, SessionNamespace};
 pub use sessions::SessionRowError;
+pub use spawn_intents::{
+    PendingSpawnIntent, SessionDraft, SessionSpawnIntent, SpawnIntentError, SpawnIntentStatus,
+};
 
 #[derive(Clone)]
 pub struct SqliteStore {

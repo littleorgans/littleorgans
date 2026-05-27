@@ -1,26 +1,12 @@
-use crate::common::{
-    LOCAL_UID, OrPanic as _, TestDaemon, launch_env, local_context, spawn_test_session,
-};
+use crate::common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
 use lilo_session_core::{
-    IsolationPolicy, MountSpec, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
+    IsolationPolicy, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
 };
 
 #[tokio::test]
-pub(crate) async fn spawn_launch_fields_reach_spawn_driver() {
+pub(crate) async fn spawn_launch_uses_runtime_service_without_driver_fallback() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let shell_resume = lilo_rm_core::ShellResume {
-        argv: vec!["/bin/zsh".to_string()],
-        env: vec![launch_env("TERM", "xterm-256color")],
-        cwd: daemon.dir.path().to_path_buf(),
-    };
-    let isolation = IsolationPolicy::Docker(lilo_rm_core::IsolationProfile::default());
-    let image = Some("runtime-matters-claude:local".to_string());
-    let mounts = vec![MountSpec {
-        source: "/host/config".into(),
-        target: "/container/config".into(),
-        read_only: true,
-    }];
 
     let spawned = daemon
         .state
@@ -33,47 +19,42 @@ pub(crate) async fn spawn_launch_fields_reach_spawn_driver() {
                     workspace: daemon.dir.path().display().to_string(),
                     dir: None,
                     namespace: None,
-                    target: "tmux:test:0.0".to_string(),
+                    target: "headless".to_string(),
                     agent_config: None,
-                    isolation: isolation.clone(),
-                    image: image.clone(),
-                    env: vec![
-                        launch_env("HOME", "/Users/tester"),
-                        launch_env("PATH", "/opt/node/bin:/usr/bin"),
-                    ],
-                    mounts: mounts.clone(),
-                    shell_resume: Some(shell_resume.clone()),
+                    isolation: IsolationPolicy::default(),
+                    image: None,
+                    env: Vec::new(),
+                    mounts: Vec::new(),
+                    shell_resume: None,
                     labels: Vec::new(),
-                    force: true,
+                    force: false,
                 }),
             },
         )
         .await;
 
-    let RpcResponse::Spawned { .. } = spawned.response else {
+    let RpcResponse::Spawned { response } = spawned.response else {
         panic!("expected spawn response");
     };
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert_eq!(launch.isolation, isolation);
-    assert_eq!(launch.image, image);
-    assert_eq!(launch.mounts, mounts);
-    assert!(launch.force);
-    assert!(launch.env.contains(&launch_env("HOME", "/Users/tester")));
-    assert!(
-        launch
-            .env
-            .contains(&launch_env("PATH", "/opt/node/bin:/usr/bin"))
+    assert_eq!(response.session.runtime, RuntimeKind::Claude);
+    assert_eq!(response.session.role, "pm");
+    assert_eq!(
+        response.session.workspace,
+        daemon.dir.path().display().to_string()
     );
-    assert_eq!(launch.shell_resume, Some(shell_resume));
+    assert_eq!(response.session.dir, daemon.dir.path());
+    assert!(response.session.runtime_pid > 0);
+    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
 pub(crate) async fn spawn_launch_cwd_is_request_workspace() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let session = spawn_test_session(&daemon, &local_context(), "pm").await;
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert_eq!(launch.cwd, daemon.dir.path());
-    assert!(!launch.force);
+
     assert_eq!(session.namespace, Namespace::default());
+    assert_eq!(session.workspace, daemon.dir.path().display().to_string());
     assert_eq!(session.dir, daemon.dir.path());
+    assert!(session.runtime_pid > 0);
+    assert!(daemon.driver.launches().is_empty());
 }

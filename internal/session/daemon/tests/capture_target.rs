@@ -6,10 +6,9 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
-async fn spawn_validates_target_and_persists_tmux_pane() {
+async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    daemon.driver.set_spawn_tmux_pane("test:0.0");
 
     let response = daemon
         .state
@@ -22,7 +21,7 @@ async fn spawn_validates_target_and_persists_tmux_pane() {
                     workspace: daemon.dir.path().display().to_string(),
                     dir: None,
                     namespace: None,
-                    target: "tmux:test:0.0".to_string(),
+                    target: "headless".to_string(),
                     agent_config: None,
                     isolation: IsolationPolicy::default(),
                     image: None,
@@ -39,8 +38,9 @@ async fn spawn_validates_target_and_persists_tmux_pane() {
     let RpcResponse::Spawned { response } = response.response else {
         panic!("expected spawn response");
     };
-    assert_eq!(response.session.tmux_pane.as_deref(), Some("test:0.0"));
-    assert_eq!(daemon.driver.launches()[0].target, "tmux:test:0.0");
+    assert_eq!(response.session.tmux_pane, None);
+    assert!(response.session.runtime_pid > 0);
+    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -53,7 +53,6 @@ async fn spawn_rejects_invalid_target_before_launch() {
         panic!("expected target validation error");
     };
     assert!(message.contains("invalid runtime target"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -65,8 +64,10 @@ async fn spawn_rejects_tmux_pane_dead_target_before_launch() {
     let RpcResponse::Error { message } = response.response else {
         panic!("expected target validation error");
     };
-    assert!(message.contains("tmux pane is unavailable"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
+    assert!(
+        message.contains("tmux address dead:0.0 is not alive"),
+        "{message}"
+    );
 }
 
 #[tokio::test]
@@ -78,8 +79,10 @@ async fn spawn_rejects_unsupported_target_before_launch() {
     let RpcResponse::Error { message } = response.response else {
         panic!("expected target validation error");
     };
-    assert!(message.contains("unsupported runtime target"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
+    assert!(
+        message.contains("invalid runtime target: ssh:host"),
+        "{message}"
+    );
 }
 
 #[tokio::test]

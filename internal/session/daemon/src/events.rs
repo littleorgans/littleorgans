@@ -139,16 +139,18 @@ mod tests {
 
     use async_trait::async_trait;
     use chrono::Utc;
+    use lilo_db::LiloDb;
+    use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         IsolationPolicy, Lifecycle, LifecycleState, LostEvidence, RuntimeEvent, RuntimeKind,
         RuntimeResponse, StatusPayload, TerminationEvidence, read_json_line, write_json_line,
     };
+    use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
     use lilo_session_core::{
         Label, Namespace, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
     use lilo_session_driver::{
-        CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnDriver, SpawnLaunch,
-        SpawnedProcess,
+        CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SessionDriver,
     };
     use lilo_session_store::SqliteStore;
     use lilo_wire::LilodRpc;
@@ -256,17 +258,26 @@ mod tests {
     }
 
     async fn test_state() -> DaemonState {
-        let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let identity = IdentityClient::connect(&dir.path().join("audit.sqlite"), 42)
+        let audit_dir = tempfile::tempdir().or_panic("tempdir creates");
+        let identity = IdentityClient::connect(&audit_dir.path().join("audit.sqlite"), 42)
             .await
             .or_panic("identity client connects");
         let dir = tempfile::tempdir().or_panic("store tempdir creates");
-        let db = lilo_db::LiloDb::open_path(dir.path().join("lilo.db"))
-            .await
-            .or_panic("store db opens");
+        let paths = LiloPaths::new(
+            LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
+        );
+        let db = LiloDb::open(&paths).await.or_panic("store db opens");
         let store = SqliteStore::open(&db);
+        let runtime = Arc::new(
+            RuntimeService::build(RuntimeServiceContext::new(
+                DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves"),
+                db,
+            ))
+            .await
+            .or_panic("runtime service builds"),
+        );
         std::mem::forget(dir);
-        DaemonState::new(store, Arc::new(NoopDriver), Arc::new(identity))
+        DaemonState::new(store, Arc::new(NoopDriver), Arc::new(identity), runtime)
     }
 
     async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
@@ -345,15 +356,7 @@ mod tests {
     struct NoopDriver;
 
     #[async_trait]
-    impl SpawnDriver for NoopDriver {
-        async fn spawn(
-            &self,
-            _session_id: &str,
-            _launch: &SpawnLaunch,
-        ) -> Result<SpawnedProcess, DriverError> {
-            unreachable!("event tests do not spawn through the driver")
-        }
-
+    impl SessionDriver for NoopDriver {
         async fn validate_target(&self, _target: &str) -> Result<(), DriverError> {
             Ok(())
         }

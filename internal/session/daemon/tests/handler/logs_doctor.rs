@@ -10,35 +10,51 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
-pub(crate) async fn spawn_persists_driver_stdout_path_for_logs() {
+pub(crate) async fn spawn_persists_runtime_stdout_path_for_logs() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let transcript = daemon.dir.path().join("runtime.stdout.log");
-    std::fs::write(&transcript, "daemon spawned\n").or_panic("transcript writes");
-    daemon.driver.set_spawn_stdout_path(transcript.clone());
 
     let session = spawn_test_session(&daemon, &context, "engineer").await;
+    let transcript = session
+        .transcript_path
+        .as_ref()
+        .or_panic("runtime stdout path records");
 
     assert_eq!(
-        session.transcript_path.as_deref(),
-        Some(transcript.as_path())
+        transcript.file_name().and_then(|name| name.to_str()),
+        Some("stdout.log")
     );
-    let logs = daemon
-        .state
-        .handle(
-            context,
-            SessionRpc::Logs {
-                request: LogsRequest {
-                    selector: Selector::Id { id: session.id },
-                    max_bytes: None,
+    assert!(transcript.starts_with(daemon.dir.path().join("lilo/logs/runtimes")));
+    assert!(daemon.driver.launches().is_empty());
+
+    let mut log_body = String::new();
+    for _ in 0..100 {
+        let logs = daemon
+            .state
+            .handle(
+                context.clone(),
+                SessionRpc::Logs {
+                    request: LogsRequest {
+                        selector: Selector::Id { id: session.id },
+                        max_bytes: None,
+                    },
                 },
-            },
-        )
-        .await;
-    let RpcResponse::Logs { response } = logs.response else {
-        panic!("expected logs response");
-    };
-    assert_eq!(response.content, "daemon spawned\n");
+            )
+            .await;
+        let RpcResponse::Logs { response } = logs.response else {
+            panic!("expected logs response");
+        };
+        log_body = response.content;
+        if log_body.contains("lilo fake runtime ready") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        log_body.contains("lilo fake runtime ready"),
+        "{}: {log_body}",
+        transcript.display()
+    );
 }
 
 #[tokio::test]

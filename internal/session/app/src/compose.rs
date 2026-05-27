@@ -30,7 +30,12 @@ pub async fn run(paths: LiloPaths) -> Result<()> {
     let session = Arc::new(SessionService::build(SessionServiceContext::new(
         paths.clone(),
         db.clone(),
+        Arc::clone(&runtime),
     ))?);
+    session
+        .reconcile_pending_spawn_intents()
+        .await
+        .context("failed to reconcile pending session spawn intents")?;
 
     let socket_path = paths.socket_path();
     lilo_runtime_daemon::socket::prepare_socket(&socket_path)?;

@@ -1,15 +1,18 @@
 #![allow(dead_code)]
 
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
+use lilo_db::LiloDb;
 use lilo_im_core::{AuditRow, Principal};
+use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     DoctorPayload, LifecycleCounts, MigrationState, RuntimeResponse, RuntimeRpc, TmuxStatus,
     WatcherCounts, read_json_line, version_info, write_json_line,
 };
+use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{
     IsolationPolicy, Label, MailCheckRequest, RpcResponse, RuntimeKind, Selector, Session,
     SessionRpc, SpawnRequest,
@@ -22,8 +25,9 @@ use lilo_session_driver::{
 };
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
+use std::os::unix::fs::PermissionsExt;
 use tokio::io::BufReader;
-use tokio::net::UnixListener;
+use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -219,22 +223,43 @@ pub struct TestDaemon {
     pub driver: Arc<MockDriver>,
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
+    runtime_socket_task: JoinHandle<()>,
 }
 
 impl TestDaemon {
     pub async fn new(local_uid: u32) -> Self {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let audit_path = dir.path().join("audit.sqlite");
-        let identity = IdentityClient::connect(&audit_path, local_uid)
-            .await
-            .or_panic("identity client connects");
+        warm_runtime_launchers_with_fake_runtime();
         let driver = Arc::new(MockDriver::new());
-        let state = DaemonState::new(open_temp_store().await, driver.clone(), Arc::new(identity));
+        let paths = LiloPaths::new(
+            LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
+        );
+        std::fs::create_dir_all(paths.run_root()).or_panic("run dir creates");
+        let db = LiloDb::open(&paths).await.or_panic("store db opens");
+        let audit_path = paths.db_path();
+        let identity = IdentityClient::new(
+            lilo_im_store::SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            local_uid,
+        );
+        let store = SqliteStore::open(&db);
+        let mut runtime_config =
+            DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves");
+        runtime_config.shim_path = assert_cmd::cargo::cargo_bin("lilo");
+        let runtime = Arc::new(
+            RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone()))
+                .await
+                .or_panic("runtime service builds"),
+        );
+        let runtime_socket_path = paths.socket_path();
+        let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
+        let state = DaemonState::new(store, driver.clone(), Arc::new(identity), runtime)
+            .with_rtmd_socket_path(runtime_socket_path);
         Self {
             state,
             driver,
             audit_path,
             dir,
+            runtime_socket_task,
         }
     }
 
@@ -248,14 +273,94 @@ impl TestDaemon {
     }
 }
 
-async fn open_temp_store() -> SqliteStore {
-    let dir = tempfile::tempdir().or_panic("store tempdir creates");
-    let db = lilo_db::LiloDb::open_path(dir.path().join("lilo.db"))
+fn spawn_runtime_socket(socket_path: &Path, runtime: Arc<RuntimeService>) -> JoinHandle<()> {
+    let listener = UnixListener::bind(socket_path).or_panic("runtime socket binds");
+    tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.or_panic("runtime socket accepts");
+            let runtime = Arc::clone(&runtime);
+            tokio::spawn(async move {
+                handle_runtime_socket_connection(stream, runtime).await;
+            });
+        }
+    })
+}
+
+async fn handle_runtime_socket_connection(stream: UnixStream, runtime: Arc<RuntimeService>) {
+    let (read_half, mut write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+    let response = match read_json_line::<_, LilodRpc>(&mut reader).await {
+        Ok(LilodRpc::Runtime(request)) => {
+            runtime
+                .handle_rpc(Principal::Local(LOCAL_UID), request)
+                .await
+        }
+        Ok(LilodRpc::Session(_)) => RuntimeResponse::error(
+            lilo_rm_core::ErrorCode::ProtocolMismatch,
+            "session rpc reached runtime test socket",
+        ),
+        Err(error) => {
+            RuntimeResponse::error(lilo_rm_core::ErrorCode::ProtocolMismatch, error.to_string())
+        }
+    };
+    write_json_line(&mut write_half, &response)
         .await
-        .or_panic("store db opens");
-    let store = SqliteStore::open(&db);
-    std::mem::forget(dir);
-    store
+        .or_panic("runtime socket writes response");
+}
+
+fn warm_runtime_launchers_with_fake_runtime() {
+    let _guard = launcher_env_lock().lock().or_panic("launcher env lock");
+    let original_path = std::env::var_os("PATH");
+    let path = test_path(fake_runtime_dir());
+    // SAFETY: Launcher warmup serializes PATH mutation through launcher_env_lock.
+    unsafe { std::env::set_var("PATH", path) };
+    let result = lilo_runtime_launchers::warm_registry();
+    match original_path {
+        Some(path) => {
+            // SAFETY: Launcher warmup serializes PATH mutation through launcher_env_lock.
+            unsafe { std::env::set_var("PATH", path) };
+        }
+        None => {
+            // SAFETY: Launcher warmup serializes PATH mutation through launcher_env_lock.
+            unsafe { std::env::remove_var("PATH") };
+        }
+    }
+    result.or_panic("runtime launchers warm");
+}
+
+fn launcher_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn fake_runtime_dir() -> &'static PathBuf {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = tempfile::tempdir().or_panic("fake runtime tempdir creates");
+        write_fake_runtime(dir.path(), "claude");
+        let path = dir.path().to_path_buf();
+        std::mem::forget(dir);
+        path
+    })
+}
+
+fn write_fake_runtime(dir: &Path, name: &str) {
+    let path = dir.join(name);
+    std::fs::write(
+        &path,
+        "#!/bin/sh\nprintf 'lilo fake runtime ready\\n'\nexec sleep 60\n",
+    )
+    .or_panic("fake runtime writes");
+    let mut permissions = std::fs::metadata(&path).or_panic("metadata").permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&path, permissions).or_panic("permissions");
+}
+
+fn test_path(fake_bin_dir: &Path) -> std::ffi::OsString {
+    let current = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![fake_bin_dir.to_path_buf()];
+    paths.extend(std::env::split_paths(&current));
+    std::env::join_paths(paths).or_panic("PATH can be joined")
 }
 
 pub async fn spawn_test_session(

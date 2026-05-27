@@ -1,11 +1,14 @@
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::{
-    Action, Authorizer, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind,
+    Action, AuditDecision, AuditRow, Authorizer, AuthzError, Principal, ResourceSpec,
+    RuntimeKind as IdentityRuntimeKind,
 };
 use lilo_im_store::SqliteAuditSink;
+use lilo_im_store::sqlite::record_audit_in_tx;
 use lilo_im_stub::StubAuthorizer;
 use lilo_session_core::{RuntimeKind, SpawnRequest};
+use sqlx::SqliteConnection;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -65,6 +68,35 @@ impl IdentityClient {
             .await
             .map(|_| ())
             .context("authorization failed")
+    }
+
+    pub async fn authorize_in_tx(
+        &self,
+        conn: &mut SqliteConnection,
+        principal: &Principal,
+        action: Action,
+        resource: &ResourceSpec,
+    ) -> Result<()> {
+        let decision = if *principal == Principal::Local(self.local_uid) {
+            AuditDecision::Allow
+        } else {
+            let reason = match principal {
+                Principal::Local(_) => "non-local uid",
+                Principal::Unknown { .. } => "unknown principal",
+            };
+            AuditDecision::Deny {
+                reason: reason.to_owned(),
+            }
+        };
+        let row = AuditRow::new(principal.clone(), action, resource.clone(), decision);
+        record_audit_in_tx(conn, &row)
+            .await
+            .context("authorization failed")?;
+        if *principal == Principal::Local(self.local_uid) {
+            Ok(())
+        } else {
+            Err(AuthzError::UnknownPrincipal).context("authorization failed")
+        }
     }
 }
 

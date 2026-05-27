@@ -48,6 +48,7 @@ serde_json.workspace = true
 insta.workspace = true
 lilo-runtime-platform = { workspace = true, features = ["test-support"] }
 lilo-wire.workspace = true
+sqlx.workspace = true
 tempfile.workspace = true
 
 [[bench]]

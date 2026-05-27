@@ -4,7 +4,7 @@ use lilo_db::LiloDb;
 use lilo_rm_core::{
     Lifecycle, LifecycleCounts, LifecycleState, MigrationState, RecentLostEvent, StatusFilter,
 };
-use sqlx::{Executor, QueryBuilder, Sqlite, SqlitePool};
+use sqlx::{Executor, QueryBuilder, Sqlite, SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
 use crate::schema;
@@ -36,78 +36,45 @@ impl LifecycleStore {
         if lifecycle.state != LifecycleState::Forking {
             bail!("insert_forking requires Forking lifecycle state");
         }
-        let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
-        sqlx::query(
-            r"
-            INSERT INTO runtime_lifecycle (
-                session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
-                tmux_pane, exit_code, exit_signal, lost_evidence, spawned_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ",
-        )
-        .bind(encoded.session_id)
-        .bind(encoded.runtime)
-        .bind(encoded.isolation)
-        .bind(encoded.state)
-        .bind(encoded.shim_pid)
-        .bind(encoded.runtime_pid)
-        .bind(encoded.start_time)
-        .bind(encoded.tmux_pane)
-        .bind(encoded.exit_code)
-        .bind(encoded.exit_signal)
-        .bind(encoded.lost_evidence)
-        .bind(encoded.now.clone())
-        .bind(encoded.now)
-        .execute(&self.pool)
-        .await
-        .with_context(|| format!("failed to insert lifecycle {}", lifecycle.session_id))?;
-        Ok(())
+        insert_forking_with(&self.pool, lifecycle).await
+    }
+
+    pub async fn insert_forking_in(
+        &self,
+        conn: &mut SqliteConnection,
+        lifecycle: &Lifecycle,
+    ) -> Result<()> {
+        if lifecycle.state != LifecycleState::Forking {
+            bail!("insert_forking requires Forking lifecycle state");
+        }
+        insert_forking_with(conn, lifecycle).await
     }
 
     pub async fn update_lifecycle(&self, lifecycle: &Lifecycle) -> Result<()> {
-        let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
-        let result = sqlx::query(
-            r"
-            UPDATE runtime_lifecycle
-            SET runtime = ?,
-                isolation = ?,
-                state = ?,
-                shim_pid = ?,
-                runtime_pid = ?,
-                start_time = ?,
-                tmux_pane = ?,
-                exit_code = ?,
-                exit_signal = ?,
-                lost_evidence = ?,
-                updated_at = ?
-            WHERE session_id = ?
-            ",
-        )
-        .bind(encoded.runtime)
-        .bind(encoded.isolation)
-        .bind(encoded.state)
-        .bind(encoded.shim_pid)
-        .bind(encoded.runtime_pid)
-        .bind(encoded.start_time)
-        .bind(encoded.tmux_pane)
-        .bind(encoded.exit_code)
-        .bind(encoded.exit_signal)
-        .bind(encoded.lost_evidence)
-        .bind(encoded.now)
-        .bind(encoded.session_id)
-        .execute(&self.pool)
-        .await
-        .with_context(|| format!("failed to update lifecycle {}", lifecycle.session_id))?;
-        if result.rows_affected() == 0 {
-            bail!("session {} not found", lifecycle.session_id);
-        }
-        Ok(())
+        update_lifecycle_with(&self.pool, lifecycle).await
+    }
+
+    pub async fn update_lifecycle_in(
+        &self,
+        conn: &mut SqliteConnection,
+        lifecycle: &Lifecycle,
+    ) -> Result<()> {
+        update_lifecycle_with(conn, lifecycle).await
     }
 
     pub async fn delete(&self, session_id: Uuid) -> Result<()> {
         sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
             .bind(session_id.to_string())
             .execute(&self.pool)
+            .await
+            .with_context(|| format!("failed to delete lifecycle {session_id}"))?;
+        Ok(())
+    }
+
+    pub async fn delete_in(&self, conn: &mut SqliteConnection, session_id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
+            .bind(session_id.to_string())
+            .execute(conn)
             .await
             .with_context(|| format!("failed to delete lifecycle {session_id}"))?;
         Ok(())
@@ -339,6 +306,81 @@ impl LifecycleStore {
         let db = LiloDb::open_path(path).await?;
         Ok(Self::open(&db))
     }
+}
+
+async fn insert_forking_with<'e, E>(executor: E, lifecycle: &Lifecycle) -> Result<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
+    let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
+    sqlx::query(
+        r"
+        INSERT INTO runtime_lifecycle (
+            session_id, runtime, isolation, state, shim_pid, runtime_pid, start_time,
+            tmux_pane, exit_code, exit_signal, lost_evidence, spawned_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ",
+    )
+    .bind(encoded.session_id)
+    .bind(encoded.runtime)
+    .bind(encoded.isolation)
+    .bind(encoded.state)
+    .bind(encoded.shim_pid)
+    .bind(encoded.runtime_pid)
+    .bind(encoded.start_time)
+    .bind(encoded.tmux_pane)
+    .bind(encoded.exit_code)
+    .bind(encoded.exit_signal)
+    .bind(encoded.lost_evidence)
+    .bind(encoded.now.clone())
+    .bind(encoded.now)
+    .execute(executor)
+    .await
+    .with_context(|| format!("failed to insert lifecycle {}", lifecycle.session_id))?;
+    Ok(())
+}
+
+async fn update_lifecycle_with<'e, E>(executor: E, lifecycle: &Lifecycle) -> Result<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
+    let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
+    let result = sqlx::query(
+        r"
+        UPDATE runtime_lifecycle
+        SET runtime = ?,
+            isolation = ?,
+            state = ?,
+            shim_pid = ?,
+            runtime_pid = ?,
+            start_time = ?,
+            tmux_pane = ?,
+            exit_code = ?,
+            exit_signal = ?,
+            lost_evidence = ?,
+            updated_at = ?
+        WHERE session_id = ?
+        ",
+    )
+    .bind(encoded.runtime)
+    .bind(encoded.isolation)
+    .bind(encoded.state)
+    .bind(encoded.shim_pid)
+    .bind(encoded.runtime_pid)
+    .bind(encoded.start_time)
+    .bind(encoded.tmux_pane)
+    .bind(encoded.exit_code)
+    .bind(encoded.exit_signal)
+    .bind(encoded.lost_evidence)
+    .bind(encoded.now)
+    .bind(encoded.session_id)
+    .execute(executor)
+    .await
+    .with_context(|| format!("failed to update lifecycle {}", lifecycle.session_id))?;
+    if result.rows_affected() == 0 {
+        bail!("session {} not found", lifecycle.session_id);
+    }
+    Ok(())
 }
 
 fn push_where(query: &mut QueryBuilder<'_, Sqlite>, has_where: &mut bool) {

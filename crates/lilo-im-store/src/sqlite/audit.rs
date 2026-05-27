@@ -4,7 +4,7 @@ use lilo_im_core::{
 };
 use serde::Serialize;
 use sqlx::sqlite::SqliteRow;
-use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
+use sqlx::{Executor, QueryBuilder, Row, Sqlite, SqliteConnection, SqlitePool};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -81,6 +81,13 @@ impl AuditSink for SqliteAuditSink {
             .await
             .map_err(|error| AuditError::sink(error.to_string()))
     }
+}
+
+pub async fn record_audit_in_tx(
+    conn: &mut SqliteConnection,
+    row: &AuditRow,
+) -> Result<(), StoreError> {
+    insert_audit_row_with(conn, row).await
 }
 
 #[derive(Debug)]
@@ -182,6 +189,13 @@ FROM {AUDIT_TABLE}",
 }
 
 async fn insert_audit_row(pool: &SqlitePool, row: &AuditRow) -> Result<(), StoreError> {
+    insert_audit_row_with(pool, row).await
+}
+
+async fn insert_audit_row_with<'e, E>(executor: E, row: &AuditRow) -> Result<(), StoreError>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     let sql = format!(
         "\
 INSERT INTO {AUDIT_TABLE} (
@@ -202,7 +216,7 @@ INSERT INTO {AUDIT_TABLE} (
         .bind(row.policy_id.as_deref())
         .bind(row.evaluation_trace.as_deref())
         .bind(row.denial_reason.as_deref())
-        .execute(pool)
+        .execute(executor)
         .await?;
     Ok(())
 }

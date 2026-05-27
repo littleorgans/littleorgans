@@ -7,6 +7,7 @@ use lilo_db::LiloDb;
 use lilo_im_store::SqliteAuditSink;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::RUNTIME_PROTOCOL_VERSION;
+use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{RpcResponse, SessionRpc, SmEndpoint, SmPaths, rtmd_socket_path};
 use lilo_session_driver::RtmdDriver;
 use lilo_session_store::SqliteStore;
@@ -35,12 +36,20 @@ pub async fn run_daemon_with_db(paths: SmPaths, db: LiloDb) -> Result<()> {
 
     let store = SqliteStore::open(&db);
     let driver = RtmdDriver::new(rtmd_socket_path.clone());
+    let runtime = Arc::new(
+        RuntimeService::build(RuntimeServiceContext::new(
+            DaemonConfig::from_env()?,
+            db.clone(),
+        ))
+        .await
+        .context("failed to build runtime service")?,
+    );
     let identity = IdentityClient::new(
         SqliteAuditSink::with_pool(db.identity_pool().clone()),
         nix::unistd::getuid().as_raw(),
     );
     let state = Arc::new(
-        DaemonState::new(store, Arc::new(driver), Arc::new(identity))
+        DaemonState::new(store, Arc::new(driver), Arc::new(identity), runtime)
             .with_rtmd_socket_path(rtmd_socket_path.clone()),
     );
     crate::reconcile::reconcile_once(&state)

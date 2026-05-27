@@ -9,15 +9,14 @@ use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
     CaptureRequest, KillOutcome, KillRequest, Lifecycle, LifecycleState, NudgeFailureReason,
     NudgeOutcome, NudgeRequest, RuntimeKind as RtmdRuntimeKind, RuntimeSignal, SpawnConflictKind,
-    SpawnConflictPayload, SpawnRequest, SpawnTarget as RtmdSpawnTarget, StatusFilter,
-    ValidateTargetOutcome,
+    SpawnConflictPayload, StatusFilter, ValidateTargetOutcome,
 };
-use lilo_session_core::RuntimeKind;
 use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
 use crate::conv::{
     kill_outcome_label, lifecycle_state_label, lifecycle_to_probe, lifecycle_transcript_path,
+    runtime_spawn_request, spawned_process,
 };
 use crate::driver::{
     CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnDriver, SpawnLaunch,
@@ -52,31 +51,9 @@ impl SpawnDriver for RtmdDriver {
     ) -> Result<SpawnedProcess, DriverError> {
         let session_id = parse_session_id(session_id)?;
         self.locked_terminal_sessions().remove(&session_id);
-        let payload = self
-            .client
-            .spawn(SpawnRequest {
-                session_id,
-                runtime: runtime_kind(launch.runtime),
-                isolation: launch.isolation.clone(),
-                image: launch.image.clone(),
-                env: launch.env.clone(),
-                mounts: launch.mounts.clone(),
-                cwd: launch.cwd.clone(),
-                target: runtime_target(&launch.target)?,
-                force: launch.force,
-                shell_resume: launch.shell_resume.clone(),
-            })
-            .await
-            .map_err(spawn_error)?;
-        let runtime_pid = runtime_pid(&payload.lifecycle)?;
-
-        Ok(SpawnedProcess {
-            runtime_pid,
-            log_dir: payload.log_dir,
-            stdout_path: payload.stdout_path,
-            stderr_path: payload.stderr_path,
-            tmux_pane: payload.lifecycle.tmux_pane.map(|pane| pane.to_string()),
-        })
+        let request = runtime_spawn_request(session_id, launch)?;
+        let payload = self.client.spawn(request).await.map_err(spawn_error)?;
+        spawned_process(payload)
     }
 
     async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
@@ -228,25 +205,6 @@ impl RtmdDriver {
 
 fn parse_session_id(session_id: &str) -> Result<Uuid, DriverError> {
     Uuid::parse_str(session_id).map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))
-}
-
-fn runtime_kind(runtime: RuntimeKind) -> RtmdRuntimeKind {
-    match runtime {
-        RuntimeKind::Claude => RtmdRuntimeKind::Claude,
-        RuntimeKind::Codex => RtmdRuntimeKind::Codex,
-    }
-}
-
-fn runtime_target(target: &str) -> Result<RtmdSpawnTarget, DriverError> {
-    target
-        .parse()
-        .map_err(|error| DriverError::InvalidTarget(format!("{error}")))
-}
-
-fn runtime_pid(lifecycle: &Lifecycle) -> Result<u32, DriverError> {
-    lifecycle
-        .runtime_pid
-        .ok_or_else(|| DriverError::MissingRuntimePid(lifecycle.session_id.to_string()))
 }
 
 fn nudge_result(outcome: &NudgeOutcome) -> NudgeResult {

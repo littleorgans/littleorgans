@@ -6,4 +6,7 @@ pub mod sqlite;
 #[path = "../../test_support.rs"]
 mod test_support;
 
-pub use sqlite::SqliteStore;
+pub use sqlite::{
+    PendingSpawnIntent, SessionDraft, SessionSpawnIntent, SpawnIntentError, SpawnIntentStatus,
+    SqliteStore,
+};

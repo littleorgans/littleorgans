@@ -7,7 +7,7 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
-pub(crate) async fn agent_config_env_reaches_spawn_driver() {
+pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let config = daemon.dir.path().join("agent.toml");
@@ -49,24 +49,13 @@ pub(crate) async fn agent_config_env_reaches_spawn_driver() {
         response.session.agent_config,
         Some(config.display().to_string())
     );
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert!(
-        launch
-            .env
-            .contains(&launch_env("CLAUDE_CONFIG_DIR", "/tmp/demo-claude"))
+    assert_eq!(
+        response.session.workspace,
+        daemon.dir.path().display().to_string()
     );
-    assert!(
-        launch
-            .env
-            .contains(&launch_env("HELIOY_AGENT_NAME", "demo"))
-    );
-    assert_eq!(launch.isolation, IsolationPolicy::Host);
-    assert_eq!(launch.image, None);
-    assert!(launch.mounts.is_empty());
-    assert!(launch.env.contains(&launch_env(
-        "HELIOY_SESSION_ID",
-        &response.session.id.to_string()
-    )));
+    assert_eq!(response.session.dir, daemon.dir.path());
+    assert!(response.session.runtime_pid > 0);
+    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]

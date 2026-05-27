@@ -5,7 +5,7 @@ use crate::{handler, reconcile};
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::Principal;
-use lilo_rm_core::{RuntimeResponse, RuntimeRpc};
+use lilo_rm_core::{RuntimeEvent, RuntimeResponse, RuntimeRpc};
 use lilo_runtime_store::LifecycleStore;
 use tokio::sync::broadcast;
 
@@ -73,6 +73,10 @@ impl RuntimeService {
             let _ = self.shutdown_tx.send(());
         }
         response
+    }
+
+    pub async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
+        self.state.append_event(event).await
     }
 
     pub fn subscribe_shutdown(&self) -> broadcast::Receiver<()> {

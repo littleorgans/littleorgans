@@ -87,6 +87,9 @@ CREATE TABLE session_spawn_intents (
     aborted_reason TEXT
 );
 
+CREATE INDEX idx_session_spawn_intents_status_created
+    ON session_spawn_intents(status, created_at);
+
 CREATE TABLE runtime_lifecycle (
     session_id TEXT PRIMARY KEY NOT NULL,
     runtime TEXT NOT NULL,

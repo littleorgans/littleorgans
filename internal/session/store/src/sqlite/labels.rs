@@ -1,5 +1,5 @@
 use lilo_session_core::{Label, LabelMutation, Session};
-use sqlx::Row;
+use sqlx::{Row, SqliteConnection};
 use uuid::Uuid;
 
 use super::{SessionRowError, SqliteStore};
@@ -24,6 +24,18 @@ impl SqliteStore {
     ) -> Result<(), SessionRowError> {
         for label in labels {
             self.upsert_label(id, label).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn insert_session_labels_in(
+        &self,
+        conn: &mut SqliteConnection,
+        id: &Uuid,
+        labels: &[Label],
+    ) -> Result<(), SessionRowError> {
+        for label in labels {
+            upsert_label_in(conn, id, label).await?;
         }
         Ok(())
     }
@@ -73,4 +85,22 @@ impl SqliteStore {
             .await?;
         Ok(())
     }
+}
+
+async fn upsert_label_in(
+    conn: &mut SqliteConnection,
+    id: &Uuid,
+    label: &Label,
+) -> Result<(), SessionRowError> {
+    sqlx::query(
+        "INSERT INTO session_labels (session_id, key, value)
+         VALUES (?, ?, ?)
+         ON CONFLICT(session_id, key) DO UPDATE SET value = excluded.value",
+    )
+    .bind(id.to_string())
+    .bind(&label.key)
+    .bind(&label.value)
+    .execute(conn)
+    .await?;
+    Ok(())
 }

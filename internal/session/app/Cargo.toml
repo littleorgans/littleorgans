@@ -51,6 +51,7 @@ lilo-db.workspace = true
 lilo-im-core.workspace = true
 lilo-im-store.workspace = true
 insta.workspace = true
+sqlx.workspace = true
 tempfile.workspace = true
 
 [[bench]]

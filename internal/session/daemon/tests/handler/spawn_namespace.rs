@@ -81,10 +81,10 @@ pub(crate) async fn spawn_prefers_new_dir_when_legacy_workspace_is_also_present(
     let RpcResponse::Spawned { response } = spawned.response else {
         panic!("expected spawn response");
     };
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert_eq!(launch.cwd, daemon.dir.path());
     assert_eq!(response.session.workspace, dir);
     assert_eq!(response.session.namespace, namespace);
+    assert_eq!(response.session.dir, daemon.dir.path());
+    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]

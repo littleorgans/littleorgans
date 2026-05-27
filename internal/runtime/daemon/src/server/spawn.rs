@@ -17,6 +17,11 @@ pub(super) struct SpawnCoordinator {
     pending_ready: Mutex<HashMap<Uuid, oneshot::Sender<ShimReady>>>,
 }
 
+pub(crate) struct BeginSpawn {
+    pub(crate) ready: oneshot::Receiver<ShimReady>,
+    pub(crate) session_backed: bool,
+}
+
 impl SpawnCoordinator {
     pub(super) fn new() -> Self {
         Self {
@@ -30,21 +35,34 @@ impl SpawnCoordinator {
         state: &ServerState,
         request: &SpawnRequest,
         launch: LaunchSpec,
-    ) -> Result<oneshot::Receiver<ShimReady>> {
-        if state.store().get(request.session_id).await?.is_some() {
-            return Err(RuntimeFailure::session_already_exists(request.session_id));
-        }
+    ) -> Result<BeginSpawn> {
+        let session_backed = match state.store().get(request.session_id).await? {
+            Some(lifecycle)
+                if lifecycle.state == LifecycleState::Forking
+                    && lifecycle.runtime == request.runtime
+                    && lifecycle.isolation == request.isolation =>
+            {
+                true
+            }
+            Some(_) => return Err(RuntimeFailure::session_already_exists(request.session_id)),
+            None => false,
+        };
         self.validate_spawn_target(request).await?;
 
-        let mut lifecycle = Lifecycle::forking(request.session_id, request.runtime.clone());
-        lifecycle.isolation = request.isolation.clone();
-        state.store().insert_forking(&lifecycle).await?;
+        if !session_backed {
+            let mut lifecycle = Lifecycle::forking(request.session_id, request.runtime.clone());
+            lifecycle.isolation = request.isolation.clone();
+            state.store().insert_forking(&lifecycle).await?;
+        }
         self.pending_launches
             .lock()
             .await
             .insert(request.session_id, launch);
         match self.begin_ready_wait(request.session_id).await {
-            Ok(receiver) => Ok(receiver),
+            Ok(ready) => Ok(BeginSpawn {
+                ready,
+                session_backed,
+            }),
             Err(error) => {
                 self.cancel_spawn(state, request.session_id).await;
                 Err(error)
@@ -145,6 +163,7 @@ impl SpawnCoordinator {
         state: &Arc<ServerState>,
         request: &SpawnRequest,
         ready: ShimReady,
+        append_event: bool,
     ) -> Result<(Lifecycle, RuntimeEvent)> {
         let runtime_pid = ready.runtime_pid;
         let mut lifecycle = state
@@ -172,7 +191,11 @@ impl SpawnCoordinator {
         state
             .start_exit_watcher(request.session_id, runtime_pid)
             .await?;
-        let event = state.append_event(event).await?;
+        let event = if append_event {
+            state.append_event(event).await?
+        } else {
+            event
+        };
         Ok((lifecycle, event))
     }
 

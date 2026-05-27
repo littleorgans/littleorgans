@@ -5,8 +5,8 @@ use chrono::{DateTime, Utc};
 use lilo_session_core::{
     LabelOp, LostEvidence, Namespace, RuntimeKind, Selector, Session, SessionState,
 };
-use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
+use sqlx::{Row, Sqlite, SqliteConnection};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -32,43 +32,19 @@ pub enum SessionRowError {
 
 impl SqliteStore {
     pub async fn insert_session(&self, session: &Session) -> Result<(), SessionRowError> {
-        sqlx::query(
-            "INSERT INTO session_sessions
-                (id, runtime, role, workspace, namespace, dir, state, lost_evidence, runtime_pid,
-                 runtime_session, transcript_path, tmux_pane, agent_config, created_at,
-                 started_at, terminated_at, exit_code, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(session.id.to_string())
-        .bind(session.runtime.to_string())
-        .bind(&session.role)
-        .bind(&session.workspace)
-        .bind(session.namespace.as_str())
-        .bind(session.dir.display().to_string())
-        .bind(session.state.sql_name())
-        .bind(session_lost_evidence(session.state))
-        .bind(session.runtime_pid)
-        .bind(session.runtime_session.as_deref())
-        .bind(
-            session
-                .transcript_path
-                .as_ref()
-                .map(|path| path.display().to_string()),
-        )
-        .bind(session.tmux_pane.as_deref())
-        .bind(session.agent_config.as_deref())
-        .bind(session.created_at.to_rfc3339())
-        .bind(session.started_at.to_rfc3339())
-        .bind(
-            session
-                .terminated_at
-                .map(|timestamp| timestamp.to_rfc3339()),
-        )
-        .bind(session.exit_code)
-        .bind(session.updated_at.to_rfc3339())
-        .execute(&self.pool)
-        .await?;
+        insert_session_row(&self.pool, session).await?;
         self.insert_session_labels(&session.id, &session.labels)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn insert_session_in(
+        &self,
+        conn: &mut SqliteConnection,
+        session: &Session,
+    ) -> Result<(), SessionRowError> {
+        insert_session_row(&mut *conn, session).await?;
+        self.insert_session_labels_in(conn, &session.id, &session.labels)
             .await?;
         Ok(())
     }
@@ -276,6 +252,49 @@ impl SqliteStore {
         .await?;
         self.get_session(id).await
     }
+}
+
+async fn insert_session_row<'e, E>(executor: E, session: &Session) -> Result<(), SessionRowError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    sqlx::query(
+        "INSERT INTO session_sessions
+            (id, runtime, role, workspace, namespace, dir, state, lost_evidence, runtime_pid,
+             runtime_session, transcript_path, tmux_pane, agent_config, created_at,
+             started_at, terminated_at, exit_code, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(session.id.to_string())
+    .bind(session.runtime.to_string())
+    .bind(&session.role)
+    .bind(&session.workspace)
+    .bind(session.namespace.as_str())
+    .bind(session.dir.display().to_string())
+    .bind(session.state.sql_name())
+    .bind(session_lost_evidence(session.state))
+    .bind(session.runtime_pid)
+    .bind(session.runtime_session.as_deref())
+    .bind(
+        session
+            .transcript_path
+            .as_ref()
+            .map(|path| path.display().to_string()),
+    )
+    .bind(session.tmux_pane.as_deref())
+    .bind(session.agent_config.as_deref())
+    .bind(session.created_at.to_rfc3339())
+    .bind(session.started_at.to_rfc3339())
+    .bind(
+        session
+            .terminated_at
+            .map(|timestamp| timestamp.to_rfc3339()),
+    )
+    .bind(session.exit_code)
+    .bind(session.updated_at.to_rfc3339())
+    .execute(executor)
+    .await?;
+    Ok(())
 }
 
 fn session_matches_selector(session: &Session, selector: &Selector) -> bool {

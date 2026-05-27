@@ -113,7 +113,7 @@ async fn handle_rpc_result(rpc: RuntimeRpc, state: Arc<ServerState>) -> Result<R
                 lilo_runtime_launchers::dispatch(&request.runtime)?.launch_spec(&request)?;
             let backends = RuntimeBackends::new(state.config());
             let launch = backends.prepare_launch(&request, launch)?;
-            let ready_rx = state.begin_spawn(&request, launch.clone()).await?;
+            let begin = state.begin_spawn(&request, launch.clone()).await?;
             let evidence = match backends.spawn(&request, &launch).await {
                 Ok(evidence) => evidence,
                 Err(error) => {
@@ -122,11 +122,13 @@ async fn handle_rpc_result(rpc: RuntimeRpc, state: Arc<ServerState>) -> Result<R
                 }
             };
 
-            let ready = tokio::time::timeout(Duration::from_secs(10), ready_rx)
+            let ready = tokio::time::timeout(Duration::from_secs(10), begin.ready)
                 .await
                 .context("timed out waiting for ShimReady")?
                 .context("shim ready channel closed")?;
-            let (lifecycle, event) = state.record_running(&request, ready).await?;
+            let (lifecycle, event) = state
+                .record_running(&request, ready, !begin.session_backed)
+                .await?;
             let (log_dir, stdout_path, stderr_path) = match evidence.log_paths {
                 Some(paths) => (
                     Some(paths.log_dir),

@@ -10,7 +10,6 @@ use lilo_rm_core::{
     ValidateTargetRequest, ValidateTargetResponse, WatcherCounts,
 };
 use lilo_runtime_store::LifecycleStore;
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
@@ -20,8 +19,12 @@ use crate::{
 };
 
 use super::{
-    DaemonConfig, events::EventAppender, spawn::SpawnCoordinator, status::StatusReader,
-    termination::TerminationCoordinator, watcher::WatcherCoordinator,
+    DaemonConfig,
+    events::EventAppender,
+    spawn::{BeginSpawn, SpawnCoordinator},
+    status::StatusReader,
+    termination::TerminationCoordinator,
+    watcher::WatcherCoordinator,
 };
 
 pub(crate) struct ServerState {
@@ -66,7 +69,7 @@ impl ServerState {
         &self,
         request: &SpawnRequest,
         launch: LaunchSpec,
-    ) -> Result<oneshot::Receiver<ShimReady>> {
+    ) -> Result<BeginSpawn> {
         self.spawn.begin_spawn(self, request, launch).await
     }
 
@@ -93,8 +96,11 @@ impl ServerState {
         self: &Arc<Self>,
         request: &SpawnRequest,
         ready: ShimReady,
+        append_event: bool,
     ) -> Result<(Lifecycle, RuntimeEvent)> {
-        self.spawn.record_running(self, request, ready).await
+        self.spawn
+            .record_running(self, request, ready, append_event)
+            .await
     }
 
     pub(crate) async fn kill_runtime(&self, request: KillRequest) -> Result<KillOutcome> {
@@ -241,7 +247,7 @@ impl ServerState {
         self.watchers.remove_watcher(session_id).await;
     }
 
-    pub(super) async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
+    pub(crate) async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
         self.events.append_event(event).await
     }
 }
