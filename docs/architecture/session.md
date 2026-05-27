@@ -233,5 +233,5 @@ refresh fmm before making a structural claim.
 This document distills `session-matters/MAP.md` and
 `session-matters/PROJECT.md` from the Phase 4 source import. The imported
 source used historic `sm-core`, `sm-store`, `sm-driver`, `sm-daemon`, `sm-cli`,
-and `sm-paths` crate directory names, but the architecture above uses the
-Phase 4 monorepo crate names.
+and historic `sm-paths` crate directory names, but the architecture above uses
+the Phase 4 monorepo crate names.
