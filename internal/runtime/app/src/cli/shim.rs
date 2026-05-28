@@ -233,7 +233,9 @@ mod tests {
     // guarantees the optional SIGTERM-ignore trap is installed before the test
     // signals the child, removing the startup race. Returns the child plus its
     // stdin handle, which the caller must keep alive to keep `read` blocked.
-    fn spawn_signal_test_child(ignore_sigterm: bool) -> (std::process::Child, std::process::ChildStdin) {
+    fn spawn_signal_test_child(
+        ignore_sigterm: bool,
+    ) -> (std::process::Child, std::process::ChildStdin) {
         use std::io::{BufRead, BufReader};
         use std::process::Stdio;
         let script = if ignore_sigterm {
@@ -262,8 +264,7 @@ mod tests {
         // to SIGKILL after the grace window instead of blocking.
         let (mut child, _stdin) = spawn_signal_test_child(true);
         let start = Instant::now();
-        let status =
-            terminate_runtime(&mut child, Duration::from_millis(200)).expect("terminate");
+        let status = terminate_runtime(&mut child, Duration::from_millis(200)).expect("terminate");
         assert!(
             start.elapsed() < Duration::from_secs(5),
             "terminate_runtime blocked on a child ignoring SIGTERM"

@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::Result;
@@ -9,8 +10,8 @@ use lilo_rm_core::{
     CaptureError, CaptureRequest, CaptureResponse, EventsRequest, KillByPidRequest,
     KillByPidResponse, KillOutcome, KillRequest, LaunchSpec, Lifecycle, LifecycleLogAvailability,
     LostEvidence, NudgeFailureReason, NudgeOutcome, NudgeRequest, NudgeResponse, RuntimeEvent,
-    RuntimeExit, ShimExit, ShimReady, SpawnRequest, StatusFilter, TerminationEvidence,
-    ValidateTargetRequest, ValidateTargetResponse, WatcherCounts,
+    RuntimeExit, RuntimeSignal, ShimExit, ShimReady, SpawnRequest, StatusFilter,
+    TerminationEvidence, ValidateTargetRequest, ValidateTargetResponse, WatcherCounts,
 };
 use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
@@ -40,6 +41,10 @@ pub(crate) struct ServerState {
     watchers: WatcherCoordinator,
     status: StatusReader,
     events: EventAppender,
+    // Live shims this daemon spawned, keyed by session. Drained on shutdown so
+    // shims never outlive the daemon as orphans. Synchronous (std Mutex) so it
+    // is reapable from Drop, where async store reads are not possible.
+    shim_pids: Mutex<HashMap<Uuid, u32>>,
 }
 
 impl ServerState {
@@ -68,6 +73,7 @@ impl ServerState {
             watchers: WatcherCoordinator::new(),
             status: StatusReader::new(),
             events: EventAppender::new(event_log),
+            shim_pids: Mutex::new(HashMap::new()),
         })
     }
 
@@ -120,9 +126,15 @@ impl ServerState {
         ready: ShimReady,
         append_event: bool,
     ) -> Result<(Lifecycle, RuntimeEvent)> {
-        self.spawn
+        let (session_id, shim_pid) = (ready.session_id, ready.shim_pid);
+        let result = self
+            .spawn
             .record_running(self, request, ready, append_event)
-            .await
+            .await;
+        if result.is_ok() {
+            self.track_shim(session_id, shim_pid);
+        }
+        result
     }
 
     pub(crate) async fn kill_runtime(&self, request: KillRequest) -> Result<KillOutcome> {
@@ -190,7 +202,10 @@ impl ServerState {
     }
 
     pub(crate) async fn record_shim_exit(&self, exit: ShimExit) -> Result<Option<RuntimeEvent>> {
-        self.termination.record_shim_exit(self, exit).await
+        let session_id = exit.session_id;
+        let result = self.termination.record_shim_exit(self, exit).await;
+        self.forget_shim(session_id);
+        result
     }
 
     pub(crate) async fn status(&self, filter: StatusFilter) -> Vec<Lifecycle> {
@@ -250,9 +265,12 @@ impl ServerState {
         exit: RuntimeExit,
         evidence: TerminationEvidence,
     ) -> Result<Option<RuntimeEvent>> {
-        self.termination
+        let result = self
+            .termination
             .record_exited(self, session_id, exit, evidence)
-            .await
+            .await;
+        self.forget_shim(session_id);
+        result
     }
 
     pub(crate) async fn record_lost(
@@ -260,9 +278,12 @@ impl ServerState {
         session_id: Uuid,
         evidence: LostEvidence,
     ) -> Result<Option<RuntimeEvent>> {
-        self.termination
+        let result = self
+            .termination
             .record_lost(self, session_id, evidence)
-            .await
+            .await;
+        self.forget_shim(session_id);
+        result
     }
 
     pub(super) async fn remove_watcher(&self, session_id: Uuid) {
@@ -271,5 +292,31 @@ impl ServerState {
 
     pub(crate) async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
         self.events.append_event(event).await
+    }
+
+    fn shim_pids_guard(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, u32>> {
+        self.shim_pids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn track_shim(&self, session_id: Uuid, shim_pid: u32) {
+        self.shim_pids_guard().insert(session_id, shim_pid);
+    }
+
+    fn forget_shim(&self, session_id: Uuid) {
+        self.shim_pids_guard().remove(&session_id);
+    }
+
+    /// SIGTERM every live shim this daemon spawned. Each shim forwards SIGTERM
+    /// to its runtime child with a bounded SIGKILL escalation, so the whole
+    /// subtree tears down rather than orphaning past daemon shutdown.
+    /// Best-effort: a shim that already exited is a no-op. Synchronous so it is
+    /// callable from Drop, where async store reads are not possible.
+    pub(crate) fn drain_shims(&self) {
+        let pids: Vec<u32> = self.shim_pids_guard().drain().map(|(_, pid)| pid).collect();
+        for pid in pids {
+            let _ = lilo_runtime_platform::signal::send_signal(pid, RuntimeSignal::Term);
+        }
     }
 }
