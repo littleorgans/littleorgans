@@ -245,23 +245,12 @@ fn ack_from_response(response: RuntimeResponse, label: &'static str) -> Result<(
 mod tests {
     use super::*;
     use crate::error::{RpcErrorContext, rpc_error_response};
-    use crate::reconcile::ReconcileConfig;
     use lilo_rm_core::{ErrorCode, RuntimeKind, RuntimeResponse};
     use lilo_runtime_platform::test_support::TmuxSession;
-    use lilo_runtime_store::StoreConfig;
     use std::path::PathBuf;
 
     fn test_config() -> DaemonConfig {
-        DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm.sock"),
-            shim_path: PathBuf::from("/tmp/rtm-shim"),
-            log_root: PathBuf::from("/tmp/rtm/logs"),
-            store: StoreConfig {
-                db_path: PathBuf::from("/tmp/rtm.db"),
-            },
-            reconcile: ReconcileConfig::default(),
-            docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
-        }
+        DaemonConfig::test_fixture()
     }
 
     #[test]

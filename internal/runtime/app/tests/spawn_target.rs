@@ -9,15 +9,15 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    FAKE_RUNTIME_READY, RtmHarness, output_stderr, output_stdout, spawn_ok, spawn_output_ok,
-    wait_for_log, wait_for_status, workspace_bin,
+    FAKE_RUNTIME_READY, RtmHarness, headless_spawn_command, headless_spawn_request_with_env,
+    output_stderr, output_stdout, spawn_ok, spawn_output_ok, wait_for_log, wait_for_log_contains,
+    wait_for_status,
 };
 use lilo_rm_core::{
-    ErrorCode, HeadlessSpawnTarget, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec,
-    NudgeFailureReason, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeKind,
-    RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnTarget, ValidateTargetOutcome,
-    ValidateTargetPayload, ValidateTargetRequest, ValidateTargetResponse, read_json_line_blocking,
-    write_json_line_blocking,
+    ErrorCode, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec, NudgeFailureReason,
+    NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse, RuntimeRpc,
+    SpawnRequest, ValidateTargetOutcome, ValidateTargetPayload, ValidateTargetRequest,
+    ValidateTargetResponse, read_json_line_blocking, write_json_line_blocking,
 };
 use lilo_wire::LilodRpc;
 use serde_json::{Value, json};
@@ -98,18 +98,11 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
         .block_on(lilo_runtime_app::shared::request(
             harness.socket_path(),
             RuntimeRpc::Spawn {
-                request: SpawnRequest {
+                request: headless_spawn_request_with_env(
                     session_id,
-                    runtime: RuntimeKind::Claude,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: vec![LaunchEnv::new("RTM_TEST_STDIO_SENTINELS", "1")],
-                    mounts: Vec::new(),
-                    cwd: harness.rtm_home().to_path_buf(),
-                    target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
-                    force: false,
-                    shell_resume: None,
-                },
+                    harness.rtm_home(),
+                    vec![LaunchEnv::new("RTM_TEST_STDIO_SENTINELS", "1")],
+                ),
             },
         ))
         .expect("headless spawn");
@@ -503,31 +496,8 @@ fn assert_spawn_conflict(
     assert!(stderr.contains(identity), "{stderr}");
 }
 
-fn wait_for_log_contains(path: &std::path::Path, expected: &str) -> String {
-    common::wait_until(Duration::from_secs(5), || {
-        let contents = std::fs::read_to_string(path).ok()?;
-        contents.contains(expected).then_some(contents)
-    })
-    .unwrap_or_else(|| {
-        let observed = std::fs::read_to_string(path);
-        panic!(
-            "log {} never contained {expected:?}, observed {observed:?}",
-            path.display()
-        )
-    })
-}
-
 fn spawn_capture_command(session_id: Uuid) -> Command {
-    let mut command = Command::new(workspace_bin("rtm"));
-    command
-        .arg("spawn")
-        .arg("--runtime")
-        .arg("claude")
-        .arg("--session-id")
-        .arg(session_id.to_string())
-        .arg("--target")
-        .arg("headless");
-    command
+    headless_spawn_command(session_id)
 }
 
 fn capture_spawn_request(mut command: Command) -> (SpawnRequest, std::process::Output) {

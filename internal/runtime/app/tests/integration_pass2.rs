@@ -2,12 +2,13 @@
 
 mod common;
 
-use std::process::{Command, Output};
+use std::process::Output;
 use std::time::Duration;
 
 use common::{
-    RtmHarness, output_stdout, parse_runtime_pid, status_json_pid, status_pid, terminate_process,
-    wait_for_events, wait_for_status, wait_for_status_timeout,
+    RtmHarness, output_stdout, parse_runtime_pid, sigkill_runtime_and_wait_exited,
+    sigkill_shim_then_runtime, spawn_ok, status_json_pid, wait_for_events, wait_for_status,
+    wait_for_status_timeout,
 };
 use uuid::Uuid;
 
@@ -15,7 +16,7 @@ use uuid::Uuid;
 fn kill_rpc_terminates_runtime_by_session_id() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
-    let spawn_stdout = spawn_runtime(&harness, &session_id);
+    let spawn_stdout = spawn_ok(&harness, &session_id, "claude");
     let runtime_pid = parse_runtime_pid(&spawn_stdout);
 
     let json = output_stdout(harness.status_format(&session_id, "json"));
@@ -56,16 +57,9 @@ fn kill_rpc_terminates_runtime_by_session_id() {
 fn kill_rpc_reports_already_exited_as_json_success() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
-    spawn_runtime(&harness, &session_id);
-    let runtime_pid = status_pid(&harness, &session_id, "pid");
+    spawn_ok(&harness, &session_id, "claude");
 
-    terminate_process(runtime_pid, "KILL");
-    wait_for_status_timeout(
-        &harness,
-        &session_id,
-        "state=Exited",
-        Duration::from_secs(1),
-    );
+    sigkill_runtime_and_wait_exited(&harness, &session_id, Duration::from_secs(1));
 
     let kill = kill_with_format(&harness, &session_id, "json");
     assert!(kill.status.success(), "kill failed: {kill:?}");
@@ -78,17 +72,9 @@ fn kill_rpc_reports_already_exited_as_json_success() {
 fn direct_sigkill_runtime_is_reported_as_exited() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
-    spawn_runtime(&harness, &session_id);
-    let runtime_pid = status_pid(&harness, &session_id, "pid");
+    spawn_ok(&harness, &session_id, "claude");
 
-    terminate_process(runtime_pid, "KILL");
-
-    let status = wait_for_status_timeout(
-        &harness,
-        &session_id,
-        "state=Exited",
-        Duration::from_secs(1),
-    );
+    let status = sigkill_runtime_and_wait_exited(&harness, &session_id, Duration::from_secs(1));
     assert!(status.contains("signal=9"), "{status}");
     let events = wait_for_events(&harness, 2);
     assert!(events.contains("runtime event=Terminated"), "{events}");
@@ -98,12 +84,9 @@ fn direct_sigkill_runtime_is_reported_as_exited() {
 fn process_exit_watcher_reports_lost_when_shim_dies_before_exit_report() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
-    spawn_runtime(&harness, &session_id);
-    let shim_pid = status_pid(&harness, &session_id, "shim_pid");
-    let runtime_pid = status_pid(&harness, &session_id, "pid");
+    spawn_ok(&harness, &session_id, "claude");
 
-    terminate_process(shim_pid, "KILL");
-    terminate_process(runtime_pid, "KILL");
+    sigkill_shim_then_runtime(&harness, &session_id);
 
     let status = wait_for_status(&harness, &session_id, "ShimDiedBeforeReport");
     assert!(
@@ -114,15 +97,9 @@ fn process_exit_watcher_reports_lost_when_shim_dies_before_exit_report() {
     assert!(events.contains("runtime event=Lost"), "{events}");
 }
 
-fn spawn_runtime(harness: &RtmHarness, session_id: &str) -> String {
-    let spawn = harness.spawn(session_id);
-    assert!(spawn.status.success(), "spawn failed: {spawn:?}");
-    output_stdout(spawn)
-}
-
 fn kill_with_format(harness: &RtmHarness, session_id: &str, format: &str) -> Output {
-    Command::new(harness.rtm_path())
-        .env("LILO_SOCKET_PATH", harness.socket_path())
+    harness
+        .rtm_command()
         .arg("kill")
         .arg(session_id)
         .arg("--format")

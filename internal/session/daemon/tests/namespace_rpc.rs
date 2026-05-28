@@ -1,11 +1,10 @@
 mod common;
 use common::OrPanic as _;
 
-use common::{LOCAL_UID, TestDaemon, local_context};
+use common::{LOCAL_UID, TestDaemon, handle_spawn, local_context, namespace_spawn_request};
 use lilo_session_core::{
-    IsolationPolicy, Namespace, NamespaceCreateRequest, NamespaceDeleteRequest,
-    NamespaceGetRequest, NamespaceListRequest, RpcResponse, RuntimeKind, Selector, SessionRpc,
-    SpawnRequest,
+    Namespace, NamespaceCreateRequest, NamespaceDeleteRequest, NamespaceGetRequest,
+    NamespaceListRequest, RpcResponse, Selector, SessionRpc,
 };
 use lilo_session_daemon::identity_client::RequestContext;
 
@@ -122,18 +121,16 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
 
-    let missing = daemon
-        .state
-        .handle(
-            context.clone(),
-            SessionRpc::Spawn {
-                request: Box::new(spawn_request(
-                    daemon.dir.path().display().to_string(),
-                    Namespace::new("alpha").or_panic("namespace validates"),
-                )),
-            },
-        )
-        .await;
+    let missing = handle_spawn(
+        &daemon,
+        context.clone(),
+        namespace_spawn_request(
+            "pm",
+            daemon.dir.path().display().to_string(),
+            Namespace::new("alpha").or_panic("namespace validates"),
+        ),
+    )
+    .await;
     let RpcResponse::Error { message } = missing.response else {
         panic!("expected spawn error");
     };
@@ -151,18 +148,16 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
         )
         .await;
 
-    let spawned = daemon
-        .state
-        .handle(
-            context,
-            SessionRpc::Spawn {
-                request: Box::new(spawn_request(
-                    daemon.dir.path().display().to_string(),
-                    Namespace::new("alpha").or_panic("namespace validates"),
-                )),
-            },
-        )
-        .await;
+    let spawned = handle_spawn(
+        &daemon,
+        context,
+        namespace_spawn_request(
+            "pm",
+            daemon.dir.path().display().to_string(),
+            Namespace::new("alpha").or_panic("namespace validates"),
+        ),
+    )
+    .await;
     let RpcResponse::Spawned { response } = spawned.response else {
         panic!("expected spawn response");
     };
@@ -175,18 +170,16 @@ async fn namespace_delete_terminates_and_removes_namespace_sessions() {
     let context = local_context();
     create_namespace(&daemon, &context, "alpha").await;
 
-    let spawned = daemon
-        .state
-        .handle(
-            context.clone(),
-            SessionRpc::Spawn {
-                request: Box::new(spawn_request(
-                    daemon.dir.path().display().to_string(),
-                    Namespace::new("alpha").or_panic("namespace validates"),
-                )),
-            },
-        )
-        .await;
+    let spawned = handle_spawn(
+        &daemon,
+        context.clone(),
+        namespace_spawn_request(
+            "pm",
+            daemon.dir.path().display().to_string(),
+            Namespace::new("alpha").or_panic("namespace validates"),
+        ),
+    )
+    .await;
     let RpcResponse::Spawned { response } = spawned.response else {
         panic!("expected spawn response");
     };
@@ -271,23 +264,4 @@ async fn create_namespace(daemon: &TestDaemon, context: &RequestContext, slug: &
     let RpcResponse::NamespaceCreated { .. } = created.response else {
         panic!("expected namespace create response");
     };
-}
-
-fn spawn_request(dir: String, namespace: Namespace) -> SpawnRequest {
-    SpawnRequest {
-        runtime: RuntimeKind::Claude,
-        role: "pm".to_string(),
-        workspace: String::new(),
-        dir: Some(dir),
-        namespace: Some(namespace),
-        target: "headless".to_string(),
-        agent_config: None,
-        isolation: IsolationPolicy::default(),
-        image: None,
-        env: Vec::new(),
-        mounts: Vec::new(),
-        shell_resume: None,
-        labels: Vec::new(),
-        force: false,
-    }
 }

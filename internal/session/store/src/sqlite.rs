@@ -4,6 +4,8 @@ mod mail;
 mod namespaces;
 mod sessions;
 mod spawn_intents;
+#[cfg(test)]
+mod test_support;
 mod time;
 
 use lilo_db::LiloDb;

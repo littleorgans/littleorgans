@@ -142,12 +142,15 @@ fn path_arg(path: &Path) -> String {
 mod tests {
     use std::path::PathBuf;
 
+    use anyhow::Result;
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationProfile, LaunchEnv, LaunchSpec, MountSpec, SpawnTarget,
     };
     use uuid::Uuid;
 
     use super::{container_name, docker_run_launch};
+
+    const TEST_IMAGE: &str = "runtime-matters-agent:latest";
 
     #[test]
     fn docker_run_launch_wraps_runtime_without_losing_launcher_env() {
@@ -160,7 +163,7 @@ mod tests {
         let spec = docker_run_launch(
             session_id,
             &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
+            TEST_IMAGE,
             &launch,
             &[],
             &SpawnTarget::Headless(HeadlessSpawnTarget {}),
@@ -175,7 +178,7 @@ mod tests {
         assert_eq!(
             spec.argv[spec.argv.len() - 3..],
             [
-                "runtime-matters-agent:latest".to_owned(),
+                TEST_IMAGE.to_owned(),
                 "claude".to_owned(),
                 "--print".to_owned(),
             ]
@@ -192,7 +195,7 @@ mod tests {
             &IsolationProfile {
                 name: Some("own-init".to_owned()),
             },
-            "runtime-matters-agent:latest",
+            TEST_IMAGE,
             &launch,
             &[],
             &SpawnTarget::Headless(HeadlessSpawnTarget {}),
@@ -211,21 +214,12 @@ mod tests {
             vec![LaunchEnv::new("CLAUDE_CODE", "1")],
         );
 
-        let spec = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &[],
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect("docker launch");
+        let spec = headless_docker_launch(&launch, &[]).expect("docker launch");
 
         let image_index = spec
             .argv
             .iter()
-            .position(|arg| arg == "runtime-matters-agent:latest")
+            .position(|arg| arg == TEST_IMAGE)
             .expect("image arg");
         assert!(
             !spec.argv[image_index + 1..]
@@ -235,7 +229,7 @@ mod tests {
         assert_eq!(
             spec.argv[spec.argv.len() - 3..],
             [
-                "runtime-matters-agent:latest".to_owned(),
+                TEST_IMAGE.to_owned(),
                 "claude".to_owned(),
                 "--print".to_owned(),
             ]
@@ -253,7 +247,7 @@ mod tests {
         let spec = docker_run_launch(
             session_id,
             &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
+            TEST_IMAGE,
             &launch,
             &[],
             &"tmux:rtm:0.1".parse::<SpawnTarget>().expect("tmux target"),
@@ -274,7 +268,7 @@ mod tests {
         assert_eq!(
             spec.argv[spec.argv.len() - 3..],
             [
-                "runtime-matters-agent:latest".to_owned(),
+                TEST_IMAGE.to_owned(),
                 "claude".to_owned(),
                 "--dangerously-skip".to_owned(),
             ]
@@ -291,7 +285,7 @@ mod tests {
         let spec = docker_run_launch(
             Uuid::nil(),
             &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
+            TEST_IMAGE,
             &launch,
             &[],
             &"tmux:rtm:0.1".parse::<SpawnTarget>().expect("tmux target"),
@@ -320,16 +314,7 @@ mod tests {
             },
         ];
 
-        let spec = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect("docker launch");
+        let spec = headless_docker_launch(&launch, &mounts).expect("docker launch");
 
         let cwd_mount_index = spec
             .argv
@@ -339,7 +324,7 @@ mod tests {
         let image_index = spec
             .argv
             .iter()
-            .position(|arg| arg == "runtime-matters-agent:latest")
+            .position(|arg| arg == TEST_IMAGE)
             .expect("image");
         let declared_mounts = &spec.argv[cwd_mount_index + 1..cwd_mount_index + 5];
         assert!(cwd_mount_index < image_index);
@@ -365,16 +350,7 @@ mod tests {
             read_only: false,
         }];
 
-        let spec = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect("docker launch");
+        let spec = headless_docker_launch(&launch, &mounts).expect("docker launch");
 
         assert!(
             !spec
@@ -397,16 +373,7 @@ mod tests {
             read_only: false,
         }];
 
-        let spec = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect("docker launch");
+        let spec = headless_docker_launch(&launch, &mounts).expect("docker launch");
 
         assert!(
             !spec
@@ -425,16 +392,8 @@ mod tests {
             read_only: false,
         }];
 
-        let error = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect_err("descendant source should fail");
+        let error =
+            headless_docker_launch(&launch, &mounts).expect_err("descendant source should fail");
 
         assert!(
             error
@@ -461,16 +420,7 @@ mod tests {
             },
         ];
 
-        let spec = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect("docker launch");
+        let spec = headless_docker_launch(&launch, &mounts).expect("docker launch");
 
         assert_eq!(workdir(&spec.argv), "/project/subdir");
     }
@@ -491,16 +441,8 @@ mod tests {
             },
         ];
 
-        let error = docker_run_launch(
-            Uuid::nil(),
-            &IsolationProfile::default(),
-            "runtime-matters-agent:latest",
-            &launch,
-            &mounts,
-            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
-            "docker",
-        )
-        .expect_err("equal cover precedence should fail");
+        let error = headless_docker_launch(&launch, &mounts)
+            .expect_err("equal cover precedence should fail");
 
         assert!(
             error
@@ -516,6 +458,18 @@ mod tests {
             .position(|arg| arg == "--workdir")
             .expect("workdir flag");
         &argv[index + 1]
+    }
+
+    fn headless_docker_launch(launch: &LaunchSpec, mounts: &[MountSpec]) -> Result<LaunchSpec> {
+        docker_run_launch(
+            Uuid::nil(),
+            &IsolationProfile::default(),
+            TEST_IMAGE,
+            launch,
+            mounts,
+            &SpawnTarget::Headless(HeadlessSpawnTarget {}),
+            "docker",
+        )
     }
 
     fn launch_spec(argv: &[&str], env: Vec<LaunchEnv>) -> LaunchSpec {

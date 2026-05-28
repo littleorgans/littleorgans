@@ -2,30 +2,18 @@ use super::*;
 
 #[tokio::test]
 async fn nudge_terminal_tmux_session_returns_typed_failure() {
-    let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
-    persist_terminal_tmux(&state.server, session_id, TerminalState::Exited).await;
-
-    let response = state
-        .server
-        .nudge_runtime(nudge_request(session_id))
-        .await
-        .expect("nudge");
-
-    assert_eq!(
-        response,
-        NudgeResponse {
-            delivered: false,
-            outcome: NudgeOutcome::Failed(NudgeFailureReason::SessionEnded),
-        }
-    );
+    assert_terminal_tmux_nudge_returns_session_ended(TerminalState::Exited).await;
 }
 
 #[tokio::test]
 async fn nudge_lost_tmux_session_returns_terminal_failure() {
+    assert_terminal_tmux_nudge_returns_session_ended(TerminalState::Lost).await;
+}
+
+async fn assert_terminal_tmux_nudge_returns_session_ended(terminal_state: TerminalState) {
     let state = TestState::new().await;
     let session_id = Uuid::now_v7();
-    persist_terminal_tmux(&state.server, session_id, TerminalState::Lost).await;
+    persist_terminal_tmux(&state.server, session_id, terminal_state).await;
 
     let response = state
         .server

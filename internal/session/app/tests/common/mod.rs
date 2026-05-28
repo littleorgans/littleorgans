@@ -2,7 +2,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -184,6 +184,54 @@ pub fn sm_bin() -> PathBuf {
         return PathBuf::from(path);
     }
     assert_cmd::cargo::cargo_bin("sm")
+}
+
+pub fn create_namespace(daemon: &DaemonFixture, name: &str) {
+    let output = daemon
+        .command()
+        .args(["create", "namespace", name])
+        .output()
+        .or_panic("sm create namespace executes");
+    assert_success("sm create namespace", &output);
+}
+
+pub fn set_context(daemon: &DaemonFixture, name: &str) {
+    let output = daemon
+        .command()
+        .args(["config", "set-context", name])
+        .output()
+        .or_panic("sm config set-context executes");
+    assert_success("sm config set-context", &output);
+}
+
+pub fn namespace_binding_contents(dir: &Path) -> String {
+    std::fs::read_to_string(dir.join("config").join("session").join("namespace"))
+        .or_panic("binding file reads")
+}
+
+pub fn first_table_field(stdout: &[u8]) -> String {
+    String::from_utf8_lossy(stdout)
+        .split_whitespace()
+        .next()
+        .or_panic("stdout has first field")
+        .to_string()
+}
+
+pub fn assert_success(command: &str, output: &Output) {
+    assert!(
+        output.status.success(),
+        "{command} failed\nstdout:\n{}\nstderr:\n{}",
+        stdout(output),
+        stderr(output)
+    );
+}
+
+pub fn stdout(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+pub fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).to_string()
 }
 
 fn wait_for_path_socket(socket: &Path, child: &mut Child) {

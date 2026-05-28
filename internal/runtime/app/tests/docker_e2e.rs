@@ -3,10 +3,10 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
-use common::{output_stdout, wait_until, workspace_bin};
+use common::{RtmHarness, output_stdout, wait_until};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -27,13 +27,12 @@ fn real_docker_spawn_lifecycle_is_opt_in() {
     let container = format!("rtm-{session_id}");
     let temp = TempDir::new().expect("temp dir");
     let images = DockerImages::new(session_id);
-    let env = RtmEnv::new(temp.path());
     build_base_image(&images, &workspace_root());
     build_e2e_image(&images, temp.path());
 
-    let mut daemon = RtmDaemon::start(&env);
+    let harness = RtmHarness::start_with_docker_image(&images.e2e);
     let _container_guard = ContainerGuard::new(container.clone());
-    spawn_docker_runtime(&env, &session_id, &images.e2e, temp.path());
+    spawn_docker_runtime(&harness, &session_id, &images.e2e, temp.path());
 
     wait_for_container(&container);
     let top = docker_top(&container);
@@ -42,9 +41,8 @@ fn real_docker_spawn_lifecycle_is_opt_in() {
         "docker top did not show claude as the image user:\n{top}"
     );
 
-    kill_runtime(&env, &session_id);
+    kill_runtime(&harness, &session_id);
     wait_for_container_absent(&container);
-    daemon.stop();
 }
 
 #[test]
@@ -65,14 +63,13 @@ fn real_docker_spawn_remaps_workdir_when_mount_covers_cwd() {
     let cwd = mount_source.join("littleorgans");
     std::fs::create_dir_all(&cwd).expect("cwd");
     let images = DockerImages::new(session_id);
-    let env = RtmEnv::new(temp.path());
     build_base_image(&images, &workspace_root());
     build_e2e_image(&images, temp.path());
 
-    let mut daemon = RtmDaemon::start(&env);
+    let harness = RtmHarness::start_with_docker_image(&images.e2e);
     let _container_guard = ContainerGuard::new(container.clone());
     spawn_docker_runtime_with_mount(
-        &env,
+        &harness,
         &session_id,
         &images.e2e,
         &cwd,
@@ -83,9 +80,8 @@ fn real_docker_spawn_remaps_workdir_when_mount_covers_cwd() {
     wait_for_container(&container);
     assert_eq!(docker_workdir(&container), "/workspace/littleorgans");
 
-    kill_runtime(&env, &session_id);
+    kill_runtime(&harness, &session_id);
     wait_for_container_absent(&container);
-    daemon.stop();
 }
 
 fn opted_in() -> bool {
@@ -152,23 +148,13 @@ USER rtm
     )
 }
 
-fn spawn_docker_runtime(env: &RtmEnv, session_id: &Uuid, image: &str, cwd: &Path) {
-    let output = env
+fn spawn_docker_runtime(harness: &RtmHarness, session_id: &Uuid, image: &str, cwd: &Path) {
+    let session_id = session_id.to_string();
+    let output = harness
         .rtm_command()
-        .args([
-            "spawn",
-            "--runtime",
-            "claude",
-            "--session-id",
-            &session_id.to_string(),
-            "--target",
-            "headless",
-            "--isolation",
-            "docker",
-            "--image",
-            image,
-            "--cwd",
-        ])
+        .args(["spawn", "--runtime", "claude", "--session-id", &session_id])
+        .args(["--target", "headless", "--isolation", "docker"])
+        .args(["--image", image, "--cwd"])
         .arg(cwd)
         .output()
         .expect("rtm spawn");
@@ -176,7 +162,7 @@ fn spawn_docker_runtime(env: &RtmEnv, session_id: &Uuid, image: &str, cwd: &Path
 }
 
 fn spawn_docker_runtime_with_mount(
-    env: &RtmEnv,
+    harness: &RtmHarness,
     session_id: &Uuid,
     image: &str,
     cwd: &Path,
@@ -184,18 +170,12 @@ fn spawn_docker_runtime_with_mount(
     mount_target: &str,
 ) {
     let mount = format!("{}:{mount_target}:rw", mount_source.display());
-    let output = env
+    let session_id = session_id.to_string();
+    let output = harness
         .rtm_command()
+        .args(["spawn", "--runtime", "claude", "--session-id", &session_id])
+        .args(["--target", "headless", "--isolation", "docker"])
         .args([
-            "spawn",
-            "--runtime",
-            "claude",
-            "--session-id",
-            &session_id.to_string(),
-            "--target",
-            "headless",
-            "--isolation",
-            "docker",
             "--image",
             image,
             "--env",
@@ -256,8 +236,8 @@ fn docker_workdir(container: &str) -> String {
     assert_success(output, "docker inspect").trim().to_owned()
 }
 
-fn kill_runtime(env: &RtmEnv, session_id: &Uuid) {
-    let output = env
+fn kill_runtime(harness: &RtmHarness, session_id: &Uuid) {
+    let output = harness
         .rtm_command()
         .args(["kill", &session_id.to_string()])
         .output()
@@ -273,119 +253,6 @@ fn assert_success(output: Output, label: &str) -> String {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     panic!("{label} failed; stdout={stdout:?}; stderr={stderr:?}");
-}
-
-struct RtmEnv {
-    socket: PathBuf,
-    home: PathBuf,
-}
-
-impl RtmEnv {
-    fn new(dir: &Path) -> Self {
-        let home = dir.join("lilo-home");
-        Self {
-            socket: dir.join("lilod.sock"),
-            home,
-        }
-    }
-
-    fn rtm_command(&self) -> Command {
-        let mut command = Command::new(workspace_bin("rtm"));
-        command
-            .env("LILO_SOCKET_PATH", &self.socket)
-            .env("LILO_HOME", &self.home);
-        command
-    }
-
-    fn lilo_command(&self) -> Command {
-        let mut command = Command::new(workspace_bin("lilo"));
-        command
-            .env("LILO_SOCKET_PATH", &self.socket)
-            .env("LILO_HOME", &self.home);
-        command
-    }
-}
-
-struct RtmDaemon<'a> {
-    env: &'a RtmEnv,
-    child: Option<Child>,
-}
-
-impl<'a> RtmDaemon<'a> {
-    fn start(env: &'a RtmEnv) -> Self {
-        assert_not_running(env);
-        let child = env
-            .lilo_command()
-            .args(["daemon", "start"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("lilo daemon start");
-        wait_until(Duration::from_secs(5), || env.socket.exists().then_some(()))
-            .unwrap_or_else(|| panic!("lilod socket was not created; daemon={child:?}"));
-        Self {
-            env,
-            child: Some(child),
-        }
-    }
-
-    fn stop(&mut self) {
-        let output = self
-            .env
-            .lilo_command()
-            .args(["daemon", "stop"])
-            .output()
-            .expect("lilo daemon stop");
-        assert_success(output, "lilo daemon stop");
-        wait_until(Duration::from_secs(5), || {
-            (!self.env.socket.exists()).then_some(())
-        })
-        .unwrap_or_else(|| panic!("lilod socket still exists at {}", self.env.socket.display()));
-        wait_for_child(self.child.take().expect("daemon child"));
-    }
-}
-
-impl Drop for RtmDaemon<'_> {
-    fn drop(&mut self) {
-        if self.child.is_some() {
-            let _ = self.env.rtm_command().args(["daemon", "stop"]).output();
-        }
-    }
-}
-
-fn assert_not_running(env: &RtmEnv) {
-    let output = env
-        .lilo_command()
-        .args(["daemon", "status"])
-        .output()
-        .expect("lilo daemon status");
-    let stdout = output_stdout(output);
-    assert!(
-        stdout.contains("not running"),
-        "unexpected daemon status: {stdout}"
-    );
-}
-
-fn wait_for_child(mut child: Child) {
-    wait_until(Duration::from_secs(5), || match child.try_wait() {
-        Ok(Some(status)) => Some(status),
-        Ok(None) => None,
-        Err(error) => panic!("wait daemon: {error}"),
-    })
-    .unwrap_or_else(|| {
-        let stderr = child
-            .stderr
-            .take()
-            .map_or_else(|| "<stderr unavailable>".to_owned(), read_to_string);
-        panic!("daemon did not exit after stop; stderr={stderr:?}")
-    });
-}
-
-fn read_to_string(stderr: impl std::io::Read) -> String {
-    let mut reader = std::io::BufReader::new(stderr);
-    let mut contents = String::new();
-    std::io::Read::read_to_string(&mut reader, &mut contents).expect("read stderr");
-    contents
 }
 
 struct DockerImages {

@@ -116,50 +116,27 @@ mod tests {
 
     #[tokio::test]
     async fn build_preserves_daemon_config_for_later_composition() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-        let config = DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
-            shim_path: dir.path().join("shim"),
-            log_root: paths.logs_root(),
-            store: StoreConfig {
-                db_path: paths.db_path(),
-            },
-            reconcile: ReconcileConfig::default(),
-            docker_preflight: DockerPreflightConfig::default(),
-        };
-        let db = LiloDb::open(&paths).await.expect("db");
+        let fixture = ServiceFixture::new(ReconcileConfig::default()).await;
 
-        let service = RuntimeService::build(RuntimeServiceContext::new(config.clone(), db))
+        let service = RuntimeService::build(fixture.context())
             .await
             .expect("service builds");
 
         assert_eq!(
             service.config().socket_path().expect("socket"),
-            config.socket_path().expect("socket")
+            fixture.config.socket_path().expect("socket")
         );
     }
 
     #[tokio::test]
     async fn runtime_shutdown_drains_periodic_reconcile_task() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-        let config = DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
-            shim_path: dir.path().join("shim"),
-            log_root: paths.logs_root(),
-            store: StoreConfig {
-                db_path: paths.db_path(),
-            },
-            reconcile: ReconcileConfig {
-                sweep_interval: Duration::from_mins(1),
-                resume_poll_interval: Duration::from_mins(1),
-                ..ReconcileConfig::default()
-            },
-            docker_preflight: DockerPreflightConfig::default(),
-        };
-        let db = LiloDb::open(&paths).await.expect("db");
-        let service = RuntimeService::build(RuntimeServiceContext::new(config, db.clone()))
+        let fixture = ServiceFixture::new(ReconcileConfig {
+            sweep_interval: Duration::from_mins(1),
+            resume_poll_interval: Duration::from_mins(1),
+            ..ReconcileConfig::default()
+        })
+        .await;
+        let service = RuntimeService::build(fixture.context())
             .await
             .expect("service builds");
 
@@ -168,6 +145,40 @@ mod tests {
             .expect("shutdown returns before timeout")
             .expect("shutdown succeeds");
         service.shutdown().await.expect("second shutdown succeeds");
-        db.close().await;
+        fixture.db.close().await;
+    }
+
+    struct ServiceFixture {
+        _dir: tempfile::TempDir,
+        config: DaemonConfig,
+        db: LiloDb,
+    }
+
+    impl ServiceFixture {
+        async fn new(reconcile: ReconcileConfig) -> Self {
+            let dir = tempfile::tempdir().expect("tempdir");
+            let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
+            let config = DaemonConfig {
+                endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
+                shim_path: dir.path().join("shim"),
+                log_root: paths.logs_root(),
+                store: StoreConfig {
+                    db_path: paths.db_path(),
+                },
+                reconcile,
+                docker_preflight: DockerPreflightConfig::default(),
+            };
+            let db = LiloDb::open(&paths).await.expect("db");
+
+            Self {
+                _dir: dir,
+                config,
+                db,
+            }
+        }
+
+        fn context(&self) -> RuntimeServiceContext {
+            RuntimeServiceContext::new(self.config.clone(), self.db.clone())
+        }
     }
 }

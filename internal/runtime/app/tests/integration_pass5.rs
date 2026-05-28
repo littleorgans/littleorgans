@@ -4,7 +4,7 @@ mod common;
 
 use common::{
     FAKE_RUNTIME_READY, RtmHarness, output_stderr, output_stdout, spawn_ok, spawn_output_ok,
-    wait_for_status,
+    wait_for_json_status, wait_for_status,
 };
 use lilo_rm_core::{CaptureError, CaptureRequest, CaptureResponse, RuntimeResponse, RuntimeRpc};
 use std::{thread, time::Duration};
@@ -308,15 +308,6 @@ fn ctrl_c_interrupts_runtime_without_losing_tmux_pane(runtime: &str) {
     tmux_session.wait_for_capture(FAKE_RUNTIME_READY);
 
     harness.stop();
-}
-
-fn wait_for_json_status(harness: &RtmHarness, session_id: &str, needle: &str) -> String {
-    common::wait_until(std::time::Duration::from_secs(5), || {
-        let output = harness.status_format(session_id, "json");
-        let stdout = output_stdout(output);
-        stdout.contains(needle).then_some(stdout)
-    })
-    .unwrap_or_else(|| panic!("json status never contained {needle}"))
 }
 
 fn wait_for_interrupt_recovery(

@@ -1,5 +1,8 @@
 mod common;
 use common::OrPanic as _;
+use common::{
+    assert_success, create_namespace, first_table_field as first_field, set_context, stderr, stdout,
+};
 
 use std::path::{Path, PathBuf};
 
@@ -262,24 +265,6 @@ fn legacy_workspace_selector_is_rejected_by_cli() {
     assert!(stderr(&selected).contains("unsupported selector"));
 }
 
-fn create_namespace(daemon: &common::DaemonFixture, namespace: &str) {
-    let output = daemon
-        .command()
-        .args(["create", "namespace", namespace])
-        .output()
-        .or_panic("sm create namespace executes");
-    assert_success("sm create namespace", &output);
-}
-
-fn set_context(daemon: &common::DaemonFixture, namespace: &str) {
-    let output = daemon
-        .command()
-        .args(["config", "set-context", namespace])
-        .output()
-        .or_panic("sm config set-context executes");
-    assert_success("sm config set-context", &output);
-}
-
 fn run_session(daemon: &common::DaemonFixture, namespace: &str, dir: &Path) -> String {
     let output = daemon
         .command()
@@ -298,15 +283,6 @@ fn run_session(daemon: &common::DaemonFixture, namespace: &str, dir: &Path) -> S
         .or_panic("sm run executes");
     assert_success("sm run", &output);
     first_field(&output.stdout)
-}
-
-fn assert_success(command: &str, output: &std::process::Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
 }
 
 fn assert_contains_only(output: &std::process::Output, present: &str, absent: &str) {
@@ -358,25 +334,9 @@ fn nonempty_line_count(bytes: &[u8]) -> usize {
         .count()
 }
 
-fn first_field(stdout: &[u8]) -> String {
-    String::from_utf8_lossy(stdout)
-        .split_whitespace()
-        .next()
-        .or_panic("stdout has first field")
-        .to_string()
-}
-
 fn canonical(path: &Path) -> String {
     std::fs::canonicalize(path)
         .or_panic("path canonicalizes")
         .display()
         .to_string()
-}
-
-fn stdout(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
 }

@@ -332,33 +332,49 @@ fn status_request_accepts_legacy_single_session_id() {
     assert_eq!(request.updated_since, None);
 }
 
+fn assert_spawn_request_json_error(
+    value: serde_json::Value,
+    expected_message: &str,
+    context: &str,
+) {
+    let error = serde_json::from_value::<SpawnRequest>(value).expect_err(context);
+
+    assert!(error.to_string().contains(expected_message), "{error}");
+}
+
+fn assert_spawn_request_round_trip(request: &SpawnRequest) {
+    let json = serde_json::to_value(request).expect("serialize");
+    let actual: SpawnRequest = serde_json::from_value(json).expect("deserialize");
+
+    assert_eq!(&actual, request);
+}
+
 #[test]
 fn spawn_request_json_requires_target() {
-    let error = serde_json::from_value::<SpawnRequest>(json!({
-        "session_id": session_id(),
-        "runtime": "claude",
-        "env": [],
-        "cwd": "/tmp/rtm"
-    }))
-    .expect_err("spawn request without target should fail");
-
-    assert!(
-        error.to_string().contains("missing field `target`"),
-        "{error}"
+    assert_spawn_request_json_error(
+        json!({
+            "session_id": session_id(),
+            "runtime": "claude",
+            "env": [],
+            "cwd": "/tmp/rtm"
+        }),
+        "missing field `target`",
+        "spawn request without target should fail",
     );
 }
 
 #[test]
 fn spawn_request_json_requires_cwd() {
-    let error = serde_json::from_value::<SpawnRequest>(json!({
-        "session_id": session_id(),
-        "runtime": "claude",
-        "env": [],
-        "target": { "type": "headless", "payload": {} }
-    }))
-    .expect_err("spawn request without cwd should fail");
-
-    assert!(error.to_string().contains("missing field `cwd`"), "{error}");
+    assert_spawn_request_json_error(
+        json!({
+            "session_id": session_id(),
+            "runtime": "claude",
+            "env": [],
+            "target": { "type": "headless", "payload": {} }
+        }),
+        "missing field `cwd`",
+        "spawn request without cwd should fail",
+    );
 }
 
 #[test]
@@ -397,10 +413,7 @@ fn spawn_request_json_round_trips_explicit_isolation_policies() {
             force: false,
             shell_resume: None,
         };
-        let json = serde_json::to_value(&request).expect("serialize");
-        let actual: SpawnRequest = serde_json::from_value(json).expect("deserialize");
-
-        assert_eq!(actual, request);
+        assert_spawn_request_round_trip(&request);
     }
 }
 
@@ -424,11 +437,7 @@ fn spawn_request_json_round_trips_mounts() {
     };
 
     insta::assert_json_snapshot!(request);
-
-    let json = serde_json::to_value(&request).expect("serialize");
-    let actual: SpawnRequest = serde_json::from_value(json).expect("deserialize");
-
-    assert_eq!(actual, request);
+    assert_spawn_request_round_trip(&request);
 }
 
 #[test]
@@ -470,18 +479,16 @@ fn lifecycle_json_omits_host_and_keeps_docker_isolation() {
 
 #[test]
 fn spawn_request_json_rejects_invalid_isolation_policy() {
-    let error = serde_json::from_value::<SpawnRequest>(json!({
-        "session_id": session_id(),
-        "runtime": "claude",
-        "isolation": { "type": "sandbox", "payload": {} },
-        "env": [],
-        "cwd": "/tmp/rtm",
-        "target": { "type": "headless", "payload": {} }
-    }))
-    .expect_err("spawn request with invalid isolation should fail");
-
-    assert!(
-        error.to_string().contains("unknown variant `sandbox`"),
-        "{error}"
+    assert_spawn_request_json_error(
+        json!({
+            "session_id": session_id(),
+            "runtime": "claude",
+            "isolation": { "type": "sandbox", "payload": {} },
+            "env": [],
+            "cwd": "/tmp/rtm",
+            "target": { "type": "headless", "payload": {} }
+        }),
+        "unknown variant `sandbox`",
+        "spawn request with invalid isolation should fail",
     );
 }

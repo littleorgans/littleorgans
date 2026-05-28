@@ -170,15 +170,15 @@ mod tests {
     use crate::test_support::{ErrOrPanic as _, OrPanic as _};
     use chrono::Utc;
     use lilo_rm_core::{RuntimeEvent, TerminationEvidence};
-    use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
-    use uuid::Uuid;
+    use lilo_session_core::SessionState;
 
+    use super::super::test_support::running_session;
     use super::*;
 
     #[tokio::test]
     async fn applies_runtime_events_and_cursor_atomically() {
         let (_dir, store) = SqliteStore::open_temp().await;
-        let session = test_session();
+        let session = running_session("general", "test");
         store
             .insert_session(&session)
             .await
@@ -221,7 +221,7 @@ mod tests {
     #[tokio::test]
     async fn duplicate_running_event_keeps_existing_running_session_timestamps() {
         let (_dir, store) = SqliteStore::open_temp().await;
-        let session = test_session();
+        let session = running_session("general", "test");
         let original_started_at = session.started_at;
         let original_updated_at = session.updated_at;
         store
@@ -258,7 +258,7 @@ mod tests {
     #[tokio::test]
     async fn persists_lost_evidence_from_runtime_events() {
         let (_dir, store) = SqliteStore::open_temp().await;
-        let session = test_session();
+        let session = running_session("general", "test");
         store
             .insert_session(&session)
             .await
@@ -292,7 +292,7 @@ mod tests {
     #[tokio::test]
     async fn rolls_back_events_when_cursor_write_fails() {
         let (_dir, store) = SqliteStore::open_temp().await;
-        let session = test_session();
+        let session = running_session("general", "test");
         store
             .insert_session(&session)
             .await
@@ -365,29 +365,5 @@ mod tests {
             store.event_cursor().await.or_panic("cursor loads"),
             Some(42)
         );
-    }
-
-    fn test_session() -> Session {
-        let now = Utc::now();
-        Session {
-            id: Uuid::now_v7(),
-            runtime: RuntimeKind::Claude,
-            role: "general".to_string(),
-            workspace: "test".to_string(),
-            namespace: Namespace::default(),
-            dir: "test".into(),
-            state: SessionState::Running,
-            runtime_pid: 42,
-            runtime_session: None,
-            transcript_path: None,
-            tmux_pane: None,
-            agent_config: None,
-            created_at: now,
-            started_at: now,
-            terminated_at: None,
-            exit_code: None,
-            updated_at: now,
-            labels: Vec::<Label>::new(),
-        }
     }
 }

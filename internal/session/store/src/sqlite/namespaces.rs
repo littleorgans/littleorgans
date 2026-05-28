@@ -151,15 +151,16 @@ impl SqliteStore {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_support::running_session;
     use super::*;
     use crate::test_support::OrPanic as _;
-    use lilo_session_core::{DEFAULT_NAMESPACE, RuntimeKind, Session, SessionState};
+    use lilo_session_core::DEFAULT_NAMESPACE;
 
     #[tokio::test]
     async fn seeds_default_namespace_and_session_location() {
         let (_dir, store) = SqliteStore::open_temp().await;
         let default_namespace = Namespace::default();
-        let session = test_session("/tmp/project");
+        let session = running_session("engineer", "/tmp/project");
 
         assert!(
             store
@@ -225,29 +226,5 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["alpha", DEFAULT_NAMESPACE]
         );
-    }
-
-    fn test_session(workspace: &str) -> Session {
-        let now = Utc::now();
-        Session {
-            id: Uuid::now_v7(),
-            runtime: RuntimeKind::Claude,
-            role: "engineer".to_string(),
-            workspace: workspace.to_string(),
-            namespace: Namespace::default(),
-            dir: PathBuf::from(workspace),
-            state: SessionState::Running,
-            runtime_pid: 42,
-            runtime_session: None,
-            transcript_path: None,
-            tmux_pane: None,
-            agent_config: None,
-            created_at: now,
-            started_at: now,
-            terminated_at: None,
-            exit_code: None,
-            updated_at: now,
-            labels: Vec::new(),
-        }
     }
 }

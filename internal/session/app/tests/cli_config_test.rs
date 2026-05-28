@@ -1,7 +1,11 @@
 mod common;
 use common::OrPanic as _;
+use common::{
+    assert_success, create_namespace, namespace_binding_contents as binding_contents, stderr,
+    stdout,
+};
 
-use std::process::{Command, Output};
+use std::process::Command;
 
 #[test]
 fn config_help_lists_set_context() {
@@ -126,35 +130,4 @@ fn set_context_daemon_unreachable_does_not_write() {
             .join("namespace")
             .exists()
     );
-}
-
-fn create_namespace(daemon: &common::DaemonFixture, name: &str) {
-    let output = daemon
-        .command()
-        .args(["create", "namespace", name])
-        .output()
-        .or_panic("sm create namespace executes");
-    assert_success("sm create namespace", &output);
-}
-
-fn binding_contents(dir: &std::path::Path) -> String {
-    std::fs::read_to_string(dir.join("config").join("session").join("namespace"))
-        .or_panic("binding file reads")
-}
-
-fn assert_success(command: &str, output: &Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
 }

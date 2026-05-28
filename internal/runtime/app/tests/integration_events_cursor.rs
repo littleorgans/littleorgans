@@ -9,12 +9,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    RtmHarness, output_stderr, output_stdout, runtime_event_line_count, spawn_ok, status_pid,
-    terminate_process, wait_until,
+    RtmHarness, output_stderr, output_stdout, runtime_event_line_count, runtime_events_rpc,
+    runtime_events_rpc_path, runtime_events_rpc_wait, runtime_watcher_counts, spawn_ok, status_pid,
+    terminate_process, wait_for_event_waiters_at_least, wait_for_event_waiters_at_most,
+    wait_for_rpc_events, wait_for_rpc_events_at_least,
 };
-use lilo_rm_core::{
-    CursorExpiredPayload, EventsRequest, RuntimeEvent, RuntimeResponse, RuntimeRpc, WatcherCounts,
-};
+use lilo_rm_core::{CursorExpiredPayload, RuntimeEvent, RuntimeResponse};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -133,7 +133,7 @@ fn expired_cursor_returns_cursor_expired_frame() {
     write_event_log(&harness, &[event_record(3, FIRST_SESSION)], "");
     harness.start_rtmd();
 
-    let response = rpc_events(&harness, Some(0));
+    let response = runtime_events_rpc(&harness, Some(0));
 
     assert_eq!(
         response,
@@ -182,7 +182,7 @@ fn startup_recovery_drops_trailing_partial_event_line() {
     write_event_log(&harness, &[event_record(1, FIRST_SESSION)], r#"{"seq":2"#);
     harness.start_rtmd();
 
-    let response = rpc_events(&harness, Some(0));
+    let response = runtime_events_rpc(&harness, Some(0));
 
     let RuntimeResponse::Events(payload) = response else {
         panic!("expected events response");
@@ -199,7 +199,7 @@ fn long_poll_times_out_with_unchanged_cursor() {
     let harness = RtmHarness::start();
     let start = Instant::now();
 
-    let response = rpc_events_wait(&harness, Some(0), Some(500));
+    let response = runtime_events_rpc_wait(&harness, Some(0), Some(500));
     let elapsed = start.elapsed();
 
     let RuntimeResponse::Events(payload) = response else {
@@ -217,10 +217,10 @@ fn long_poll_times_out_with_unchanged_cursor() {
 #[test]
 fn long_poll_wakes_when_event_is_appended() {
     let harness = RtmHarness::start();
-    let baseline = rpc_watchers(&harness).event_waiters;
+    let baseline = runtime_watcher_counts(&harness).event_waiters;
     let socket_path = harness.socket_path().to_path_buf();
     let start = Instant::now();
-    let waiter = thread::spawn(move || rpc_events_wait_path(socket_path, Some(0), Some(5_000)));
+    let waiter = thread::spawn(move || runtime_events_rpc_path(socket_path, Some(0), Some(5_000)));
 
     wait_for_event_waiters_at_least(&harness, baseline + 1);
     spawn_ok(&harness, FIRST_SESSION, "claude");
@@ -240,9 +240,9 @@ fn long_poll_wakes_when_event_is_appended() {
 #[test]
 fn timed_out_long_poll_releases_waiter() {
     let harness = RtmHarness::start();
-    let baseline = rpc_watchers(&harness).event_waiters;
+    let baseline = runtime_watcher_counts(&harness).event_waiters;
     let socket_path = harness.socket_path().to_path_buf();
-    let waiter = thread::spawn(move || rpc_events_wait_path(socket_path, Some(0), Some(100)));
+    let waiter = thread::spawn(move || runtime_events_rpc_path(socket_path, Some(0), Some(100)));
     wait_for_event_waiters_at_least(&harness, baseline + 1);
 
     let response = waiter.join().expect("waiter");
@@ -258,12 +258,12 @@ fn timed_out_long_poll_releases_waiter() {
 #[test]
 fn concurrent_long_pollers_all_wake_on_single_append() {
     let harness = RtmHarness::start();
-    let baseline = rpc_watchers(&harness).event_waiters;
+    let baseline = runtime_watcher_counts(&harness).event_waiters;
     let socket_path = Arc::new(harness.socket_path().to_path_buf());
     let waiters: Vec<_> = (0..100)
         .map(|_| {
             let socket_path = Arc::clone(&socket_path);
-            thread::spawn(move || rpc_events_wait_path(&*socket_path, Some(0), Some(5_000)))
+            thread::spawn(move || runtime_events_rpc_path(&*socket_path, Some(0), Some(5_000)))
         })
         .collect();
 
@@ -312,92 +312,6 @@ impl Cursor for RuntimeResponse {
             other => panic!("expected events response, got {other:?}"),
         }
     }
-}
-
-fn wait_for_rpc_events(
-    harness: &RtmHarness,
-    since: Option<u64>,
-    expected: usize,
-) -> RuntimeResponse {
-    wait_until(Duration::from_secs(5), || {
-        let response = rpc_events(harness, since);
-        match &response {
-            RuntimeResponse::Events(payload) if payload.events.len() == expected => Some(response),
-            _ => None,
-        }
-    })
-    .unwrap_or_else(|| panic!("events never reached {expected}"))
-}
-
-fn wait_for_rpc_events_at_least(
-    harness: &RtmHarness,
-    since: Option<u64>,
-    expected: usize,
-) -> RuntimeResponse {
-    wait_until(Duration::from_secs(5), || {
-        let response = rpc_events(harness, since);
-        match &response {
-            RuntimeResponse::Events(payload) if payload.events.len() >= expected => Some(response),
-            _ => None,
-        }
-    })
-    .unwrap_or_else(|| panic!("events never reached {expected}"))
-}
-
-fn rpc_events(harness: &RtmHarness, since: Option<u64>) -> RuntimeResponse {
-    rpc_events_wait(harness, since, None)
-}
-
-fn rpc_events_wait(
-    harness: &RtmHarness,
-    since: Option<u64>,
-    wait_ms: Option<u32>,
-) -> RuntimeResponse {
-    rpc_events_wait_path(harness.socket_path(), since, wait_ms)
-}
-
-fn rpc_events_wait_path(
-    socket_path: impl AsRef<std::path::Path>,
-    since: Option<u64>,
-    wait_ms: Option<u32>,
-) -> RuntimeResponse {
-    tokio::runtime::Runtime::new()
-        .expect("runtime")
-        .block_on(lilo_rm_client::request(
-            socket_path,
-            RuntimeRpc::Events {
-                request: EventsRequest { since, wait_ms },
-            },
-        ))
-        .expect("events rpc")
-}
-
-fn rpc_watchers(harness: &RtmHarness) -> WatcherCounts {
-    let response = tokio::runtime::Runtime::new()
-        .expect("runtime")
-        .block_on(lilo_rm_client::request(
-            harness.socket_path(),
-            RuntimeRpc::Watchers,
-        ))
-        .expect("watchers rpc");
-    let RuntimeResponse::Watchers(payload) = response else {
-        panic!("expected watchers response");
-    };
-    payload.watchers
-}
-
-fn wait_for_event_waiters_at_least(harness: &RtmHarness, expected: usize) {
-    wait_until(Duration::from_secs(5), || {
-        (rpc_watchers(harness).event_waiters >= expected).then_some(())
-    })
-    .unwrap_or_else(|| panic!("event_waiters never reached at least {expected}"));
-}
-
-fn wait_for_event_waiters_at_most(harness: &RtmHarness, expected: usize) {
-    wait_until(Duration::from_secs(5), || {
-        (rpc_watchers(harness).event_waiters <= expected).then_some(())
-    })
-    .unwrap_or_else(|| panic!("event_waiters never returned to at most {expected}"));
 }
 
 fn write_event_log(harness: &RtmHarness, records: &[serde_json::Value], tail: &str) {

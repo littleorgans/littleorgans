@@ -9,10 +9,10 @@ use lilo_rm_core::{
 };
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{
-    IsolationPolicy, Label, MailCheckRequest, RpcResponse, RuntimeKind, Selector, Session,
-    SessionRpc, SpawnRequest,
+    IsolationPolicy, Label, MailCheckRequest, Namespace, RpcResponse, RuntimeKind, Selector,
+    Session, SessionRpc, SpawnRequest,
 };
-use lilo_session_daemon::handler::DaemonState;
+use lilo_session_daemon::handler::{DaemonState, HandlerResult};
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
 use lilo_session_driver::{LaunchEnv, RtmdDriver};
 use lilo_session_store::SqliteStore;
@@ -192,34 +192,67 @@ pub async fn spawn_test_session_with_labels(
     role: &str,
     labels: Vec<Label>,
 ) -> Session {
-    let spawned = daemon
-        .state
-        .handle(
-            context.clone(),
-            SessionRpc::Spawn {
-                request: Box::new(SpawnRequest {
-                    runtime: RuntimeKind::Claude,
-                    role: role.to_string(),
-                    workspace: daemon.dir.path().display().to_string(),
-                    dir: None,
-                    namespace: None,
-                    target: "headless".to_string(),
-                    agent_config: None,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: Vec::new(),
-                    mounts: Vec::new(),
-                    shell_resume: None,
-                    labels,
-                    force: false,
-                }),
-            },
-        )
-        .await;
+    let mut request = headless_spawn_request(role, daemon.dir.path().display().to_string());
+    request.labels = labels;
+    let spawned = handle_spawn(daemon, context.clone(), request).await;
     let RpcResponse::Spawned { response } = spawned.response else {
         panic!("expected spawn response");
     };
     response.session
+}
+
+pub async fn handle_spawn(
+    daemon: &TestDaemon,
+    context: RequestContext,
+    request: SpawnRequest,
+) -> HandlerResult {
+    daemon
+        .state
+        .handle(
+            context,
+            SessionRpc::Spawn {
+                request: Box::new(request),
+            },
+        )
+        .await
+}
+
+pub fn headless_spawn_request(role: &str, workspace: impl Into<String>) -> SpawnRequest {
+    spawn_request(role, workspace, "headless")
+}
+
+pub fn namespace_spawn_request(
+    role: &str,
+    dir: impl Into<String>,
+    namespace: Namespace,
+) -> SpawnRequest {
+    let mut request = headless_spawn_request(role, String::new());
+    request.dir = Some(dir.into());
+    request.namespace = Some(namespace);
+    request
+}
+
+pub fn spawn_request(
+    role: &str,
+    workspace: impl Into<String>,
+    target: impl Into<String>,
+) -> SpawnRequest {
+    SpawnRequest {
+        runtime: RuntimeKind::Claude,
+        role: role.to_string(),
+        workspace: workspace.into(),
+        dir: None,
+        namespace: None,
+        target: target.into(),
+        agent_config: None,
+        isolation: IsolationPolicy::default(),
+        image: None,
+        env: Vec::new(),
+        mounts: Vec::new(),
+        shell_resume: None,
+        labels: Vec::new(),
+        force: false,
+    }
 }
 
 pub async fn mail_count(state: &DaemonState, context: RequestContext, session_id: Uuid) -> usize {

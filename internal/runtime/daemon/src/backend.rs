@@ -111,13 +111,15 @@ mod tests {
     use super::RuntimeBackends;
     use crate::{docker_preflight::DockerPreflightConfig, server::DaemonConfig};
 
+    const TEST_IMAGE: &str = "runtime-matters-agent:latest";
+
     #[test]
     fn docker_policy_wraps_launch_for_host_shim() {
         let config = daemon_config();
         let backends = RuntimeBackends::new(&config);
         let mut request = spawn_request();
         request.isolation = IsolationPolicy::Docker(IsolationProfile::default());
-        request.image = Some("runtime-matters-agent:latest".to_owned());
+        request.image = Some(TEST_IMAGE.to_owned());
 
         let launch = backends
             .prepare_launch(&request, launch_spec())
@@ -187,20 +189,9 @@ mod tests {
     }
 
     fn daemon_config() -> DaemonConfig {
-        DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm.sock"),
-            shim_path: PathBuf::from("/tmp/rtm-shim"),
-            log_root: PathBuf::from("/tmp/rtm/logs"),
-            store: lilo_runtime_store::StoreConfig {
-                db_path: PathBuf::from("/tmp/rtm.db"),
-            },
-            reconcile: crate::reconcile::ReconcileConfig::default(),
-            docker_preflight: DockerPreflightConfig::new(
-                "runtime-matters-agent:latest",
-                false,
-                false,
-            ),
-        }
+        DaemonConfig::test_fixture_with_docker_preflight(DockerPreflightConfig::new(
+            TEST_IMAGE, false, false,
+        ))
     }
 
     fn spawn_request() -> SpawnRequest {

@@ -1,89 +1,23 @@
+#[path = "common/daemon.rs"]
+mod daemon;
+#[path = "common/mock_socket.rs"]
+mod mock_socket;
+
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::path::Path;
 
 use lilo_rm_client::{ClientError, EventWatcher, RuntimeClient};
 use lilo_rm_core::{
     EventBatch, EventsRequest, ProtocolError, RUNTIME_PROTOCOL_VERSION, RuntimeResponse,
-    RuntimeRpc, VersionInfo, VersionPayload, read_json_line, write_json_line,
+    RuntimeRpc, VersionInfo, VersionPayload,
 };
-use lilo_runtime_daemon::{
-    DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig, run_daemon,
-};
-use lilo_runtime_store::StoreConfig;
-use lilo_wire::LilodRpc;
+use mock_socket::{mock_runtime_exchange, mock_runtime_response};
 use serde_json::json;
-use tokio::io::BufReader;
-use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-struct TestDaemon {
-    client: RuntimeClient,
-    task: JoinHandle<()>,
-    tempdir: tempfile::TempDir,
-}
-
-impl TestDaemon {
-    async fn start_with_log(records: &[serde_json::Value]) -> Self {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let socket_path = tempdir.path().join("rtmd.sock");
-        write_event_log(tempdir.path(), records);
-        let config = DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket(socket_path.clone()),
-            shim_path: std::env::current_exe().expect("current test executable"),
-            log_root: tempdir.path().join("logs"),
-            store: StoreConfig {
-                db_path: tempdir.path().join("rtm.sqlite"),
-            },
-            reconcile: ReconcileConfig::default(),
-            docker_preflight: DockerPreflightConfig::default(),
-        };
-        let task = tokio::spawn(async move {
-            run_daemon(config).await.expect("daemon run");
-        });
-        wait_for_socket(&socket_path).await;
-        Self {
-            client: RuntimeClient::new(socket_path),
-            task,
-            tempdir,
-        }
-    }
-
-    fn client(&self) -> RuntimeClient {
-        self.client.clone()
-    }
-
-    async fn stop(self) {
-        let response = self
-            .client
-            .request(RuntimeRpc::Stop)
-            .await
-            .expect("stop daemon");
-        assert_eq!(response, RuntimeResponse::Stopping);
-        self.task.await.expect("daemon task");
-        drop(self.tempdir);
-    }
-}
-
-async fn wait_for_socket(socket_path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut last_error = None;
-    while Instant::now() < deadline {
-        match UnixStream::connect(socket_path).await {
-            Ok(_) => return,
-            Err(error) => {
-                last_error = Some(error);
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-        }
-    }
-    panic!(
-        "daemon socket never accepted connections at {}; last error={last_error:?}",
-        socket_path.display()
-    );
-}
+use daemon::TestDaemon;
 
 #[tokio::test]
 async fn connect_rejects_protocol_mismatch() {
@@ -148,7 +82,10 @@ async fn next_uses_configured_wait_ms_and_seek_cursor() {
 
 #[tokio::test]
 async fn cursor_durability_survives_watcher_rebuild() {
-    let daemon = TestDaemon::start_with_log(&[event_record(1), event_record(2)]).await;
+    let daemon = TestDaemon::start_with_data(|root| {
+        write_event_log(root, &[event_record(1), event_record(2)]);
+    })
+    .await;
     let mut watcher = EventWatcher::builder()
         .wait_ms(0)
         .connect(daemon.client())
@@ -175,7 +112,10 @@ async fn cursor_durability_survives_watcher_rebuild() {
 
 #[tokio::test]
 async fn cursor_expired_advances_cursor_and_can_resume_from_oldest() {
-    let daemon = TestDaemon::start_with_log(&[event_record(3)]).await;
+    let daemon = TestDaemon::start_with_data(|root| {
+        write_event_log(root, &[event_record(3)]);
+    })
+    .await;
     let mut watcher = EventWatcher::builder()
         .since(0)
         .wait_ms(0)
@@ -195,7 +135,10 @@ async fn cursor_expired_advances_cursor_and_can_resume_from_oldest() {
 
 #[tokio::test]
 async fn seek_repositions_next_request() {
-    let daemon = TestDaemon::start_with_log(&[event_record(1), event_record(2)]).await;
+    let daemon = TestDaemon::start_with_data(|root| {
+        write_event_log(root, &[event_record(1), event_record(2)]);
+    })
+    .await;
     let mut watcher = EventWatcher::builder()
         .since(2)
         .wait_ms(0)
@@ -212,68 +155,28 @@ async fn seek_repositions_next_request() {
 }
 
 fn mock_version_client(protocol_version: &str) -> (RuntimeClient, JoinHandle<()>) {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let socket_path = tempdir.path().join("rtmd.sock");
-    let listener = UnixListener::bind(&socket_path).expect("bind test socket");
-    let client = RuntimeClient::new(socket_path);
     let mut version = VersionInfo::new("0.6.0", "test-sha");
     protocol_version.clone_into(&mut version.protocol_version);
-    let server = tokio::spawn(async move {
-        let _tempdir = tempdir;
-        let (stream, _) = listener.accept().await.expect("accept client");
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = BufReader::new(read_half);
-        let envelope: LilodRpc = read_json_line(&mut reader).await.expect("read rpc");
-        let LilodRpc::Runtime(rpc) = envelope else {
-            panic!("expected runtime rpc");
-        };
-        assert_eq!(rpc, RuntimeRpc::Version);
-        write_json_line(
-            &mut write_half,
-            &RuntimeResponse::Version(VersionPayload { version }),
-        )
-        .await
-        .expect("write response");
-    });
-    (client, server)
+    mock_runtime_response(
+        RuntimeRpc::Version,
+        RuntimeResponse::Version(VersionPayload { version }),
+    )
 }
 
 async fn next_request(builder: lilo_rm_client::EventWatcherBuilder) -> EventsRequest {
-    let (tempdir, socket_path) = temp_socket_path();
-    let listener = UnixListener::bind(&socket_path).expect("bind test socket");
-    let client = RuntimeClient::new(socket_path);
-    let server = tokio::spawn(async move {
-        let _tempdir = tempdir;
-        let (stream, _) = listener.accept().await.expect("accept client");
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = BufReader::new(read_half);
-        let envelope: LilodRpc = read_json_line(&mut reader).await.expect("read rpc");
-        let LilodRpc::Runtime(rpc) = envelope else {
-            panic!("expected runtime rpc");
-        };
+    let (client, server) = mock_runtime_exchange(|rpc| {
         let RuntimeRpc::Events { request } = rpc else {
             panic!("expected events rpc");
         };
-        write_json_line(
-            &mut write_half,
-            &RuntimeResponse::Events(lilo_rm_core::EventsPayload {
-                events: Vec::new(),
-                cursor: request.since.unwrap_or_default(),
-            }),
-        )
-        .await
-        .expect("write response");
-        request
+        let response = RuntimeResponse::Events(lilo_rm_core::EventsPayload {
+            events: Vec::new(),
+            cursor: request.since.unwrap_or_default(),
+        });
+        (response, request)
     });
     let mut watcher = builder.build(client);
     watcher.next().await.expect("watcher next");
     server.await.expect("server task")
-}
-
-fn temp_socket_path() -> (tempfile::TempDir, PathBuf) {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let socket_path = tempdir.path().join("rtmd.sock");
-    (tempdir, socket_path)
 }
 
 fn assert_event_count(batch: &EventBatch, expected: usize) {

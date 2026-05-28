@@ -29,10 +29,7 @@ fn spawn_request_round_trips_as_tagged_json() {
         }),
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: SessionRpc = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
@@ -100,10 +97,7 @@ fn delete_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: SessionRpc = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
@@ -120,10 +114,7 @@ fn mail_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: SessionRpc = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
@@ -139,8 +130,12 @@ fn nudge_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
+    assert_rpc_round_trip(&request);
+}
+
+fn assert_rpc_round_trip(request: &SessionRpc) {
+    let json = serde_json::to_string(request).or_panic("serializes request");
     let decoded: SessionRpc = serde_json::from_str(&json).or_panic("decodes request");
 
-    assert_eq!(decoded, request);
+    assert_eq!(&decoded, request);
 }

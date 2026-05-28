@@ -6,10 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
+use lilo_rm_core::{
+    HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, RuntimeKind, SpawnRequest, SpawnTarget,
+};
 use tempfile::TempDir;
+use uuid::Uuid;
 
 use super::output::{output_stdout, parse_status_field};
-use super::process::terminate_process;
+use super::process::{terminate_process, wait_for_child_exit};
 use super::{docker, workspace_bin};
 
 pub const FAKE_RUNTIME_READY: &str = "rtm fake runtime ready";
@@ -268,7 +272,7 @@ impl RtmHarness {
         stop_daemon(&self.lilo, &self.socket, &self.rtm_home, &mut self.daemon);
     }
 
-    fn rtm_command(&self) -> Command {
+    pub fn rtm_command(&self) -> Command {
         let mut command = Command::new(&self.rtm);
         command
             .env("LILO_SOCKET_PATH", &self.socket)
@@ -437,13 +441,32 @@ fn daemon_debug(daemon: &mut Child) -> String {
 }
 
 fn wait_for_child(child: &mut Child) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        if child.try_wait().expect("try wait").is_some() {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(25));
+    if wait_for_child_exit(child, Duration::from_secs(5)).is_some() {
+        return;
     }
     let _ = child.kill();
     panic!("daemon did not exit");
+}
+
+pub fn headless_spawn_request(session_id: Uuid, cwd: impl Into<PathBuf>) -> SpawnRequest {
+    headless_spawn_request_with_env(session_id, cwd, Vec::new())
+}
+
+pub fn headless_spawn_request_with_env(
+    session_id: Uuid,
+    cwd: impl Into<PathBuf>,
+    env: Vec<LaunchEnv>,
+) -> SpawnRequest {
+    SpawnRequest {
+        session_id,
+        runtime: RuntimeKind::Claude,
+        isolation: IsolationPolicy::default(),
+        image: None,
+        env,
+        mounts: Vec::new(),
+        cwd: cwd.into(),
+        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
+        force: false,
+        shell_resume: None,
+    }
 }

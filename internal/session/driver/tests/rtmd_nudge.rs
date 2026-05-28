@@ -8,7 +8,6 @@ use lilo_rm_core::{
 use lilo_session_driver::RtmdDriver;
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
-use tokio::net::UnixListener;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -46,13 +45,7 @@ async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
 }
 
 fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> (RtmdDriver, JoinHandle<()>) {
-    let tempdir = tempfile::tempdir().or_panic("tempdir");
-    let socket_path = tempdir.path().join("rtmd.sock");
-    let listener = UnixListener::bind(&socket_path).or_panic("bind test socket");
-    let driver = RtmdDriver::new(socket_path);
-    let server = tokio::spawn(async move {
-        let _tempdir = tempdir;
-        let (stream, _) = listener.accept().await.or_panic("accept client");
+    common::mock_rtmd_server(move |stream| async move {
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);
         let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read rpc");
@@ -79,6 +72,5 @@ fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> (RtmdDriver, Join
         )
         .await
         .or_panic("write response");
-    });
-    (driver, server)
+    })
 }

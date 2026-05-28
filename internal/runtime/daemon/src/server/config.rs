@@ -37,6 +37,27 @@ impl DaemonConfig {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn test_fixture() -> Self {
+        Self::test_fixture_with_docker_preflight(DockerPreflightConfig::default())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_fixture_with_docker_preflight(
+        docker_preflight: DockerPreflightConfig,
+    ) -> Self {
+        Self {
+            endpoint: RuntimeEndpoint::unix_socket("/tmp/rtm.sock"),
+            shim_path: PathBuf::from("/tmp/rtm-shim"),
+            log_root: PathBuf::from("/tmp/rtm/logs"),
+            store: StoreConfig {
+                db_path: PathBuf::from("/tmp/rtm.db"),
+            },
+            reconcile: reconcile::ReconcileConfig::default(),
+            docker_preflight,
+        }
+    }
+
     pub fn socket_path(&self) -> Result<&std::path::Path> {
         Ok(self.endpoint.unix_socket_path()?)
     }
