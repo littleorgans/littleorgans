@@ -1,7 +1,10 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+mod common;
+
 use std::process::Command;
 
+use common::headless_spawn_command;
 use uuid::Uuid;
 
 #[test]
@@ -180,16 +183,7 @@ fn spawn_mount_flag_rejects_tilde_source_when_home_is_unset() {
 }
 
 fn spawn_command() -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rtm"));
-    command
-        .arg("spawn")
-        .arg("--runtime")
-        .arg("claude")
-        .arg("--session-id")
-        .arg(Uuid::now_v7().to_string())
-        .arg("--target")
-        .arg("headless");
-    command
+    headless_spawn_command(Uuid::now_v7())
 }
 
 fn spawn_with_mount(value: &str) -> std::process::Output {

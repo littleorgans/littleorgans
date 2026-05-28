@@ -2,6 +2,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
+use lilo_identity_service::IdentityClient;
+#[cfg(test)]
+use lilo_im_store::SqliteAuditSink;
 use lilo_rm_core::{
     CaptureError, CaptureRequest, CaptureResponse, EventsRequest, KillByPidRequest,
     KillByPidResponse, KillOutcome, KillRequest, LaunchSpec, Lifecycle, LifecycleLogAvailability,
@@ -10,7 +13,6 @@ use lilo_rm_core::{
     ValidateTargetRequest, ValidateTargetResponse, WatcherCounts,
 };
 use lilo_runtime_store::LifecycleStore;
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
@@ -20,13 +22,18 @@ use crate::{
 };
 
 use super::{
-    DaemonConfig, events::EventAppender, spawn::SpawnCoordinator, status::StatusReader,
-    termination::TerminationCoordinator, watcher::WatcherCoordinator,
+    DaemonConfig,
+    events::EventAppender,
+    spawn::{BeginSpawn, SpawnCoordinator},
+    status::StatusReader,
+    termination::TerminationCoordinator,
+    watcher::WatcherCoordinator,
 };
 
 pub(crate) struct ServerState {
     config: DaemonConfig,
     store: LifecycleStore,
+    identity: IdentityClient,
     started_instant: Instant,
     spawn: SpawnCoordinator,
     termination: TerminationCoordinator,
@@ -36,11 +43,25 @@ pub(crate) struct ServerState {
 }
 
 impl ServerState {
+    #[cfg(test)]
     pub(crate) fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
+        let identity = IdentityClient::new(
+            SqliteAuditSink::with_pool(store.pool().clone()),
+            nix::unistd::getuid().as_raw(),
+        );
+        Self::new_with_identity(config, store, identity)
+    }
+
+    pub(crate) fn new_with_identity(
+        config: DaemonConfig,
+        store: LifecycleStore,
+        identity: IdentityClient,
+    ) -> Result<Self> {
         let event_log = EventLog::open(config.data_dir())?;
         Ok(Self {
             config,
             store,
+            identity,
             started_instant: Instant::now(),
             spawn: SpawnCoordinator::new(),
             termination: TerminationCoordinator::new(),
@@ -58,6 +79,10 @@ impl ServerState {
         &self.store
     }
 
+    pub(crate) fn identity(&self) -> &IdentityClient {
+        &self.identity
+    }
+
     pub(crate) fn uptime_secs(&self) -> u64 {
         self.started_instant.elapsed().as_secs()
     }
@@ -66,7 +91,7 @@ impl ServerState {
         &self,
         request: &SpawnRequest,
         launch: LaunchSpec,
-    ) -> Result<oneshot::Receiver<ShimReady>> {
+    ) -> Result<BeginSpawn> {
         self.spawn.begin_spawn(self, request, launch).await
     }
 
@@ -93,8 +118,11 @@ impl ServerState {
         self: &Arc<Self>,
         request: &SpawnRequest,
         ready: ShimReady,
+        append_event: bool,
     ) -> Result<(Lifecycle, RuntimeEvent)> {
-        self.spawn.record_running(self, request, ready).await
+        self.spawn
+            .record_running(self, request, ready, append_event)
+            .await
     }
 
     pub(crate) async fn kill_runtime(&self, request: KillRequest) -> Result<KillOutcome> {
@@ -241,7 +269,7 @@ impl ServerState {
         self.watchers.remove_watcher(session_id).await;
     }
 
-    pub(super) async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
+    pub(crate) async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
         self.events.append_event(event).await
     }
 }

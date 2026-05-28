@@ -34,6 +34,25 @@ pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
 }
 
 #[test]
+pub(crate) fn run_resolves_spawn_intent_and_persists_session() {
+    let runtime_path = common::fake_runtime_path("claude");
+    let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
+
+    let run = daemon
+        .command()
+        .args(["run", "claude", "--role", "engineer", "--detach"])
+        .output()
+        .or_panic("sm run executes");
+    assert_success("sm run", &run);
+    let id = first_field(&run.stdout);
+
+    let counts = spawn_intent_counts(&daemon.audit_path(), &id);
+    assert_eq!(counts.pending, 0);
+    assert_eq!(counts.resolved, 1);
+    assert_eq!(counts.sessions, 1);
+}
+
+#[test]
 pub(crate) fn workspace_arg_is_rejected_by_clap() {
     let daemon = common::DaemonFixture::start();
 
@@ -56,6 +75,47 @@ pub(crate) fn workspace_arg_is_rejected_by_clap() {
     let stderr = String::from_utf8_lossy(&run.stderr);
     assert!(stderr.contains("unexpected argument '--workspace'"));
     assert!(!stderr.contains("--workspace is deprecated"));
+}
+
+struct SpawnIntentCounts {
+    pending: i64,
+    resolved: i64,
+    sessions: i64,
+}
+
+fn spawn_intent_counts(path: &std::path::Path, id: &str) -> SpawnIntentCounts {
+    let runtime = tokio::runtime::Runtime::new().or_panic("tokio runtime");
+    runtime.block_on(async move {
+        let db = lilo_db::LiloDb::open_path(path).await.or_panic("db opens");
+        SpawnIntentCounts {
+            pending: count_rows(
+                db.session_pool(),
+                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'pending'",
+                id,
+            )
+            .await,
+            resolved: count_rows(
+                db.session_pool(),
+                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'resolved'",
+                id,
+            )
+            .await,
+            sessions: count_rows(
+                db.session_pool(),
+                "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
+                id,
+            )
+            .await,
+        }
+    })
+}
+
+async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> i64 {
+    sqlx::query_scalar(sql)
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .or_panic("count rows")
 }
 
 #[test]

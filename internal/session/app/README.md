@@ -7,8 +7,7 @@ Control plane for Helioy sessions.
 ## Runtime
 
 ```bash
-rtm daemon start
-sm daemon start
+lilo daemon start
 sm create namespace project-alpha
 sm config set-context project-alpha
 sm create session claude --role general --dir "$PWD"
@@ -19,14 +18,12 @@ sm capture <session-id>
 sm delete namespace project-alpha
 sm logs id:<session-id>
 sm doctor
-sm daemon stop
-rtm daemon stop
+lilo daemon stop
 ```
 
-The daemon uses `~/.sm/sm.pid`, `~/.sm/sock`, and `~/.sm/sm.db` by default.
-Set `SM_HOME` to use an alternate runtime directory.
-The daemon connects to runtime-matters through `~/.rtm/sock`, or `RTM_SOCKET_PATH`.
-`smd` requires `rtmd` with runtime protocol 0.6 or newer.
+The daemon uses `~/.lilo/run/lilod.pid`, `~/.lilo/run/lilod.sock`, and `~/.lilo/data/lilo.db` by default.
+Set `LILO_HOME` to use an alternate runtime directory.
+`lilod` composes session and runtime handling behind one local socket.
 
 ## Namespaces
 
@@ -55,13 +52,13 @@ sm create namespace project-alpha
 sm config set-context project-alpha
 ```
 
-The user namespace context lives under `SM_HOME`, or `~/.sm` when `SM_HOME` is
-unset. CLI selector reads default to that context. If no context is set, the CLI
-uses `default`. `--namespace <slug>` overrides user context, and the namespace
-must already exist.
+The user namespace context lives under `LILO_HOME/config/session`, or
+`~/.lilo/config/session` when `LILO_HOME` is unset. CLI selector reads default
+to that context. If no context is set, the CLI uses `default`.
+`--namespace <slug>` overrides user context, and the namespace must already exist.
 
-Namespace resolution precedence is: explicit `--namespace`, `SM_NAMESPACE`,
-user namespace context, then `default`.
+Namespace resolution precedence is: explicit `--namespace`, user namespace
+context, then `default`.
 
 `sm run --dir <path>` is the directory flag. New callers should use `--dir` and
 `--namespace`.
@@ -108,8 +105,8 @@ sm mcp
 
 | Tool | CLI | Purpose |
 |------|-----|---------|
-| `session_run` | `sm run` | Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
-| `agent_run` | `sm run` | Deprecated compatibility alias for session_run. Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
+| `session_run` | `sm run` | Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
+| `agent_run` | `sm run` | Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
 | `session_list` | `sm get session` | List session records known to the session-matters daemon. Supports the shared selector grammar. |
 | `agent_list` | `sm get session` | Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar. |
 | `session_get` | `sm get session` | Get one session record by id. The tool returns an error envelope when the id is unknown. |
@@ -126,7 +123,7 @@ sm mcp
 | `mail_read` | `sm mail read` | Read unread mail for sessions selected by selector. Reads mark messages read unless peek is true. |
 | `mail_check` | `sm mail check` | Return the unread mail count for sessions selected by selector without draining mail. |
 | `mail_stop_check` | `sm mail stop-check` | Return the unread mail count for stop-hook decisions without draining mail. |
-| `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through rtmd; headless or ended runtimes return typed failure messages. |
+| `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages. |
 | `logs` | `sm logs` | Read the transcript linked to one selected session. |
 | `wait` | `sm wait` | Wait until a selector satisfies running, terminated, or count=N. |
 | `doctor` | `sm doctor` | Report session-matters daemon health, LOST sessions, and runtime-matters status. |
@@ -209,7 +206,7 @@ Examples:
 
 ## Session Control Workflow
 
-Start runtime-matters with `rtm daemon start` before `smd`; session-matters requires runtime-matters protocol 0.6 or newer.
+Start `lilo daemon start`; lilod composes session and runtime handling behind one local socket.
 Use `session_run` to run a local session through the session-matters daemon.
 Use `session_list` to inspect live and terminated sessions.
 Use `session_get` before acting on one session id.

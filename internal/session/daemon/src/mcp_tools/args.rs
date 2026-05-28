@@ -7,31 +7,34 @@ use serde_json::Value;
 use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
-pub(super) fn scoped_optional_selector(
+pub(super) async fn scoped_optional_selector(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
     selector: Option<Selector>,
 ) -> Result<Option<Selector>> {
-    Ok(match read_namespace_scope(state, context, arguments)? {
-        Some((namespace, scope)) => {
-            Some(Selector::scoped_to_namespace(selector, namespace, scope)?)
-        }
-        None => selector,
-    })
+    Ok(
+        match read_namespace_scope(state, context, arguments).await? {
+            Some((namespace, scope)) => {
+                Some(Selector::scoped_to_namespace(selector, namespace, scope)?)
+            }
+            None => selector,
+        },
+    )
 }
 
-pub(super) fn scoped_required_selector(
+pub(super) async fn scoped_required_selector(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
     selector: Selector,
 ) -> Result<Selector> {
-    scoped_optional_selector(state, context, arguments, Some(selector))?
+    scoped_optional_selector(state, context, arguments, Some(selector))
+        .await?
         .ok_or_else(|| anyhow!("required selector was removed by namespace scoping"))
 }
 
-fn read_namespace_scope(
+async fn read_namespace_scope(
     state: &DaemonState,
     context: &RequestContext,
     arguments: &Value,
@@ -44,8 +47,9 @@ fn read_namespace_scope(
     }
     if let Some(id) = context.mcp_caller_session_id {
         let session = state
-            .store()?
+            .store()
             .get_session(&id)
+            .await
             .context("failed to load MCP caller session")?;
         if let Some(session) = session {
             return Ok(Some((session.namespace, NamespaceScope::Default)));
@@ -71,20 +75,9 @@ pub(super) fn optional_bool(arguments: &Value, field: &str) -> Option<bool> {
 }
 
 pub(super) fn optional_mounts(arguments: &Value) -> Result<Vec<MountSpec>> {
-    let Some(value) = arguments.get("mounts") else {
-        return Ok(Vec::new());
-    };
-    value
-        .as_array()
-        .ok_or_else(|| anyhow!("`mounts` must be an array of HOST:CONTAINER[:ro|:rw] strings"))?
-        .iter()
-        .map(|value| {
-            let mount = value
-                .as_str()
-                .ok_or_else(|| anyhow!("`mounts` entries must be strings"))?;
-            MountSpec::from_str(mount).map_err(Into::into)
-        })
-        .collect()
+    optional_string_array(arguments, "mounts", "HOST:CONTAINER[:ro|:rw]", |mount| {
+        MountSpec::from_str(mount).map_err(Into::into)
+    })
 }
 
 pub(super) fn required_selector(arguments: &Value, field: &str) -> Result<Selector> {
@@ -105,21 +98,31 @@ pub(super) fn selector_from_id(id: &str) -> Result<Selector> {
 }
 
 pub(super) fn optional_labels(arguments: &Value) -> Result<Vec<Label>> {
-    let Some(value) = arguments.get("labels") else {
+    optional_string_array(arguments, "labels", "key=value", |label| {
+        Label::from_str(label).map_err(Into::into)
+    })
+}
+
+fn optional_string_array<T>(
+    arguments: &Value,
+    field: &str,
+    entry_description: &str,
+    parse: impl Fn(&str) -> Result<T>,
+) -> Result<Vec<T>> {
+    let Some(value) = arguments.get(field) else {
         return Ok(Vec::new());
     };
-    let labels = value
+    value
         .as_array()
-        .ok_or_else(|| anyhow!("`labels` must be an array of key=value strings"))?
+        .ok_or_else(|| anyhow!("`{field}` must be an array of {entry_description} strings"))?
         .iter()
         .map(|value| {
-            let label = value
+            let item = value
                 .as_str()
-                .ok_or_else(|| anyhow!("`labels` entries must be strings"))?;
-            Label::from_str(label).map_err(Into::into)
+                .ok_or_else(|| anyhow!("`{field}` entries must be strings"))?;
+            parse(item)
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(labels)
+        .collect()
 }
 
 pub(super) fn unexpected_response(response: &RpcResponse) -> anyhow::Error {

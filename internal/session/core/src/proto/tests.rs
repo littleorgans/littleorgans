@@ -1,12 +1,12 @@
 use lilo_rm_core::{IsolationPolicy, MountSpec};
 
-use super::{DeleteRequest, MailSendRequest, NudgeRequest, RpcRequest, SpawnRequest};
+use super::{DeleteRequest, MailSendRequest, NudgeRequest, SessionRpc, SpawnRequest};
 use crate::test_support::OrPanic as _;
 use crate::{RuntimeKind, Selector};
 
 #[test]
 fn spawn_request_round_trips_as_tagged_json() {
-    let request = RpcRequest::Spawn {
+    let request = SessionRpc::Spawn {
         request: Box::new(SpawnRequest {
             runtime: RuntimeKind::Claude,
             role: "general".to_string(),
@@ -29,10 +29,7 @@ fn spawn_request_round_trips_as_tagged_json() {
         }),
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: RpcRequest = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
@@ -46,8 +43,8 @@ fn spawn_request_decodes_legacy_payload_without_new_fields() {
         }
     }"#;
 
-    let decoded: RpcRequest = serde_json::from_str(json).or_panic("decodes legacy request");
-    let RpcRequest::Spawn { request } = decoded else {
+    let decoded: SessionRpc = serde_json::from_str(json).or_panic("decodes legacy request");
+    let SessionRpc::Spawn { request } = decoded else {
         panic!("expected spawn request");
     };
     assert_eq!(request.workspace, "/tmp/project");
@@ -72,8 +69,8 @@ fn spawn_request_decodes_new_payload_without_legacy_workspace() {
         }
     }"#;
 
-    let decoded: RpcRequest = serde_json::from_str(json).or_panic("decodes new request");
-    let RpcRequest::Spawn { request } = decoded else {
+    let decoded: SessionRpc = serde_json::from_str(json).or_panic("decodes new request");
+    let SessionRpc::Spawn { request } = decoded else {
         panic!("expected spawn request");
     };
     assert_eq!(request.workspace, "");
@@ -88,7 +85,7 @@ fn spawn_request_decodes_new_payload_without_legacy_workspace() {
 
 #[test]
 fn delete_request_round_trips_as_tagged_json() {
-    let request = RpcRequest::Delete {
+    let request = SessionRpc::Delete {
         request: DeleteRequest {
             selector: Selector::Id {
                 id: "019e32e3-0000-7000-8000-000000000000"
@@ -100,15 +97,12 @@ fn delete_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: RpcRequest = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
 fn mail_request_round_trips_as_tagged_json() {
-    let request = RpcRequest::MailSend {
+    let request = SessionRpc::MailSend {
         request: MailSendRequest {
             from: Some("019e32e3-0000-7000-8000-000000000000".to_string()),
             to: Selector::Id {
@@ -120,15 +114,12 @@ fn mail_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: RpcRequest = serde_json::from_str(&json).or_panic("decodes request");
-
-    assert_eq!(decoded, request);
+    assert_rpc_round_trip(&request);
 }
 
 #[test]
 fn nudge_request_round_trips_as_tagged_json() {
-    let request = RpcRequest::Nudge {
+    let request = SessionRpc::Nudge {
         request: NudgeRequest {
             to: Selector::Id {
                 id: "019e32e3-0000-7000-8000-000000000001"
@@ -139,8 +130,12 @@ fn nudge_request_round_trips_as_tagged_json() {
         },
     };
 
-    let json = serde_json::to_string(&request).or_panic("serializes request");
-    let decoded: RpcRequest = serde_json::from_str(&json).or_panic("decodes request");
+    assert_rpc_round_trip(&request);
+}
 
-    assert_eq!(decoded, request);
+fn assert_rpc_round_trip(request: &SessionRpc) {
+    let json = serde_json::to_string(request).or_panic("serializes request");
+    let decoded: SessionRpc = serde_json::from_str(&json).or_panic("decodes request");
+
+    assert_eq!(&decoded, request);
 }

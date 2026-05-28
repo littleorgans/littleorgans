@@ -3,10 +3,15 @@ use std::str::FromStr;
 use anyhow::{Context, Result, anyhow};
 use chrono::{DateTime, Utc};
 use lilo_rm_core::{
-    IsolationPolicy, Lifecycle, LifecycleState, LostEvidence, RecentLostEvent, RuntimeExit,
-    RuntimeKind, TmuxAddress,
+    IsolationPolicy, Lifecycle, LifecycleCounts, LifecycleState, LostEvidence, RecentLostEvent,
+    RuntimeExit, RuntimeKind, TmuxAddress,
 };
 use uuid::Uuid;
+
+const STATE_FORKING: &str = "Forking";
+pub(super) const STATE_RUNNING: &str = "Running";
+const STATE_EXITED: &str = "Exited";
+pub(super) const STATE_LOST: &str = "Lost";
 
 #[derive(sqlx::FromRow)]
 pub(super) struct LifecycleRow {
@@ -121,27 +126,44 @@ fn decode_tmux_pane(tmux_pane: Option<String>) -> Result<Option<TmuxAddress>> {
 
 fn encode_state(state: &LifecycleState) -> Result<EncodedState> {
     match state {
-        LifecycleState::Forking => Ok(("Forking", None, None, None)),
-        LifecycleState::Running => Ok(("Running", None, None, None)),
-        LifecycleState::Exited(exit) => Ok(("Exited", exit.code, exit.signal, None)),
-        LifecycleState::Lost(evidence) => Ok(("Lost", None, None, Some(encode_lost(*evidence)?))),
+        LifecycleState::Forking => Ok((STATE_FORKING, None, None, None)),
+        LifecycleState::Running => Ok((STATE_RUNNING, None, None, None)),
+        LifecycleState::Exited(exit) => Ok((STATE_EXITED, exit.code, exit.signal, None)),
+        LifecycleState::Lost(evidence) => {
+            Ok((STATE_LOST, None, None, Some(encode_lost(*evidence)?)))
+        }
         _ => Err(anyhow!("unsupported lifecycle state variant: {state:?}")),
     }
 }
 
 fn decode_state(row: &LifecycleRow) -> Result<LifecycleState> {
     match row.state.as_str() {
-        "Forking" => Ok(LifecycleState::Forking),
-        "Running" => Ok(LifecycleState::Running),
-        "Exited" => Ok(LifecycleState::Exited(RuntimeExit::new(
+        STATE_FORKING => Ok(LifecycleState::Forking),
+        STATE_RUNNING => Ok(LifecycleState::Running),
+        STATE_EXITED => Ok(LifecycleState::Exited(RuntimeExit::new(
             decode_i32(row.exit_code, "exit_code")?,
             decode_i32(row.exit_signal, "exit_signal")?,
         ))),
-        "Lost" => Ok(LifecycleState::Lost(decode_lost(
+        STATE_LOST => Ok(LifecycleState::Lost(decode_lost(
             row.lost_evidence.as_deref(),
         )?)),
         state => Err(anyhow!("unknown lifecycle state {state}")),
     }
+}
+
+pub(super) fn count_lifecycle_state(
+    counts: &mut LifecycleCounts,
+    state: &str,
+    count: u64,
+) -> Result<()> {
+    match state {
+        STATE_FORKING => counts.forking = count,
+        STATE_RUNNING => counts.running = count,
+        STATE_EXITED => counts.exited = count,
+        STATE_LOST => counts.lost = count,
+        state => return Err(anyhow!("unknown lifecycle state {state}")),
+    }
+    Ok(())
 }
 
 fn encode_lost(evidence: LostEvidence) -> Result<&'static str> {

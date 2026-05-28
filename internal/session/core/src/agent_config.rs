@@ -1,5 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
+use lilo_paths::expand_home_path;
+
 pub fn is_agent_config_path_like(value: &str) -> bool {
     value.contains(std::path::MAIN_SEPARATOR) || value.starts_with('~') || value.starts_with('.')
 }
@@ -17,7 +19,7 @@ pub fn normalize_agent_config_request(
         return value.to_string();
     }
 
-    let path = expand_home(value, home_dir);
+    let path = expand_home_path(value, home_dir).unwrap_or_else(|| PathBuf::from(value));
     let absolute = if path.is_absolute() {
         path
     } else {
@@ -27,19 +29,6 @@ pub fn normalize_agent_config_request(
         .unwrap_or_else(|_| normalize_lexically(&absolute))
         .display()
         .to_string()
-}
-
-fn expand_home(value: &str, home_dir: Option<&Path>) -> PathBuf {
-    let Some(home_dir) = home_dir else {
-        return PathBuf::from(value);
-    };
-    if value == "~" {
-        return home_dir.to_path_buf();
-    }
-    if let Some(rest) = value.strip_prefix("~/") {
-        return home_dir.join(rest);
-    }
-    PathBuf::from(value)
 }
 
 fn normalize_lexically(path: &Path) -> PathBuf {

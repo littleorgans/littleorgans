@@ -27,8 +27,3 @@ fn generated_cli_help_is_stable() {
         .join("\n")
     );
 }
-
-#[test]
-fn generated_admin_skill_doc_is_stable() {
-    insta::assert_snapshot!(include_str!("../templates/SKILL.md"));
-}

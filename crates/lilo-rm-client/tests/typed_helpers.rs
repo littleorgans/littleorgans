@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+#[path = "common/mock_socket.rs"]
+mod mock_socket;
 
-use lilo_rm_client::{ClientError, RuntimeClient, request};
+use lilo_rm_client::{ClientError, request};
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureRequest, CaptureResponse, CursorExpiredPayload,
     DockerIsolationStatus, DockerReadiness, DockerStatus, DoctorPayload, DoctorResponse, ErrorCode,
@@ -10,40 +11,10 @@ use lilo_rm_core::{
     NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeKind, RuntimeResponse, RuntimeRpc,
     RuntimeSignal, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     SpawnedPayload, StatusFilter, StatusPayload, ValidateTargetPayload, ValidateTargetRequest,
-    ValidateTargetResponse, VersionInfo, VersionPayload, WatcherCounts, read_json_line,
-    write_json_line,
+    ValidateTargetResponse, VersionInfo, VersionPayload, WatcherCounts,
 };
-use tokio::io::BufReader;
-use tokio::net::UnixListener;
-use tokio::task::JoinHandle;
+use mock_socket::{mock_runtime_response as mock_response, temp_socket_path};
 use uuid::Uuid;
-
-fn temp_socket_path() -> (tempfile::TempDir, PathBuf) {
-    let tempdir = tempfile::tempdir().expect("tempdir");
-    let socket_path = tempdir.path().join("rtmd.sock");
-    (tempdir, socket_path)
-}
-
-fn mock_response(
-    expected_rpc: RuntimeRpc,
-    response: RuntimeResponse,
-) -> (RuntimeClient, JoinHandle<()>) {
-    let (tempdir, socket_path) = temp_socket_path();
-    let listener = UnixListener::bind(&socket_path).expect("bind test socket");
-    let client = RuntimeClient::new(socket_path);
-    let server = tokio::spawn(async move {
-        let _tempdir = tempdir;
-        let (stream, _) = listener.accept().await.expect("accept client");
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = BufReader::new(read_half);
-        let rpc: RuntimeRpc = read_json_line(&mut reader).await.expect("read rpc");
-        assert_eq!(rpc, expected_rpc);
-        write_json_line(&mut write_half, &response)
-            .await
-            .expect("write response");
-    });
-    (client, server)
-}
 
 #[tokio::test]
 async fn missing_socket_reports_daemon_unavailable() {
@@ -386,73 +357,58 @@ typed_helper_tests!(
     "Nudge"
 );
 
-#[tokio::test]
-async fn nudge_helper_preserves_unsupported_headless_outcome() {
+async fn assert_nudge_helper_preserves_outcome(
+    payload: NudgePayload,
+    expected: NudgeResponse,
+    message: &'static str,
+) {
     let (client, server) = mock_response(
         RuntimeRpc::Nudge {
             request: nudge_request(),
         },
-        RuntimeResponse::Nudge(unsupported_nudge_payload()),
+        RuntimeResponse::Nudge(payload),
     );
 
-    let actual = client
-        .nudge(nudge_request())
-        .await
-        .expect("unsupported nudge response is caller visible");
+    let actual = client.nudge(nudge_request()).await.expect(message);
 
-    assert_eq!(
-        actual,
-        nudge_response(NudgeOutcome::Unsupported(
-            NudgeFailureReason::HeadlessLifecycle
-        ))
-    );
+    assert_eq!(actual, expected);
     server.await.expect("server task");
+}
+
+#[tokio::test]
+async fn nudge_helper_preserves_unsupported_headless_outcome() {
+    assert_nudge_helper_preserves_outcome(
+        unsupported_nudge_payload(),
+        nudge_response(NudgeOutcome::Unsupported(
+            NudgeFailureReason::HeadlessLifecycle,
+        )),
+        "unsupported nudge response is caller visible",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn nudge_helper_preserves_tmux_pane_dead_outcome() {
-    let (client, server) = mock_response(
-        RuntimeRpc::Nudge {
-            request: nudge_request(),
-        },
-        RuntimeResponse::Nudge(NudgePayload {
+    assert_nudge_helper_preserves_outcome(
+        NudgePayload {
             response: nudge_response(NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead)),
-        }),
-    );
-
-    let actual = client
-        .nudge(nudge_request())
-        .await
-        .expect("failed nudge response is caller visible");
-
-    assert_eq!(
-        actual,
-        nudge_response(NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead))
-    );
-    server.await.expect("server task");
+        },
+        nudge_response(NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead)),
+        "failed nudge response is caller visible",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn nudge_helper_preserves_terminal_session_outcome() {
-    let (client, server) = mock_response(
-        RuntimeRpc::Nudge {
-            request: nudge_request(),
-        },
-        RuntimeResponse::Nudge(NudgePayload {
+    assert_nudge_helper_preserves_outcome(
+        NudgePayload {
             response: nudge_response(NudgeOutcome::Failed(NudgeFailureReason::SessionEnded)),
-        }),
-    );
-
-    let actual = client
-        .nudge(nudge_request())
-        .await
-        .expect("terminal nudge response is caller visible");
-
-    assert_eq!(
-        actual,
-        nudge_response(NudgeOutcome::Failed(NudgeFailureReason::SessionEnded))
-    );
-    server.await.expect("server task");
+        },
+        nudge_response(NudgeOutcome::Failed(NudgeFailureReason::SessionEnded)),
+        "terminal nudge response is caller visible",
+    )
+    .await;
 }
 
 typed_helper_tests!(

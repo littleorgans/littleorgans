@@ -2,7 +2,7 @@ use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_rm_core::{Lifecycle, RuntimeKind, ShimReady};
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
 
 use super::process::process_alive;
@@ -25,11 +25,8 @@ pub fn persist_running_with_start_time(
     tokio::runtime::Runtime::new()
         .expect("tokio runtime")
         .block_on(async {
-            let store = LifecycleStore::open(StoreConfig {
-                db_path: db_path.to_path_buf(),
-            })
-            .await
-            .expect("store");
+            let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
+            let store = LifecycleStore::open(&db);
             let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
             store.insert_forking(&lifecycle).await.expect("insert");
             lifecycle.mark_running(ShimReady {

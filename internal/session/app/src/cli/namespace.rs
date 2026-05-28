@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use lilo_session_core::{
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceGetRequest, NamespaceListRequest,
-    NamespaceRecord, RpcRequest, RpcResponse, SmEndpoint,
+    NamespaceRecord, RpcResponse, SessionRpc,
 };
 
 use crate::cli::cli_def::{CreateArgs, CreateResource, NamespaceCreateArgs};
@@ -21,7 +21,7 @@ pub async fn get(slug: Option<String>, json: bool) -> Result<()> {
 }
 
 async fn list(json: bool) -> Result<()> {
-    let response = send(&RpcRequest::NamespaceList {
+    let response = send(&SessionRpc::NamespaceList {
         request: NamespaceListRequest::default(),
     })
     .await?;
@@ -81,7 +81,7 @@ pub(crate) async fn get_namespace_record(slug: String) -> Result<Option<Namespac
 }
 
 async fn get_namespace_response(slug: String) -> Result<RpcResponse> {
-    send(&RpcRequest::NamespaceGet {
+    send(&SessionRpc::NamespaceGet {
         request: NamespaceGetRequest { slug },
     })
     .await
@@ -94,7 +94,7 @@ async fn create_namespace(args: NamespaceCreateArgs) -> Result<()> {
 }
 
 async fn request_create(slug: String) -> Result<NamespaceCreateResponse> {
-    let response = send(&RpcRequest::NamespaceCreate {
+    let response = send(&SessionRpc::NamespaceCreate {
         request: NamespaceCreateRequest { slug },
     })
     .await?;
@@ -109,9 +109,8 @@ async fn request_create(slug: String) -> Result<NamespaceCreateResponse> {
     }
 }
 
-async fn send(request: &RpcRequest) -> Result<RpcResponse> {
-    let endpoint = SmEndpoint::from_env()?;
-    lilo_session_daemon::send_request(&endpoint, request).await
+async fn send(request: &SessionRpc) -> Result<RpcResponse> {
+    crate::cli::client::send_request(request).await
 }
 
 fn print_create_response(response: &NamespaceCreateResponse) {

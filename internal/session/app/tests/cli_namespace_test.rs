@@ -1,5 +1,9 @@
 mod common;
 use common::OrPanic as _;
+use common::{
+    assert_success, create_namespace, first_table_field as first_field,
+    namespace_binding_contents as binding_contents, set_context, stderr, stdout,
+};
 
 use serde_json::Value;
 
@@ -184,7 +188,15 @@ fn delete_namespace_cascades_sessions_and_clears_binding() {
 #[test]
 fn delete_namespace_clears_stale_binding_when_catalog_entry_is_absent() {
     let daemon = common::DaemonFixture::start();
-    std::fs::write(daemon.dir.path().join("namespace"), "missing\n").or_panic("binding writes");
+    let binding = daemon
+        .dir
+        .path()
+        .join("config")
+        .join("session")
+        .join("namespace");
+    std::fs::create_dir_all(binding.parent().or_panic("binding parent"))
+        .or_panic("binding parent creates");
+    std::fs::write(&binding, "missing\n").or_panic("binding writes");
 
     let output = daemon
         .command()
@@ -194,7 +206,7 @@ fn delete_namespace_clears_stale_binding_when_catalog_entry_is_absent() {
 
     assert_success("sm delete namespace missing", &output);
     assert!(stdout(&output).contains("catalog entry already absent; stale binding cleared"));
-    assert!(!daemon.dir.path().join("namespace").exists());
+    assert!(!binding.exists());
 }
 
 #[test]
@@ -205,7 +217,7 @@ fn delete_namespace_surfaces_binding_clear_failure_and_retry_converges() {
 
     let failed = daemon
         .command()
-        .env("SM_FAULT_NAMESPACE_BINDING_CLEAR", "1")
+        .env("LILO_FAULT_NAMESPACE_BINDING_CLEAR", "1")
         .args(["delete", "namespace", "foo"])
         .output()
         .or_panic("sm delete namespace foo executes");
@@ -225,12 +237,19 @@ fn delete_namespace_surfaces_binding_clear_failure_and_retry_converges() {
 
 #[test]
 fn delete_namespace_daemon_unreachable_does_not_clear_binding() {
-    let sm_home = tempfile::tempdir().or_panic("sm home");
-    std::fs::write(sm_home.path().join("namespace"), "foo\n").or_panic("binding writes");
+    let sm_home = tempfile::tempdir().or_panic("lilo home");
+    let binding = sm_home
+        .path()
+        .join("config")
+        .join("session")
+        .join("namespace");
+    std::fs::create_dir_all(binding.parent().or_panic("binding parent"))
+        .or_panic("binding parent creates");
+    std::fs::write(&binding, "foo\n").or_panic("binding writes");
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["delete", "namespace", "foo"])
-        .env("SM_HOME", sm_home.path())
+        .env("LILO_HOME", sm_home.path())
         .env("HOME", sm_home.path())
         .output()
         .or_panic("sm delete namespace foo executes");
@@ -238,51 +257,4 @@ fn delete_namespace_daemon_unreachable_does_not_clear_binding() {
     assert!(!output.status.success());
     assert!(stderr(&output).contains("failed to connect"));
     assert_eq!(binding_contents(sm_home.path()), "foo\n");
-}
-
-fn create_namespace(daemon: &common::DaemonFixture, name: &str) {
-    let output = daemon
-        .command()
-        .args(["create", "namespace", name])
-        .output()
-        .or_panic("sm create namespace executes");
-    assert_success("sm create namespace", &output);
-}
-
-fn set_context(daemon: &common::DaemonFixture, name: &str) {
-    let output = daemon
-        .command()
-        .args(["config", "set-context", name])
-        .output()
-        .or_panic("sm config set-context executes");
-    assert_success("sm config set-context", &output);
-}
-
-fn binding_contents(dir: &std::path::Path) -> String {
-    std::fs::read_to_string(dir.join("namespace")).or_panic("binding file reads")
-}
-
-fn first_field(stdout: &[u8]) -> String {
-    String::from_utf8_lossy(stdout)
-        .split_whitespace()
-        .next()
-        .or_panic("stdout has first field")
-        .to_string()
-}
-
-fn assert_success(command: &str, output: &std::process::Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
-}
-
-fn stdout(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
 }

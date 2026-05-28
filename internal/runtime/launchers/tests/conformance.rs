@@ -25,18 +25,7 @@ fn unknown_runtime_kind_is_not_registered() {
 }
 
 fn assert_launcher_conforms(launcher: &'static dyn RuntimeLauncher) {
-    let request = SpawnRequest {
-        session_id: Uuid::now_v7(),
-        runtime: launcher.kind(),
-        isolation: IsolationPolicy::default(),
-        image: None,
-        env: Vec::new(),
-        mounts: Vec::new(),
-        cwd: lilo_rm_core::launcher_probe_cwd(),
-        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
-        force: false,
-        shell_resume: None,
-    };
+    let request = probe_request(launcher.kind());
 
     let argv = launcher.argv(&request).expect("argv");
     assert!(!argv.is_empty(), "argv should not be empty");
@@ -60,6 +49,21 @@ fn assert_launcher_conforms(launcher: &'static dyn RuntimeLauncher) {
         ),
         "HELIOY_RUNTIME should be present"
     );
+}
+
+fn probe_request(runtime: RuntimeKind) -> SpawnRequest {
+    SpawnRequest {
+        session_id: Uuid::now_v7(),
+        runtime,
+        isolation: IsolationPolicy::default(),
+        image: None,
+        env: Vec::new(),
+        mounts: Vec::new(),
+        cwd: lilo_rm_core::launcher_probe_cwd(),
+        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
+        force: false,
+        shell_resume: None,
+    }
 }
 
 fn expected_binary(runtime: &RuntimeKind) -> &'static str {

@@ -36,15 +36,13 @@ async fn docker_path_shaped_env_with_same_destination_mount_is_accepted() {
         .push(LaunchEnv::new("CLAUDE_CONFIG_DIR", config.clone()));
     request.mounts.push(bind_mount(&layout.config, &config));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "same destination mount should pass",
     )
-    .await
-    .expect("same destination mount should pass");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 }
 
 #[tokio::test]
@@ -59,15 +57,13 @@ async fn docker_path_shaped_env_accepts_subtree_mount_coverage() {
         .push(LaunchEnv::new("CLAUDE_CONFIG_DIR", env_value));
     request.mounts.push(bind_mount(&layout.config, &target));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "subtree mount should pass",
     )
-    .await
-    .expect("subtree mount should pass");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 }
 
 #[tokio::test]
@@ -79,15 +75,13 @@ async fn docker_spawn_without_path_shaped_envs_or_mounts_is_accepted() {
         .env
         .push(LaunchEnv::new("CLAUDE_CODE_OAUTH_TOKEN", "token"));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "spawn without path shaped envs should pass",
     )
-    .await
-    .expect("spawn without path shaped envs should pass");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 }
 
 #[tokio::test]
@@ -169,15 +163,13 @@ async fn docker_mount_source_equal_to_cwd_suppresses_cwd_auto_mount() {
     let mut request = docker_request(&layout.cwd);
     request.mounts.push(bind_mount(&layout.cwd, "/project"));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "cwd cover should pass",
     )
-    .await
-    .expect("cwd cover should pass");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 
     let launch = RuntimeBackends::new(state.config())
         .prepare_launch(&request, launch_spec(&request.cwd))
@@ -197,15 +189,13 @@ async fn docker_mount_source_ancestor_of_cwd_remaps_workdir() {
     let mut request = docker_request(&cwd);
     request.mounts.push(bind_mount(&root, "/workspace"));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "ancestor cover should pass",
     )
-    .await
-    .expect("ancestor cover should pass");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 
     let launch = RuntimeBackends::new(state.config())
         .prepare_launch(&request, launch_spec(&request.cwd))
@@ -273,15 +263,13 @@ async fn docker_container_paths_are_normalized_without_host_filesystem_lookup() 
         .push(LaunchEnv::new("CLAUDE_CONFIG_DIR", "/missing/root/child/../config"));
     request.mounts.push(bind_mount(&layout.config, "/missing/root"));
 
-    let response = check_with_docker_inspector(
+    assert_preflight_passes(
         &state,
         &mut request,
         &FakeDockerInspector::available_non_root(),
+        "container target comparison should be lexical",
     )
-    .await
-    .expect("container target comparison should be lexical");
-
-    assert!(response.is_none(), "preflight returned conflict");
+    .await;
 }
 
 #[cfg(unix)]
@@ -368,7 +356,7 @@ async fn host_isolation_mounts_do_not_reject_direct_rpc_requests() {
         .await
         .expect("host isolation should not reject mounts");
 
-    assert!(response.is_none(), "preflight returned conflict");
+    assert_no_preflight_conflict(response.as_ref());
 }
 
 struct MountLayout {
@@ -427,4 +415,21 @@ fn workdir(argv: &[String]) -> &str {
         .position(|arg| arg == "--workdir")
         .expect("workdir flag");
     &argv[index + 1]
+}
+
+async fn assert_preflight_passes(
+    state: &Arc<ServerState>,
+    request: &mut SpawnRequest,
+    docker: &FakeDockerInspector,
+    message: &'static str,
+) {
+    let response = check_with_docker_inspector(state, request, docker)
+        .await
+        .expect(message);
+
+    assert_no_preflight_conflict(response.as_ref());
+}
+
+fn assert_no_preflight_conflict(response: Option<&RuntimeResponse>) {
+    assert!(response.is_none(), "preflight returned conflict");
 }

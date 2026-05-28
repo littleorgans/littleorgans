@@ -10,7 +10,7 @@ pub(crate) struct SpawnLocation {
     pub dir: PathBuf,
 }
 
-pub(crate) fn normalize_spawn_request(
+pub(crate) async fn normalize_spawn_request(
     request: &mut SpawnRequest,
     store: &SqliteStore,
 ) -> Result<SpawnLocation> {
@@ -23,6 +23,7 @@ pub(crate) fn normalize_spawn_request(
     let namespace = request.namespace.clone().unwrap_or_default();
     let exists = store
         .namespace_exists(&namespace)
+        .await
         .context("failed to validate namespace")?;
     if !exists {
         return Err(anyhow!("namespace not found: {namespace}"));

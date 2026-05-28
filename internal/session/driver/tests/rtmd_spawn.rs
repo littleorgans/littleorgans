@@ -9,9 +9,9 @@ use lilo_rm_core::{
     read_json_line, write_json_line,
 };
 use lilo_session_core::RuntimeKind as SmRuntimeKind;
-use lilo_session_driver::{RtmdDriver, SpawnDriver, SpawnLaunch};
+use lilo_session_driver::SpawnLaunch;
+use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
-use tokio::net::UnixListener;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -26,10 +26,6 @@ async fn rtmd_spawn_forwards_force_disabled() {
 
 async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
     let session_id = Uuid::now_v7();
-    let tempdir = tempfile::tempdir().or_panic("tempdir");
-    let socket_path = tempdir.path().join("rtmd.sock");
-    let listener = UnixListener::bind(&socket_path).or_panic("bind test socket");
-    let driver = RtmdDriver::new(socket_path);
     let shell_resume = ShellResume {
         argv: vec!["/bin/zsh".to_string()],
         env: vec![LaunchEnv::new("TERM", "xterm-256color")],
@@ -43,17 +39,18 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
         read_only: true,
     }];
 
-    let server = tokio::spawn({
+    let (driver, server) = common::mock_rtmd_server({
         let shell_resume = shell_resume.clone();
         let isolation = isolation.clone();
         let image = image.clone();
         let mounts = mounts.clone();
-        async move {
-            let _tempdir = tempdir;
-            let (stream, _) = listener.accept().await.or_panic("accept client");
+        move |stream| async move {
             let (read_half, mut write_half) = stream.into_split();
             let mut reader = BufReader::new(read_half);
-            let rpc: RuntimeRpc = read_json_line(&mut reader).await.or_panic("read rpc");
+            let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read rpc");
+            let LilodRpc::Runtime(rpc) = envelope else {
+                panic!("expected runtime rpc");
+            };
             let RuntimeRpc::Spawn { request } = rpc else {
                 panic!("expected spawn rpc");
             };

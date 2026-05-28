@@ -3,12 +3,12 @@ source: internal/session/app/tests/mcp_schema_snapshot_test.rs
 expression: tool
 ---
 {
-  "description": "Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.",
+  "description": "Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.",
   "inputSchema": {
     "additionalProperties": false,
     "properties": {
       "agent_config": {
-        "description": "Agent config name resolved as ~/.agm/<name>/agent.toml, or an explicit agent.toml path.",
+        "description": "Agent config name resolved under ~/.lilo/config/session/agents/<name>/agent.toml, or an explicit agent.toml path.",
         "type": "string"
       },
       "dir": {

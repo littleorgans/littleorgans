@@ -85,7 +85,7 @@ fn error_message(error: &anyhow::Error) -> String {
             socket_path,
             source,
         }) if source.kind() == std::io::ErrorKind::NotFound => format!(
-            "rtmd is not running; start it with `rtm daemon start` (socket: {})",
+            "rtmd is not running; start it with `lilo daemon start` (socket: {})",
             socket_path.display()
         ),
         _ => error.to_string(),
@@ -176,6 +176,7 @@ const CLI_JSON_SNAPSHOT_REDACTIONS: &[(&str, &str)] = &[
     ("lost", "[count]"),
     ("process_exit_watchers", "[count]"),
     ("shim_sockets", "[count]"),
+    ("event_waiters", "[count]"),
     ("command", "[command]"),
     ("error", "[launcher_error]"),
     ("message", "[message]"),
@@ -252,7 +253,7 @@ mod tests {
 
         assert_eq!(
             error_message(&error),
-            "rtmd is not running; start it with `rtm daemon start` (socket: /tmp/rtm.sock)"
+            "rtmd is not running; start it with `lilo daemon start` (socket: /tmp/rtm.sock)"
         );
         assert_eq!(error_code(&error), "runtime_unavailable");
     }

@@ -70,11 +70,7 @@ impl DockerLiveness for FakeDockerLiveness {
 #[tokio::test]
 async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.path().join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let store = open_store(temp.path().join("rtm.sqlite")).await;
     let dead = persist_running(&store, 101, Utc.timestamp_opt(1_000, 0).unwrap()).await;
     let reused = persist_running(&store, 202, Utc.timestamp_opt(2_000, 0).unwrap()).await;
     let mut already_lost = persist_running(&store, 303, Utc.timestamp_opt(3_000, 0).unwrap()).await;
@@ -104,11 +100,7 @@ async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
 #[tokio::test]
 async fn startup_reconciliation_marks_pid_lost_when_start_time_races_exit() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.path().join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let store = open_store(temp.path().join("rtm.sqlite")).await;
     let lifecycle = persist_running(&store, 404, Utc.timestamp_opt(4_000, 0).unwrap()).await;
     let state = Arc::new(ServerState::new(test_config(temp.path()), store.clone()).expect("state"));
     let probe = VanishingProbe {
@@ -124,11 +116,7 @@ async fn startup_reconciliation_marks_pid_lost_when_start_time_races_exit() {
 #[tokio::test]
 async fn startup_reconciliation_marks_pid_lost_when_probe_reports_gone() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.path().join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let store = open_store(temp.path().join("rtm.sqlite")).await;
     let lifecycle = persist_running(&store, 505, Utc.timestamp_opt(5_000, 0).unwrap()).await;
     let state = Arc::new(ServerState::new(test_config(temp.path()), store.clone()).expect("state"));
 
@@ -143,11 +131,7 @@ async fn startup_reconciliation_marks_pid_lost_when_probe_reports_gone() {
 #[tokio::test]
 async fn periodic_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.path().join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let store = open_store(temp.path().join("rtm.sqlite")).await;
     let dead = persist_running(&store, 101, Utc.timestamp_opt(1_000, 0).unwrap()).await;
     let reused = persist_running(&store, 202, Utc.timestamp_opt(2_000, 0).unwrap()).await;
     let state = Arc::new(ServerState::new(test_config(temp.path()), store.clone()).expect("state"));
@@ -190,11 +174,7 @@ async fn periodic_reconciliation_marks_dead_and_reused_pids_lost_once() {
 #[tokio::test]
 async fn docker_reconciliation_uses_docker_liveness() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = LifecycleStore::open(StoreConfig {
-        db_path: temp.path().join("rtm.sqlite"),
-    })
-    .await
-    .expect("store");
+    let store = open_store(temp.path().join("rtm.sqlite")).await;
     let lifecycle = persist_docker_running(&store, 606).await;
     let state = Arc::new(ServerState::new(test_config(temp.path()), store.clone()).expect("state"));
     let process = FakeProbe {
@@ -304,4 +284,9 @@ fn test_config(root: &Path) -> DaemonConfig {
         reconcile: ReconcileConfig::default(),
         docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
     }
+}
+
+async fn open_store(path: impl AsRef<Path>) -> LifecycleStore {
+    let db = lilo_db::LiloDb::open_path(path).await.expect("store db");
+    LifecycleStore::open(&db)
 }

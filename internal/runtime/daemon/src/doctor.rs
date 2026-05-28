@@ -16,10 +16,7 @@ const RECENT_LOST_WINDOW: Duration = Duration::hours(24);
 pub(crate) async fn collect(state: Arc<ServerState>) -> Result<DoctorResponse> {
     Ok(DoctorResponse {
         version: crate::version::runtime_version_info(),
-        socket_path: state
-            .config()
-            .endpoint
-            .display_label(&lilo_paths::RuntimePathEnv::from_process()),
+        socket_path: state.config().endpoint.display_label(),
         uptime_secs: state.uptime_secs(),
         sqlite: state.store().migration_state().await?,
         lifecycles: state.store().lifecycle_counts().await?,

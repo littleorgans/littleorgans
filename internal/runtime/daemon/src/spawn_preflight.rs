@@ -6,8 +6,9 @@ use std::{
 
 use anyhow::Result;
 use lilo_rm_core::{
-    IsolationPolicy, IsolationProfile, KillRequest, LaunchEnv, MountSpec, RuntimeResponse,
-    RuntimeSignal, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, claude_path_shaped_env,
+    IsolationPolicy, IsolationProfile, KillRequest, LaunchEnv, Lifecycle, LifecycleState,
+    MountSpec, RuntimeResponse, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload,
+    SpawnRequest, claude_path_shaped_env,
 };
 
 use crate::server::ServerState;
@@ -31,7 +32,9 @@ async fn check_with_docker_inspector(
 ) -> Result<Option<RuntimeResponse>> {
     check_isolation_policy(state, request, docker).await?;
 
-    if let Some(lifecycle) = state.store().get(request.session_id).await? {
+    if let Some(lifecycle) = state.store().get(request.session_id).await?
+        && !is_session_backed_forking(&lifecycle, request)
+    {
         return Ok(Some(conflict(SpawnConflictKind::SessionId, lifecycle)));
     }
 
@@ -296,6 +299,12 @@ fn unsupported_docker_behavior(reason: &str) -> anyhow::Error {
 
 fn conflict(kind: SpawnConflictKind, lifecycle: lilo_rm_core::Lifecycle) -> RuntimeResponse {
     RuntimeResponse::SpawnConflict(SpawnConflictPayload { kind, lifecycle })
+}
+
+fn is_session_backed_forking(lifecycle: &Lifecycle, request: &SpawnRequest) -> bool {
+    lifecycle.state == LifecycleState::Forking
+        && lifecycle.runtime == request.runtime
+        && lifecycle.isolation == request.isolation
 }
 
 #[cfg(test)]

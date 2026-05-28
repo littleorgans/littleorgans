@@ -1,0 +1,22 @@
+[package]
+name = "lilo-wire"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "lilo_wire"
+path = "src/lib.rs"
+
+[dependencies]
+lilo-rm-core.workspace = true
+lilo-session-core.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

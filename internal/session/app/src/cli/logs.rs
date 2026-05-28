@@ -5,21 +5,19 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use lilo_session_core::{LogsRequest, RpcRequest, RpcResponse, Selector, SmEndpoint};
+use lilo_session_core::{LogsRequest, RpcResponse, Selector, SessionRpc};
 
 use crate::cli::cli_def::LogsArgs;
 
+use super::capture::unexpected_daemon_response;
+
 pub async fn run(args: LogsArgs) -> Result<()> {
-    let endpoint = SmEndpoint::from_env()?;
-    let response = lilo_session_daemon::send_request(
-        &endpoint,
-        &RpcRequest::Logs {
-            request: LogsRequest {
-                selector: Selector::from_str(&args.selector)?,
-                max_bytes: args.max_bytes,
-            },
+    let response = crate::cli::client::send_request(&SessionRpc::Logs {
+        request: LogsRequest {
+            selector: Selector::from_str(&args.selector)?,
+            max_bytes: args.max_bytes,
         },
-    )
+    })
     .await?;
 
     match response {
@@ -34,10 +32,7 @@ pub async fn run(args: LogsArgs) -> Result<()> {
             Ok(())
         }
         RpcResponse::Error { message } => bail!(message),
-        other => bail!(
-            "unexpected daemon response: {} (please report)",
-            other.kind()
-        ),
+        other => Err(unexpected_daemon_response(&other)),
     }
 }
 

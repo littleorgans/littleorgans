@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 
-use lilo_session_core::{ListRequest, RpcRequest, RpcResponse, Selector, SmEndpoint};
+use lilo_session_core::{ListRequest, RpcResponse, Selector, SessionRpc};
 
 use crate::cli::cli_def::{GetArgs, GetResource, SessionGetArgs, SessionListArgs};
 use crate::cli::output::{print_session_line, print_session_table};
@@ -78,12 +78,8 @@ impl From<SessionGetArgs> for SessionListArgs {
 }
 
 async fn send_list(selector: Option<Selector>) -> Result<RpcResponse> {
-    let endpoint = SmEndpoint::from_env()?;
-    lilo_session_daemon::send_request(
-        &endpoint,
-        &RpcRequest::List {
-            request: ListRequest { selector },
-        },
-    )
+    crate::cli::client::send_request(&SessionRpc::List {
+        request: ListRequest { selector },
+    })
     .await
 }

@@ -1,125 +1,139 @@
 use chrono::Utc;
 use lilo_rm_core::{EventCursor, LostEvidence, RuntimeEvent, TerminationEvidence};
-use rusqlite::types::Type;
-use rusqlite::{OptionalExtension, params};
+use sqlx::{Row, Sqlite, Transaction};
 
 use super::SqliteStore;
 
 impl SqliteStore {
-    pub fn event_cursor(&self) -> rusqlite::Result<Option<EventCursor>> {
-        self.connection
-            .query_row("SELECT cursor FROM event_cursor WHERE id = 1", [], |row| {
-                let value: Vec<u8> = row.get(0)?;
-                decode_cursor(&value)
-            })
-            .optional()
+    pub async fn event_cursor(&self) -> sqlx::Result<Option<EventCursor>> {
+        let value = sqlx::query("SELECT cursor FROM session_event_cursor WHERE id = 1")
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|row| row.try_get::<Vec<u8>, _>("cursor"))
+            .transpose()?;
+        value.map(|cursor| decode_cursor(&cursor)).transpose()
     }
 
-    pub fn apply_cursor(&mut self, cursor: EventCursor) -> rusqlite::Result<()> {
-        let transaction = self.connection.transaction()?;
-        write_cursor(&transaction, cursor)?;
-        transaction.commit()
+    pub async fn apply_cursor(&self, cursor: EventCursor) -> sqlx::Result<()> {
+        let mut transaction = self.pool.begin().await?;
+        write_cursor(&mut transaction, cursor).await?;
+        transaction.commit().await
     }
 
-    pub fn apply_runtime_events_and_cursor(
-        &mut self,
+    pub async fn apply_runtime_events_and_cursor(
+        &self,
         events: &[RuntimeEvent],
         next_cursor: EventCursor,
-    ) -> rusqlite::Result<()> {
-        let transaction = self.connection.transaction()?;
+    ) -> sqlx::Result<()> {
+        let mut transaction = self.pool.begin().await?;
         for event in events {
-            apply_runtime_event(&transaction, event)?;
+            apply_runtime_event(&mut transaction, event).await?;
         }
-        write_cursor(&transaction, next_cursor)?;
-        transaction.commit()
+        write_cursor(&mut transaction, next_cursor).await?;
+        transaction.commit().await
     }
 }
 
-fn apply_runtime_event(
-    transaction: &rusqlite::Transaction<'_>,
+async fn apply_runtime_event(
+    transaction: &mut Transaction<'_, Sqlite>,
     event: &RuntimeEvent,
-) -> rusqlite::Result<()> {
+) -> sqlx::Result<()> {
     match event {
         RuntimeEvent::Running {
             session_id,
             runtime_pid,
             start_time,
-        } => transaction.execute(
-            "UPDATE sessions
+        } => sqlx::query(
+            "UPDATE session_sessions
              SET state = 'RUNNING',
-                 runtime_pid = ?1,
-                 started_at = ?2,
-                 updated_at = ?3
-             WHERE id = ?4
-               AND state IN ('SPAWNING', 'RUNNING')",
-            params![
-                runtime_pid,
-                start_time.to_rfc3339(),
-                Utc::now().to_rfc3339(),
-                session_id.to_string(),
-            ],
-        )?,
+                 runtime_pid = ?,
+                 started_at = ?,
+                 updated_at = ?
+             WHERE id = ?
+               AND state IN ('SPAWNING', 'RUNNING')
+               AND (state = 'SPAWNING' OR runtime_pid != ?)",
+        )
+        .bind(runtime_pid)
+        .bind(start_time.to_rfc3339())
+        .bind(Utc::now().to_rfc3339())
+        .bind(session_id.to_string())
+        .bind(runtime_pid)
+        .execute(&mut **transaction)
+        .await?
+        .rows_affected(),
         RuntimeEvent::Terminated {
             session_id,
             exit_code,
             signal: _,
             evidence,
-        } => match evidence {
-            TerminationEvidence::Lost(lost_evidence) => {
-                mark_lost(transaction, &session_id.to_string(), *lost_evidence)?
+        } => {
+            if let TerminationEvidence::Lost(lost_evidence) = evidence {
+                mark_lost(transaction, &session_id.to_string(), *lost_evidence).await?
+            } else {
+                let now = Utc::now().to_rfc3339();
+                sqlx::query(
+                    "UPDATE session_sessions
+             SET state = 'TERMINATED',
+                 lost_evidence = NULL,
+                 exit_code = ?,
+                 terminated_at = ?,
+                 updated_at = ?
+             WHERE id = ?
+               AND state IN ('SPAWNING', 'RUNNING')",
+                )
+                .bind(exit_code)
+                .bind(&now)
+                .bind(&now)
+                .bind(session_id.to_string())
+                .execute(&mut **transaction)
+                .await?
+                .rows_affected()
             }
-            _ => transaction.execute(
-                "UPDATE sessions
-                 SET state = 'TERMINATED',
-                     lost_evidence = NULL,
-                     exit_code = ?1,
-                     terminated_at = ?2,
-                     updated_at = ?2
-                 WHERE id = ?3
-                   AND state IN ('SPAWNING', 'RUNNING')",
-                params![exit_code, Utc::now().to_rfc3339(), session_id.to_string()],
-            )?,
-        },
+        }
         RuntimeEvent::Lost {
             session_id,
             evidence,
-        } => mark_lost(transaction, &session_id.to_string(), *evidence)?,
+        } => mark_lost(transaction, &session_id.to_string(), *evidence).await?,
     };
     Ok(())
 }
 
-fn mark_lost(
-    transaction: &rusqlite::Transaction<'_>,
+async fn mark_lost(
+    transaction: &mut Transaction<'_, Sqlite>,
     session_id: &str,
     evidence: LostEvidence,
-) -> rusqlite::Result<usize> {
-    transaction.execute(
-        "UPDATE sessions
+) -> sqlx::Result<u64> {
+    let result = sqlx::query(
+        "UPDATE session_sessions
          SET state = 'LOST',
-             lost_evidence = ?1,
-             updated_at = ?2
-         WHERE id = ?3
+             lost_evidence = ?,
+             updated_at = ?
+         WHERE id = ?
            AND state IN ('SPAWNING', 'RUNNING')",
-        params![
-            lost_evidence_to_sql(evidence),
-            Utc::now().to_rfc3339(),
-            session_id,
-        ],
     )
+    .bind(lost_evidence_to_sql(evidence))
+    .bind(Utc::now().to_rfc3339())
+    .bind(session_id)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(result.rows_affected())
 }
 
-fn write_cursor(
-    transaction: &rusqlite::Transaction<'_>,
+async fn write_cursor(
+    transaction: &mut Transaction<'_, Sqlite>,
     cursor: EventCursor,
-) -> rusqlite::Result<()> {
-    transaction.execute(
-        "INSERT INTO event_cursor (id, cursor, updated_at)
-         VALUES (1, ?1, ?2)
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO session_event_cursor (id, cursor, updated_at)
+         VALUES (1, ?, ?)
          ON CONFLICT(id) DO UPDATE
          SET cursor = excluded.cursor,
              updated_at = excluded.updated_at",
-        params![cursor.to_be_bytes().to_vec(), Utc::now().to_rfc3339()],
-    )?;
+    )
+    .bind(cursor.to_be_bytes().to_vec())
+    .bind(Utc::now().to_rfc3339())
+    .execute(&mut **transaction)
+    .await?;
     Ok(())
 }
 
@@ -141,10 +155,13 @@ pub(crate) fn lost_evidence_to_sql(evidence: LostEvidence) -> &'static str {
     }
 }
 
-fn decode_cursor(value: &[u8]) -> rusqlite::Result<EventCursor> {
-    let bytes: [u8; 8] = value.try_into().map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(0, Type::Blob, Box::new(error))
-    })?;
+fn decode_cursor(value: &[u8]) -> sqlx::Result<EventCursor> {
+    let bytes: [u8; 8] = value
+        .try_into()
+        .map_err(|error| sqlx::Error::ColumnDecode {
+            index: "cursor".to_string(),
+            source: Box::new(error),
+        })?;
     Ok(EventCursor::from_be_bytes(bytes))
 }
 
@@ -153,16 +170,19 @@ mod tests {
     use crate::test_support::{ErrOrPanic as _, OrPanic as _};
     use chrono::Utc;
     use lilo_rm_core::{RuntimeEvent, TerminationEvidence};
-    use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
-    use uuid::Uuid;
+    use lilo_session_core::SessionState;
 
+    use super::super::test_support::running_session;
     use super::*;
 
-    #[test]
-    fn applies_runtime_events_and_cursor_atomically() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
-        let session = test_session();
-        store.insert_session(&session).or_panic("session inserts");
+    #[tokio::test]
+    async fn applies_runtime_events_and_cursor_atomically() {
+        let (_dir, store) = SqliteStore::open_temp().await;
+        let session = running_session("general", "test");
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
 
         store
             .apply_runtime_events_and_cursor(
@@ -181,23 +201,68 @@ mod tests {
                 ],
                 42,
             )
+            .await
             .or_panic("events apply");
 
         let updated = store
             .get_session(&session.id)
+            .await
             .or_panic("session loads")
             .or_panic("session exists");
         assert_eq!(updated.state, SessionState::Terminated);
         assert_eq!(updated.runtime_pid, 101);
         assert_eq!(updated.exit_code, Some(7));
-        assert_eq!(store.event_cursor().or_panic("cursor loads"), Some(42));
+        assert_eq!(
+            store.event_cursor().await.or_panic("cursor loads"),
+            Some(42)
+        );
     }
 
-    #[test]
-    fn persists_lost_evidence_from_runtime_events() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
-        let session = test_session();
-        store.insert_session(&session).or_panic("session inserts");
+    #[tokio::test]
+    async fn duplicate_running_event_keeps_existing_running_session_timestamps() {
+        let (_dir, store) = SqliteStore::open_temp().await;
+        let session = running_session("general", "test");
+        let original_started_at = session.started_at;
+        let original_updated_at = session.updated_at;
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
+
+        store
+            .apply_runtime_events_and_cursor(
+                &[RuntimeEvent::Running {
+                    session_id: session.id,
+                    runtime_pid: session.runtime_pid,
+                    start_time: original_started_at + chrono::Duration::seconds(10),
+                }],
+                43,
+            )
+            .await
+            .or_panic("events apply");
+
+        let updated = store
+            .get_session(&session.id)
+            .await
+            .or_panic("session loads")
+            .or_panic("session exists");
+        assert_eq!(updated.runtime_pid, session.runtime_pid);
+        assert_eq!(updated.started_at, original_started_at);
+        assert_eq!(updated.updated_at, original_updated_at);
+        assert_eq!(
+            store.event_cursor().await.or_panic("cursor loads"),
+            Some(43)
+        );
+    }
+
+    #[tokio::test]
+    async fn persists_lost_evidence_from_runtime_events() {
+        let (_dir, store) = SqliteStore::open_temp().await;
+        let session = running_session("general", "test");
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
 
         store
             .apply_runtime_events_and_cursor(
@@ -207,10 +272,12 @@ mod tests {
                 }],
                 9,
             )
+            .await
             .or_panic("lost event applies");
 
         let updated = store
             .get_session(&session.id)
+            .await
             .or_panic("session loads")
             .or_panic("session exists");
         assert_eq!(
@@ -219,25 +286,27 @@ mod tests {
                 evidence: LostEvidence::PidReuseDetected
             }
         );
-        assert_eq!(store.event_cursor().or_panic("cursor loads"), Some(9));
+        assert_eq!(store.event_cursor().await.or_panic("cursor loads"), Some(9));
     }
 
-    #[test]
-    fn rolls_back_events_when_cursor_write_fails() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
-        let session = test_session();
-        store.insert_session(&session).or_panic("session inserts");
+    #[tokio::test]
+    async fn rolls_back_events_when_cursor_write_fails() {
+        let (_dir, store) = SqliteStore::open_temp().await;
+        let session = running_session("general", "test");
         store
-            .connection
-            .execute(
-                "CREATE TRIGGER fail_event_cursor_insert
-                 BEFORE INSERT ON event_cursor
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
+        sqlx::query(
+            "CREATE TRIGGER fail_event_cursor_insert
+                 BEFORE INSERT ON session_event_cursor
                  BEGIN
                      SELECT RAISE(ABORT, 'cursor write failed');
                  END",
-                [],
-            )
-            .or_panic("trigger creates");
+        )
+        .execute(store.pool())
+        .await
+        .or_panic("trigger creates");
 
         let error = store
             .apply_runtime_events_and_cursor(
@@ -249,62 +318,52 @@ mod tests {
                 }],
                 1,
             )
+            .await
             .err_or_panic("cursor conversion fails");
 
-        assert!(matches!(error, rusqlite::Error::SqliteFailure(_, _)));
+        assert!(matches!(error, sqlx::Error::Database(_)));
         let unchanged = store
             .get_session(&session.id)
+            .await
             .or_panic("session loads")
             .or_panic("session exists");
         assert_eq!(unchanged.state, SessionState::Running);
         assert_eq!(unchanged.exit_code, None);
-        assert_eq!(store.event_cursor().or_panic("cursor loads"), None);
+        assert_eq!(store.event_cursor().await.or_panic("cursor loads"), None);
     }
 
-    #[test]
-    fn applies_cursor_without_events() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
+    #[tokio::test]
+    async fn applies_cursor_without_events() {
+        let (_dir, store) = SqliteStore::open_temp().await;
 
-        store.apply_cursor(77).or_panic("cursor applies");
+        store.apply_cursor(77).await.or_panic("cursor applies");
 
-        assert_eq!(store.event_cursor().or_panic("cursor loads"), Some(77));
+        assert_eq!(
+            store.event_cursor().await.or_panic("cursor loads"),
+            Some(77)
+        );
     }
 
-    #[test]
-    fn persists_cursor_across_reopen() {
+    #[tokio::test]
+    async fn persists_cursor_across_reopen() {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
         let db_path = dir.path().join("store.sqlite");
         {
-            let mut store = SqliteStore::open(&db_path).or_panic("store opens");
-            store.apply_cursor(42).or_panic("cursor applies");
+            let db = lilo_db::LiloDb::open_path(&db_path)
+                .await
+                .or_panic("db opens");
+            let store = SqliteStore::open(&db);
+            store.apply_cursor(42).await.or_panic("cursor applies");
         }
 
-        let store = SqliteStore::open(&db_path).or_panic("store reopens");
+        let db = lilo_db::LiloDb::open_path(&db_path)
+            .await
+            .or_panic("db reopens");
+        let store = SqliteStore::open(&db);
 
-        assert_eq!(store.event_cursor().or_panic("cursor loads"), Some(42));
-    }
-
-    fn test_session() -> Session {
-        let now = Utc::now();
-        Session {
-            id: Uuid::now_v7(),
-            runtime: RuntimeKind::Claude,
-            role: "general".to_string(),
-            workspace: "test".to_string(),
-            namespace: Namespace::default(),
-            dir: "test".into(),
-            state: SessionState::Running,
-            runtime_pid: 42,
-            runtime_session: None,
-            transcript_path: None,
-            tmux_pane: None,
-            agent_config: None,
-            created_at: now,
-            started_at: now,
-            terminated_at: None,
-            exit_code: None,
-            updated_at: now,
-            labels: Vec::<Label>::new(),
-        }
+        assert_eq!(
+            store.event_cursor().await.or_panic("cursor loads"),
+            Some(42)
+        );
     }
 }

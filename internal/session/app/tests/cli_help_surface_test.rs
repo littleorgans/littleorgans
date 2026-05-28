@@ -7,7 +7,6 @@ use std::process::{Command, Output};
 fn top_level_help_describes_visible_commands() {
     let stdout = help(&["--help"]);
     for description in [
-        "Manage the session-matters daemon",
         "Imperatively run a session through the session-matters daemon",
         "Create namespace and session records",
         "Manage session-matters user configuration",
@@ -26,18 +25,32 @@ fn top_level_help_describes_visible_commands() {
 }
 
 #[test]
-fn daemon_help_describes_subcommands() {
-    let stdout = help(&["daemon", "--help"]);
-    for description in [
-        "Start the session-matters daemon",
-        "Stop the session-matters daemon",
-        "Show session-matters daemon status",
-    ] {
-        assert!(
-            stdout.contains(description),
-            "daemon help missing {description:?}\n{stdout}"
-        );
-    }
+fn daemon_command_is_not_a_visible_surface() {
+    let stdout = help(&["--help"]);
+    assert!(
+        !stdout
+            .lines()
+            .any(|line| line.trim_start().starts_with("daemon ")),
+        "{stdout}"
+    );
+    let removed_command = ["sm", "daemon"].join(" ");
+    assert!(!stdout.contains(&removed_command), "{stdout}");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_sm"))
+        .args(["daemon", "--help"])
+        .output()
+        .or_panic("removed daemon help executes");
+    assert!(
+        !output.status.success(),
+        "removed daemon help unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("unrecognized subcommand 'daemon'"),
+        "removed daemon help should be rejected as an unknown subcommand\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -49,8 +62,8 @@ fn run_help_describes_every_flag() {
         "Filesystem directory used as the runtime's working directory",
         "Namespace slug for the session",
         "Session label as key=value",
-        "Agent config name resolved as",
-        "~/.agm/<name>/agent.toml",
+        "Agent config name resolved under",
+        "~/.lilo/config/session/agents/<name>/agent.toml",
         "claude_config_dir",
         "[env]",
         "Runtime isolation policy",
@@ -296,10 +309,6 @@ fn help(args: &[&str]) -> String {
 fn retained_help_nodes() -> Vec<&'static [&'static str]> {
     vec![
         &["--help"],
-        &["daemon", "--help"],
-        &["daemon", "start", "--help"],
-        &["daemon", "stop", "--help"],
-        &["daemon", "status", "--help"],
         &["run", "--help"],
         &["create", "--help"],
         &["create", "namespace", "--help"],

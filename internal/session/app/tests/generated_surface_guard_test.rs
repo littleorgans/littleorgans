@@ -120,7 +120,6 @@ fn generated_help_constants_have_source_consumers() {
 fn removed_surface_guard_paths() -> Vec<PathBuf> {
     let mut paths = app_paths([
         "src/tool_docs.rs",
-        "templates/SKILL.md",
         "README.md",
         "src/mcp/generated_instructions.rs",
     ]);

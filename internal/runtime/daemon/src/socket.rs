@@ -1,19 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use lilo_paths::RuntimeEndpoint;
-
-pub fn socket_path_from_env() -> Result<PathBuf> {
-    Ok(lilo_paths::unix_socket_path_from_env()?)
-}
-
-pub fn runtime_endpoint_from_env() -> Result<RuntimeEndpoint> {
-    Ok(lilo_paths::runtime_endpoint_from_env()?)
-}
-
-pub fn display_socket_path(path: &Path) -> String {
-    lilo_paths::display_unix_socket_path_from_env(path)
-}
 
 pub fn prepare_socket(path: &Path) -> Result<()> {
     let parent = path

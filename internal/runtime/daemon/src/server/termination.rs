@@ -118,12 +118,28 @@ impl TerminationCoordinator {
         exit: RuntimeExit,
         evidence: TerminationEvidence,
     ) -> Result<Option<RuntimeEvent>> {
+        self.record_terminal(state, session_id, evidence, |lifecycle| {
+            lifecycle.mark_exited(exit)
+        })
+        .await
+    }
+
+    async fn record_terminal<F>(
+        &self,
+        state: &ServerState,
+        session_id: Uuid,
+        evidence: TerminationEvidence,
+        mark_terminal: F,
+    ) -> Result<Option<RuntimeEvent>>
+    where
+        F: FnOnce(&mut Lifecycle) -> bool + Send,
+    {
         let mut lifecycle = state
             .store()
             .get(session_id)
             .await?
             .ok_or_else(|| RuntimeFailure::session_not_found(session_id))?;
-        if !lifecycle.mark_exited(exit) {
+        if !mark_terminal(&mut lifecycle) {
             return Ok(None);
         }
         state.store().update_lifecycle(&lifecycle).await?;
@@ -137,20 +153,11 @@ impl TerminationCoordinator {
         session_id: Uuid,
         evidence: LostEvidence,
     ) -> Result<Option<RuntimeEvent>> {
-        let mut lifecycle = state
-            .store()
-            .get(session_id)
-            .await?
-            .ok_or_else(|| RuntimeFailure::session_not_found(session_id))?;
-        if !lifecycle.mark_lost(evidence) {
-            return Ok(None);
-        }
-        state.store().update_lifecycle(&lifecycle).await?;
-        self.finish_terminal(
+        self.record_terminal(
             state,
             session_id,
-            &lifecycle,
             TerminationEvidence::Lost(evidence),
+            |lifecycle| lifecycle.mark_lost(evidence),
         )
         .await
     }

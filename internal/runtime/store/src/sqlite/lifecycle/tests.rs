@@ -10,10 +10,7 @@ use super::LifecycleStore;
 
 #[tokio::test]
 async fn persists_lifecycle_transitions() {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
+    let (_temp, store) = lifecycle_store().await;
     let session_id = Uuid::now_v7();
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
 
@@ -31,10 +28,7 @@ async fn persists_lifecycle_transitions() {
 
 #[tokio::test]
 async fn tmux_pane_round_trips_through_sqlite() {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
+    let (_temp, store) = lifecycle_store().await;
     let session_id = Uuid::now_v7();
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.mark_running(ShimReady {
@@ -57,10 +51,7 @@ async fn tmux_pane_round_trips_through_sqlite() {
 
 #[tokio::test]
 async fn isolation_policy_round_trips_through_sqlite() {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
+    let (_temp, store) = lifecycle_store().await;
     let session_id = Uuid::now_v7();
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.isolation = IsolationPolicy::Docker(IsolationProfile {
@@ -75,10 +66,7 @@ async fn isolation_policy_round_trips_through_sqlite() {
 
 #[tokio::test]
 async fn lists_lifecycles_with_composed_status_filters() {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
+    let (_temp, store) = lifecycle_store().await;
     let old_claude = Uuid::now_v7();
     let wanted = Uuid::now_v7();
     let wrong_state = Uuid::now_v7();
@@ -107,10 +95,7 @@ async fn lists_lifecycles_with_composed_status_filters() {
 
 #[tokio::test]
 async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
+    let (_temp, store) = lifecycle_store().await;
     let session_id = Uuid::now_v7();
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     store.insert_forking(&lifecycle).await.expect("insert");
@@ -127,7 +112,7 @@ async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
     assert_eq!(counts.lost, 1);
     let migrations = store.migration_state().await.expect("migrations");
     assert_eq!(migrations.applied, migrations.total);
-    assert_eq!(migrations.total, 3);
+    assert_eq!(migrations.total, 1);
     assert_eq!(
         store.last_probe_sweep().await.expect("last sweep"),
         Some(swept_at)
@@ -178,12 +163,21 @@ async fn insert_lost(store: &LifecycleStore, session_id: Uuid, runtime: RuntimeK
 }
 
 async fn set_updated_at(store: &LifecycleStore, session_id: Uuid, updated_at: DateTime<Utc>) {
-    sqlx::query("UPDATE lifecycle SET updated_at = ? WHERE session_id = ?")
+    sqlx::query("UPDATE runtime_lifecycle SET updated_at = ? WHERE session_id = ?")
         .bind(updated_at.to_rfc3339())
         .bind(session_id.to_string())
         .execute(store.pool())
         .await
         .expect("set updated_at");
+}
+
+async fn lifecycle_store() -> (TempDir, LifecycleStore) {
+    let temp = TempDir::new().expect("temp dir");
+    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
+        .await
+        .expect("store");
+
+    (temp, store)
 }
 
 fn test_time(seconds: i64) -> DateTime<Utc> {

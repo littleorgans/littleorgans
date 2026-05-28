@@ -9,7 +9,3 @@ pub(crate) fn env_path(name: &str) -> Option<PathBuf> {
 fn non_empty_env(name: &str) -> Option<OsString> {
     env::var_os(name).filter(|value| !value.is_empty())
 }
-
-pub(crate) fn non_empty_path(value: Option<&OsString>) -> Option<PathBuf> {
-    value.filter(|value| !value.is_empty()).map(PathBuf::from)
-}

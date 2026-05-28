@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-cli/tests/surface_snapshots.rs
+source: internal/runtime/app/tests/surface_snapshots.rs
+assertion_line: 67
 expression: snapshot
 ---
 {
@@ -60,14 +61,12 @@ expression: snapshot
     "recent_lost": [],
     "socket_path": "[socket]",
     "sqlite": {
-      "applied": 3,
+      "applied": 1,
       "applied_descriptions": [
-        "lifecycle",
-        "probe state",
-        "lifecycle isolation"
+        "unified schema"
       ],
       "pending_descriptions": [],
-      "total": 3
+      "total": 1
     },
     "tmux": {
       "available": "[tmux]",
@@ -95,7 +94,7 @@ expression: snapshot
       "version": "[version]"
     },
     "watchers": {
-      "event_waiters": 0,
+      "event_waiters": "[count]",
       "process_exit_watchers": "[count]",
       "shim_sockets": "[count]"
     }

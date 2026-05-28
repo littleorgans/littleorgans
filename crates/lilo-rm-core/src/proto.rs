@@ -275,10 +275,7 @@ where
 {
     let mut line = String::new();
     let read = reader.read_line(&mut line).await?;
-    if read == 0 {
-        return Err(ProtocolError::Eof);
-    }
-    parse_json_line(&line)
+    parse_read_json_line(read, &line)
 }
 
 pub async fn write_json_line<W, T>(writer: &mut W, message: &T) -> Result<(), ProtocolError>
@@ -299,10 +296,7 @@ where
 {
     let mut line = String::new();
     let read = reader.read_line(&mut line)?;
-    if read == 0 {
-        return Err(ProtocolError::Eof);
-    }
-    parse_json_line(&line)
+    parse_read_json_line(read, &line)
 }
 
 pub fn write_json_line_blocking<W, T>(writer: &mut W, message: &T) -> Result<(), ProtocolError>
@@ -321,6 +315,16 @@ where
     T: DeserializeOwned,
 {
     Ok(serde_json::from_str(line.trim_end())?)
+}
+
+fn parse_read_json_line<T>(bytes_read: usize, line: &str) -> Result<T, ProtocolError>
+where
+    T: DeserializeOwned,
+{
+    if bytes_read == 0 {
+        return Err(ProtocolError::Eof);
+    }
+    parse_json_line(line)
 }
 
 fn json_line_bytes<T>(message: &T) -> Result<Vec<u8>, ProtocolError>

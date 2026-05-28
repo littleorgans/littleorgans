@@ -14,8 +14,7 @@ Control plane for Helioy sessions.
 ## Runtime
 
 ```bash
-rtm daemon start
-sm daemon start
+lilo daemon start
 sm create namespace project-alpha
 sm config set-context project-alpha
 sm create session claude --role general --dir "$PWD"
@@ -26,14 +25,12 @@ sm capture <session-id>
 sm delete namespace project-alpha
 sm logs id:<session-id>
 sm doctor
-sm daemon stop
-rtm daemon stop
+lilo daemon stop
 ```
 
-The daemon uses `~/.sm/sm.pid`, `~/.sm/sock`, and `~/.sm/sm.db` by default.
-Set `SM_HOME` to use an alternate runtime directory.
-The daemon connects to runtime-matters through `~/.rtm/sock`, or `RTM_SOCKET_PATH`.
-`smd` requires `rtmd` with runtime protocol 0.6 or newer.
+The daemon uses `~/.lilo/run/lilod.pid`, `~/.lilo/run/lilod.sock`, and `~/.lilo/data/lilo.db` by default.
+Set `LILO_HOME` to use an alternate runtime directory.
+`lilod` composes session and runtime handling behind one local socket.
 
 ## Namespaces
 
@@ -62,13 +59,13 @@ sm create namespace project-alpha
 sm config set-context project-alpha
 ```
 
-The user namespace context lives under `SM_HOME`, or `~/.sm` when `SM_HOME` is
-unset. CLI selector reads default to that context. If no context is set, the CLI
-uses `default`. `--namespace <slug>` overrides user context, and the namespace
-must already exist.
+The user namespace context lives under `LILO_HOME/config/session`, or
+`~/.lilo/config/session` when `LILO_HOME` is unset. CLI selector reads default
+to that context. If no context is set, the CLI uses `default`.
+`--namespace <slug>` overrides user context, and the namespace must already exist.
 
-Namespace resolution precedence is: explicit `--namespace`, `SM_NAMESPACE`,
-user namespace context, then `default`.
+Namespace resolution precedence is: explicit `--namespace`, user namespace
+context, then `default`.
 
 `sm run --dir <path>` is the directory flag. New callers should use `--dir` and
 `--namespace`.
@@ -128,7 +125,7 @@ pub fn render_server_instructions(
     tools: &[ToolContract],
 ) -> String {
     let mut out = String::new();
-    out.push_str("session-matters controls local Helioy sessions through smd.\n\n");
+    out.push_str("session-matters controls local Helioy sessions through lilod.\n\n");
     out.push_str("Use session_run to run a session, session_list to inspect sessions, ");
     out.push_str(
         "session_get before acting on one id, and session_delete to terminate a session.\n\n",
@@ -148,29 +145,6 @@ pub fn render_generated_instructions_rs(instructions: &str) -> String {
          #![allow(clippy::all)]\n\n\
          pub const SERVER_INSTRUCTIONS: &str = {instructions:?};\n"
     )
-}
-
-pub fn render_skill_md(
-    skill: Option<&SkillConfig>,
-    shared: &SharedContent,
-    tools: &[ToolContract],
-) -> String {
-    let mut out = String::new();
-    out.push_str("---\n");
-    out.push_str("name: session-matters\n");
-    out.push_str("description: Control local Helioy sessions through smd via MCP tools.\n");
-    out.push_str("---\n\n");
-    out.push_str("# session-matters\n\n");
-    out.push_str("Use this skill when you need to run, list, inspect, or terminate local Helioy sessions.\n\n");
-    append_tool_table(&mut out, tools);
-    append_selector_grammar_section(&mut out, shared);
-    append_examples(&mut out);
-    if let Some(skill) = skill {
-        out.push('\n');
-        out.push_str(skill.workflow.trim());
-        out.push('\n');
-    }
-    out
 }
 
 pub fn render_readme_md(

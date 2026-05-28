@@ -16,6 +16,8 @@ path = "src/lib.rs"
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
+lilo-common = { path = "../../../crates/lilo-common", version = "0.8.0" }
+lilo-db.workspace = true
 lilo-paths.workspace = true
 lilo-rm-core.workspace = true
 serde_json.workspace = true

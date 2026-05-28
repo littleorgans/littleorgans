@@ -26,8 +26,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    #[command(about = "Manage the session-matters daemon")]
-    Daemon(DaemonArgs),
     #[command(about = generated_help::SESSION_RUN_ABOUT, long_about = generated_help::SESSION_RUN_ABOUT, arg_required_else_help = true)]
     Run(RunArgs),
     #[command(about = "Create namespace and session records")]
@@ -54,24 +52,6 @@ pub enum Command {
     Nudge(NudgeArgs),
     #[command(about = "Bridge MCP stdio to the session-matters daemon")]
     Mcp(McpArgs),
-    #[command(name = "__smd", hide = true)]
-    InternalDaemon,
-}
-
-#[derive(Debug, Args)]
-pub struct DaemonArgs {
-    #[command(subcommand)]
-    pub action: DaemonAction,
-}
-
-#[derive(Debug, Subcommand)]
-pub enum DaemonAction {
-    #[command(about = "Start the session-matters daemon")]
-    Start,
-    #[command(about = "Stop the session-matters daemon")]
-    Stop,
-    #[command(about = "Show session-matters daemon status")]
-    Status,
 }
 
 #[derive(Debug, Args)]

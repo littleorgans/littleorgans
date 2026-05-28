@@ -4,6 +4,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::RuntimeKindParseError;
+use crate::string_serde::{deserialize_string_parsed, serialize_string};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeKind {
@@ -49,7 +50,7 @@ impl Serialize for RuntimeKind {
     where
         S: Serializer,
     {
-        serializer.serialize_str(self.as_str())
+        serialize_string(self.as_str(), serializer)
     }
 }
 
@@ -58,9 +59,7 @@ impl<'de> Deserialize<'de> for RuntimeKind {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserialize_string_parsed(deserializer)
     }
 }
 

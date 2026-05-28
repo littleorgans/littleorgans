@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use lilo_session_core::{
-    DoctorRequest, LogsRequest, NudgeRequest, RpcRequest, RpcResponse, WaitCondition, WaitRequest,
+    DoctorRequest, LogsRequest, NudgeRequest, RpcResponse, SessionRpc, WaitCondition, WaitRequest,
     tool_success,
 };
 use serde_json::{Value, json};
@@ -10,9 +10,9 @@ use serde_json::{Value, json};
 use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
+use super::agent::session_tool_response_error;
 use super::args::{
     optional_u64, required_selector, required_string, scoped_required_selector, selector_from_id,
-    unexpected_response,
 };
 
 pub(crate) async fn nudge(
@@ -25,11 +25,12 @@ pub(crate) async fn nudge(
         context,
         arguments,
         required_selector(arguments, "to")?,
-    )?;
+    )
+    .await?;
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Nudge {
+            SessionRpc::Nudge {
                 request: NudgeRequest {
                     to,
                     content: required_string(arguments, "content")?.to_string(),
@@ -45,8 +46,7 @@ pub(crate) async fn nudge(
                 "errors": response.errors
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -57,11 +57,11 @@ pub(crate) async fn logs(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_string(arguments, "id").and_then(selector_from_id))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Logs {
+            SessionRpc::Logs {
                 request: LogsRequest {
                     selector,
                     max_bytes: optional_u64(arguments, "max_bytes"),
@@ -78,8 +78,7 @@ pub(crate) async fn logs(
                 "content": response.content
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -94,11 +93,12 @@ pub(crate) async fn wait(
         context,
         arguments,
         required_selector(arguments, "selector")?,
-    )?;
+    )
+    .await?;
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Wait {
+            SessionRpc::Wait {
                 request: WaitRequest {
                     selector,
                     condition,
@@ -112,8 +112,7 @@ pub(crate) async fn wait(
             format!("wait matched: {}", response.matched),
             &json!({ "matched": response.matched, "sessions": response.sessions }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -125,7 +124,7 @@ pub(crate) async fn doctor(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::Doctor {
+            SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
         )
@@ -140,7 +139,6 @@ pub(crate) async fn doctor(
                 "findings": response.findings
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }

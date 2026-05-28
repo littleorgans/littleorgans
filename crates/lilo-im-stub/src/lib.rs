@@ -46,30 +46,17 @@ where
         action: Action,
         resource: &ResourceSpec,
     ) -> AuthzResult {
-        if *principal == Principal::Local(self.local_uid) {
-            self.record(principal, action, resource, AuditDecision::Allow)
-                .await?;
-            return Ok(Authorized {
+        let decision = AuditDecision::evaluate_local(principal, self.local_uid);
+        self.record(principal, action, resource, decision.clone())
+            .await?;
+        if decision == AuditDecision::Allow {
+            Ok(Authorized {
                 principal: principal.clone(),
                 role: "admin".to_owned(),
                 capabilities: Vec::new(),
-            });
+            })
+        } else {
+            Err(AuthzError::UnknownPrincipal)
         }
-
-        let reason = match principal {
-            Principal::Local(_) => "non-local uid",
-            Principal::Unknown { .. } => "unknown principal",
-        };
-        self.record(
-            principal,
-            action,
-            resource,
-            AuditDecision::Deny {
-                reason: reason.to_owned(),
-            },
-        )
-        .await?;
-
-        Err(AuthzError::UnknownPrincipal)
     }
 }

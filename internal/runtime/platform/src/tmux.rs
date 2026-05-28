@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn respawn_pane_args_only_carry_provided_env() {
-        let env = vec![LaunchEnv::new("RTM_SOCKET_PATH", "/tmp/rtm.sock")];
+        let env = vec![LaunchEnv::new("LILO_SOCKET_PATH", "/tmp/lilod.sock")];
         let command_argv = vec!["rtm".to_owned(), "__shim".to_owned()];
         let respawn_args = build_respawn_pane_args(&pane(), &command_argv, &env).expect("args");
 
@@ -241,7 +241,7 @@ mod tests {
                 e_flags.push(iter.next().expect("paired -e value").clone());
             }
         }
-        assert_eq!(e_flags, vec!["RTM_SOCKET_PATH=/tmp/rtm.sock".to_owned()]);
+        assert_eq!(e_flags, vec!["LILO_SOCKET_PATH=/tmp/lilod.sock".to_owned()]);
     }
 
     #[test]
@@ -249,7 +249,7 @@ mod tests {
         // Regression guard: the daemon hands tmux only the bootstrap socket var.
         // Runtime env (secrets, PATH, etc.) must travel over the post-spawn UDS
         // ShimLaunch handoff, never via tmux's -e flag or argv.
-        let env = vec![LaunchEnv::new("RTM_SOCKET_PATH", "/tmp/rtm.sock")];
+        let env = vec![LaunchEnv::new("LILO_SOCKET_PATH", "/tmp/lilod.sock")];
         let command_argv = vec!["rtm".to_owned(), "__shim".to_owned()];
         let respawn_args = build_respawn_pane_args(&pane(), &command_argv, &env).expect("args");
 
@@ -258,7 +258,7 @@ mod tests {
             .filter(|pair| pair[0] == "-e")
             .map(|pair| pair[1].as_str())
             .collect();
-        assert_eq!(e_values, vec!["RTM_SOCKET_PATH=/tmp/rtm.sock"]);
+        assert_eq!(e_values, vec!["LILO_SOCKET_PATH=/tmp/lilod.sock"]);
 
         for forbidden in [
             "HELIOY_PAT=",

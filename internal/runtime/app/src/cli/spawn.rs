@@ -3,7 +3,7 @@ use clap::Args;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::{
     IsolationPolicy, LaunchEnv, MountSpec, RuntimeKind, RuntimeResponse, SpawnRequest, SpawnTarget,
-    upsert_launch_env,
+    ensure_mounts_allowed_for_isolation, upsert_launch_env,
 };
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -55,7 +55,7 @@ pub async fn run(args: SpawnArgs) -> Result<()> {
         mounts,
         force,
     } = args;
-    reject_host_mounts(&isolation, &mounts)?;
+    ensure_mounts_allowed_for_isolation(&isolation, &mounts)?;
     let cwd = spawn_cwd(cwd)?;
     let socket_path = crate::shared::socket_path()?;
     let env = spawn_env(&isolation, env)?;
@@ -78,13 +78,6 @@ pub async fn run(args: SpawnArgs) -> Result<()> {
         .await?;
 
     output::emit(&output, &RuntimeResponse::Spawned(payload))?;
-    Ok(())
-}
-
-fn reject_host_mounts(isolation: &IsolationPolicy, mounts: &[MountSpec]) -> Result<()> {
-    if isolation.is_host() && !mounts.is_empty() {
-        bail!("--mount is docker-only and cannot be used with --isolation host");
-    }
     Ok(())
 }
 

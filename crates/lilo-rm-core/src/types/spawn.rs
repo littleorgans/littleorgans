@@ -5,6 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
+use crate::string_serde::{deserialize_string_parsed, serialize_display};
 use crate::{IsolationPolicy, LaunchEnv, RuntimeKind, RuntimeSignal, ShellResume};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,7 +52,7 @@ impl Serialize for TmuxAddress {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serialize_display(self, serializer)
     }
 }
 
@@ -60,9 +61,7 @@ impl<'de> Deserialize<'de> for TmuxAddress {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserialize_string_parsed(deserializer)
     }
 }
 
@@ -358,61 +357,52 @@ mod tests {
         assert_eq!(restored, mount);
     }
 
-    #[test]
-    fn mount_spec_parses_default_read_only() {
-        let mount: MountSpec = "/host/config:/container/config".parse().expect("mount");
+    fn assert_mount_spec_parse(value: &str, expected_read_only: bool) {
+        let mount: MountSpec = value.parse().expect("mount");
 
         assert_eq!(mount.source, PathBuf::from("/host/config"));
         assert_eq!(mount.target, PathBuf::from("/container/config"));
-        assert!(mount.read_only);
+        assert_eq!(mount.read_only, expected_read_only);
+    }
+
+    #[test]
+    fn mount_spec_parses_default_read_only() {
+        assert_mount_spec_parse("/host/config:/container/config", true);
     }
 
     #[test]
     fn mount_spec_parses_explicit_read_only() {
-        let mount: MountSpec = "/host/config:/container/config:ro".parse().expect("mount");
-
-        assert_eq!(mount.source, PathBuf::from("/host/config"));
-        assert_eq!(mount.target, PathBuf::from("/container/config"));
-        assert!(mount.read_only);
+        assert_mount_spec_parse("/host/config:/container/config:ro", true);
     }
 
     #[test]
     fn mount_spec_parses_explicit_read_write() {
-        let mount: MountSpec = "/host/config:/container/config:rw".parse().expect("mount");
+        assert_mount_spec_parse("/host/config:/container/config:rw", false);
+    }
 
-        assert_eq!(mount.source, PathBuf::from("/host/config"));
-        assert_eq!(mount.target, PathBuf::from("/container/config"));
-        assert!(!mount.read_only);
+    fn home_path() -> PathBuf {
+        PathBuf::from(std::env::var_os("HOME").expect("HOME"))
+    }
+
+    fn assert_mount_source_expands(value: &str, expected: &std::path::Path) {
+        let actual = expand_mount_source(value).expect("source");
+
+        assert_eq!(actual.as_path(), expected);
     }
 
     #[test]
     fn mount_source_expands_tilde() {
-        let home = std::env::var_os("HOME").expect("HOME");
-
-        assert_eq!(
-            expand_mount_source("~").expect("source"),
-            PathBuf::from(home)
-        );
+        assert_mount_source_expands("~", &home_path());
     }
 
     #[test]
     fn mount_source_expands_tilde_subpath() {
-        let home = PathBuf::from(std::env::var_os("HOME").expect("HOME"));
-
-        assert_eq!(
-            expand_mount_source("~/config").expect("source"),
-            home.join("config")
-        );
+        assert_mount_source_expands("~/config", &home_path().join("config"));
     }
 
     #[test]
     fn mount_source_expands_tilde_prefix() {
-        let home = PathBuf::from(std::env::var_os("HOME").expect("HOME"));
-
-        assert_eq!(
-            expand_mount_source("~foo").expect("source"),
-            home.join("foo")
-        );
+        assert_mount_source_expands("~foo", &home_path().join("foo"));
     }
 
     #[test]

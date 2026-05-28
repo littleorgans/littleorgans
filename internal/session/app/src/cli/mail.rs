@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use std::str::FromStr;
 
 use lilo_session_core::{
-    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcRequest,
-    RpcResponse, Selector, SmEndpoint,
+    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcResponse,
+    Selector, SessionRpc,
 };
 
 use crate::cli::cli_def::{
@@ -22,7 +22,7 @@ pub async fn run(args: MailArgs) -> Result<()> {
 }
 
 async fn send(args: MailSendArgs) -> Result<()> {
-    let response = send_daemon_request(RpcRequest::MailSend {
+    let response = send_daemon_request(SessionRpc::MailSend {
         request: MailSendRequest {
             from: args.from.or_else(env_session_id),
             to: required_scoped_selector(&args.to, &args.scope)?,
@@ -50,7 +50,7 @@ async fn send(args: MailSendArgs) -> Result<()> {
 }
 
 async fn read(args: MailReadArgs) -> Result<()> {
-    let response = send_daemon_request(RpcRequest::MailRead {
+    let response = send_daemon_request(SessionRpc::MailRead {
         request: MailReadRequest {
             selector: Selector::from_str(&args.selector)?,
             peek: args.peek,
@@ -81,7 +81,7 @@ async fn check(args: MailCheckArgs) -> Result<()> {
 }
 
 async fn stop_check(args: MailStopCheckArgs) -> Result<()> {
-    let response = send_daemon_request(RpcRequest::MailStopCheck {
+    let response = send_daemon_request(SessionRpc::MailStopCheck {
         request: MailStopCheckRequest {
             selector: Selector::from_str(&args.selector)?,
         },
@@ -110,7 +110,7 @@ async fn stop_check(args: MailStopCheckArgs) -> Result<()> {
 }
 
 async fn unread_count(selector: String) -> Result<usize> {
-    let response = send_daemon_request(RpcRequest::MailCheck {
+    let response = send_daemon_request(SessionRpc::MailCheck {
         request: MailCheckRequest {
             selector: Selector::from_str(&selector)?,
         },
@@ -127,9 +127,8 @@ async fn unread_count(selector: String) -> Result<usize> {
     }
 }
 
-async fn send_daemon_request(request: RpcRequest) -> Result<RpcResponse> {
-    let endpoint = SmEndpoint::from_env()?;
-    lilo_session_daemon::send_request(&endpoint, &request).await
+async fn send_daemon_request(request: SessionRpc) -> Result<RpcResponse> {
+    crate::cli::client::send_request(&request).await
 }
 
 fn env_session_id() -> Option<String> {

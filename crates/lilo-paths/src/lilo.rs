@@ -5,8 +5,8 @@ use crate::env::env_path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-const LILO_HOME_ENV: &str = "LILO_HOME";
-const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
+pub(crate) const LILO_HOME_ENV: &str = "LILO_HOME";
+pub(crate) const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
 const HOME_ENV: &str = "HOME";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -63,6 +63,29 @@ impl LiloPaths {
         self.home.join("logs")
     }
 
+    pub fn agent_config_dir(&self, name: impl fmt::Display) -> PathBuf {
+        self.config_root()
+            .join("session")
+            .join("agents")
+            .join(name.to_string())
+    }
+
+    pub fn namespace_binding(&self) -> PathBuf {
+        self.config_root().join("session").join("namespace")
+    }
+
+    pub fn session_log(&self, id: impl fmt::Display) -> PathBuf {
+        self.logs_root().join("sessions").join(format!("{id}.log"))
+    }
+
+    pub fn runtime_log_dir(&self, id: impl fmt::Display) -> PathBuf {
+        self.logs_root().join("runtimes").join(id.to_string())
+    }
+
+    pub fn lilod_log(&self) -> PathBuf {
+        self.logs_root().join("lilod.log")
+    }
+
     pub fn cache_root(&self) -> PathBuf {
         self.home.join("cache")
     }
@@ -88,6 +111,17 @@ impl LiloPaths {
     }
 }
 
+#[must_use]
+pub fn expand_home_path(value: &str, home: Option<&Path>) -> Option<PathBuf> {
+    if value == "~" {
+        return home.map(Path::to_path_buf);
+    }
+    if let Some(rest) = value.strip_prefix("~/") {
+        return home.map(|home| home.join(rest));
+    }
+    Some(PathBuf::from(value))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct DaemonEndpoint {
@@ -98,6 +132,12 @@ impl DaemonEndpoint {
     pub fn from_paths(paths: &LiloPaths) -> Self {
         Self {
             socket_path: paths.socket_path(),
+        }
+    }
+
+    pub fn unix_socket(path: impl Into<PathBuf>) -> Self {
+        Self {
+            socket_path: path.into(),
         }
     }
 
@@ -188,6 +228,31 @@ mod tests {
     }
 
     #[test]
+    fn home_expansion_rewrites_only_home_prefixes() {
+        let home = Path::new("/tmp/home");
+
+        assert_eq!(expand_home_path("~", Some(home)), Some(home.to_path_buf()));
+        assert_eq!(
+            expand_home_path("~/agent.toml", Some(home)),
+            Some(home.join("agent.toml"))
+        );
+        assert_eq!(
+            expand_home_path("~user/agent.toml", None),
+            Some("~user/agent.toml".into())
+        );
+        assert_eq!(
+            expand_home_path("/tmp/agent.toml", None),
+            Some("/tmp/agent.toml".into())
+        );
+    }
+
+    #[test]
+    fn home_expansion_requires_home_for_home_prefixes() {
+        assert_eq!(expand_home_path("~", None), None);
+        assert_eq!(expand_home_path("~/agent.toml", None), None);
+    }
+
+    #[test]
     fn endpoint_uses_paths_display_and_stable_json_string() {
         let _env = EnvGuard::new(&[
             ("LILO_HOME", Some(DEFAULT_HOME)),
@@ -226,7 +291,9 @@ mod tests {
     legacy_env_ignored_test!(rtm_home_is_ignored, "RTM_HOME");
     legacy_env_ignored_test!(rtm_socket_path_is_ignored, "RTM_SOCKET_PATH");
     legacy_env_ignored_test!(sm_home_is_ignored, "SM_HOME");
+    legacy_env_ignored_test!(sm_socket_path_is_ignored, "SM_SOCKET_PATH");
     legacy_env_ignored_test!(sm_db_path_is_ignored, "SM_DB_PATH");
+    legacy_env_ignored_test!(sm_namespace_is_ignored, "SM_NAMESPACE");
     legacy_env_ignored_test!(rtm_db_path_is_ignored, "RTM_DB_PATH");
     legacy_env_ignored_test!(lilo_db_path_is_ignored, "LILO_DB_PATH");
     legacy_env_ignored_test!(agm_home_is_ignored, "AGM_HOME");
@@ -254,6 +321,23 @@ mod tests {
         assert_eq!(paths.run_root(), root.join("run"));
         assert_eq!(paths.data_root(), root.join("data"));
         assert_eq!(paths.logs_root(), root.join("logs"));
+        assert_eq!(
+            paths.agent_config_dir("demo"),
+            root.join("config/session/agents/demo")
+        );
+        assert_eq!(
+            paths.namespace_binding(),
+            root.join("config/session/namespace")
+        );
+        assert_eq!(
+            paths.session_log("019e6900"),
+            root.join("logs/sessions/019e6900.log")
+        );
+        assert_eq!(
+            paths.runtime_log_dir("019e6900"),
+            root.join("logs/runtimes/019e6900")
+        );
+        assert_eq!(paths.lilod_log(), root.join("logs/lilod.log"));
         assert_eq!(paths.cache_root(), root.join("cache"));
         assert_eq!(paths.tmp_root(), root.join("tmp"));
         assert_eq!(paths.socket_path(), root.join("run/lilod.sock"));

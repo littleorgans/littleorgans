@@ -38,10 +38,7 @@ pub struct LaunchSpec {
 
 impl LaunchSpec {
     pub fn command(&self) -> Result<&str, LauncherError> {
-        self.argv
-            .first()
-            .map(String::as_str)
-            .ok_or(LauncherError::EmptyArgv)
+        argv_command(&self.argv, LauncherError::EmptyArgv)
     }
 }
 
@@ -54,11 +51,12 @@ pub struct ShellResume {
 
 impl ShellResume {
     pub fn command(&self) -> Result<&str, LauncherError> {
-        self.argv
-            .first()
-            .map(String::as_str)
-            .ok_or(LauncherError::EmptyShellArgv)
+        argv_command(&self.argv, LauncherError::EmptyShellArgv)
     }
+}
+
+fn argv_command(argv: &[String], empty_error: LauncherError) -> Result<&str, LauncherError> {
+    argv.first().map(String::as_str).ok_or(empty_error)
 }
 
 pub trait RuntimeLauncher: Sync {

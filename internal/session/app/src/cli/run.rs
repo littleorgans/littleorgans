@@ -2,10 +2,10 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget};
+use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget, ensure_mounts_allowed_for_isolation};
 use lilo_session_core::{
-    Label, Namespace, RpcRequest, RpcResponse, SmEndpoint, SpawnRequest,
-    agent_config_uses_home_prefix, is_agent_config_path_like, normalize_agent_config_request,
+    Label, Namespace, RpcResponse, SessionRpc, SpawnRequest, agent_config_uses_home_prefix,
+    is_agent_config_path_like, normalize_agent_config_request,
 };
 
 use crate::cli::cli_def::{RunArgs, SessionCreateArgs};
@@ -14,7 +14,7 @@ use crate::cli::output::print_session_line;
 
 pub async fn run(args: RunArgs) -> Result<()> {
     let isolation = args.isolation.unwrap_or_default();
-    reject_host_mounts(&isolation, &args.mounts)?;
+    ensure_mounts_allowed_for_isolation(&isolation, &args.mounts)?;
     spawn_session(
         args.session,
         args.target,
@@ -48,7 +48,6 @@ async fn spawn_session(
 ) -> Result<()> {
     let spawn_location = resolve_spawn_location(args.dir.as_ref(), args.namespace.clone())?;
     let agent_config = normalize_cli_agent_config(args.agent_config.as_deref())?;
-    let endpoint = SmEndpoint::from_env()?;
     let env = lilo_rm_core::capture_caller_env();
     let spawn_target = SpawnTarget::from_str(&target).ok();
     let shell_resume = if spawn_target
@@ -62,31 +61,28 @@ async fn spawn_session(
     } else {
         None
     };
-    let response = lilo_session_daemon::send_request(
-        &endpoint,
-        &RpcRequest::Spawn {
-            request: Box::new(SpawnRequest {
-                runtime: args.runtime,
-                role: args.role,
-                workspace: spawn_location.dir.clone(),
-                dir: Some(spawn_location.dir),
-                namespace: Some(spawn_location.namespace),
-                target,
-                agent_config,
-                isolation,
-                image,
-                env,
-                mounts,
-                shell_resume,
-                labels: args
-                    .labels
-                    .iter()
-                    .map(|label| Label::from_str(label))
-                    .collect::<Result<Vec<_>, _>>()?,
-                force,
-            }),
-        },
-    )
+    let response = crate::cli::client::send_request(&SessionRpc::Spawn {
+        request: Box::new(SpawnRequest {
+            runtime: args.runtime,
+            role: args.role,
+            workspace: spawn_location.dir.clone(),
+            dir: Some(spawn_location.dir),
+            namespace: Some(spawn_location.namespace),
+            target,
+            agent_config,
+            isolation,
+            image,
+            env,
+            mounts,
+            shell_resume,
+            labels: args
+                .labels
+                .iter()
+                .map(|label| Label::from_str(label))
+                .collect::<Result<Vec<_>, _>>()?,
+            force,
+        }),
+    })
     .await?;
 
     match response {
@@ -100,13 +96,6 @@ async fn spawn_session(
             other.kind()
         ),
     }
-}
-
-fn reject_host_mounts(isolation: &IsolationPolicy, mounts: &[MountSpec]) -> Result<()> {
-    if isolation.is_host() && !mounts.is_empty() {
-        bail!("--mount is docker-only and cannot be used with --isolation host");
-    }
-    Ok(())
 }
 
 fn normalize_cli_agent_config(agent_config: Option<&str>) -> Result<Option<String>> {
@@ -247,24 +236,21 @@ mod tests {
     // Rust 2024 marks process env mutation unsafe. The lock keeps these env
     // changes scoped and serial for namespace resolution tests.
     #[allow(unsafe_code)]
-    fn with_isolated_namespace_env<T>(sm_home: PathBuf, test: impl FnOnce() -> T) -> T {
+    fn with_isolated_namespace_env<T>(lilo_home: PathBuf, test: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK
             .get_or_init(|| Mutex::new(()))
             .lock()
             .or_panic("env lock");
-        let original_sm_home = std::env::var_os("SM_HOME");
-        let original_sm_namespace = std::env::var_os("SM_NAMESPACE");
+        let original_lilo_home = std::env::var_os("LILO_HOME");
 
         // SAFETY: ENV_LOCK serializes namespace tests, so no other thread reads
-        // or writes SM_HOME / SM_NAMESPACE concurrently; originals are restored
+        // or writes LILO_HOME concurrently; originals are restored
         // before the guard drops.
         unsafe {
-            std::env::set_var("SM_HOME", sm_home);
-            std::env::remove_var("SM_NAMESPACE");
+            std::env::set_var("LILO_HOME", lilo_home);
         }
         let result = test();
-        restore_env("SM_HOME", original_sm_home);
-        restore_env("SM_NAMESPACE", original_sm_namespace);
+        restore_env("LILO_HOME", original_lilo_home);
         result
     }
 

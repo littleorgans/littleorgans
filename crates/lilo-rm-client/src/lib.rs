@@ -14,6 +14,7 @@ use lilo_rm_core::{
     RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnedPayload, StatusFilter, StatusPayload,
     ValidateTargetRequest, ValidateTargetResponse, VersionPayload, read_json_line, write_json_line,
 };
+use lilo_wire::LilodRpc;
 use thiserror::Error;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
@@ -21,6 +22,15 @@ use tokio::net::UnixStream;
 mod event_watcher;
 
 pub use event_watcher::{EventWatcher, EventWatcherBuilder};
+
+macro_rules! runtime_payload {
+    ($variant:ident, $payload:ident => $value:expr) => {
+        |response| match response {
+            RuntimeResponse::$variant($payload) => Ok($value),
+            response => Err(Box::new(response)),
+        }
+    };
+}
 
 /// Async client for the rtmd Unix socket JSON line protocol.
 #[derive(Clone, Debug)]
@@ -46,6 +56,19 @@ impl RuntimeClient {
         request(self.socket_path(), rpc).await
     }
 
+    async fn request_expected<T>(
+        &self,
+        rpc: RuntimeRpc,
+        expected: &'static str,
+        extract: impl FnOnce(RuntimeResponse) -> Result<T, Box<RuntimeResponse>>,
+    ) -> Result<T, ClientError> {
+        let response = self.request(rpc).await?;
+        extract(response).map_err(|response| ClientError::UnexpectedResponse {
+            expected,
+            got: response_name(&response),
+        })
+    }
+
     /// Spawn a runtime session and return the created lifecycle payload.
     pub async fn spawn(&self, request: SpawnRequest) -> Result<SpawnedPayload, ClientError> {
         match self.request(RuntimeRpc::Spawn { request }).await? {
@@ -59,31 +82,34 @@ impl RuntimeClient {
 
     /// Kill a runtime session by session id.
     pub async fn kill(&self, request: KillRequest) -> Result<KillOutcome, ClientError> {
-        match self.request(RuntimeRpc::Kill { request }).await? {
-            RuntimeResponse::Killed(payload) => Ok(payload.outcome),
-            response => unexpected_response("Killed", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::Kill { request },
+            "Killed",
+            runtime_payload!(Killed, payload => payload.outcome),
+        )
+        .await
     }
 
     /// Kill an arbitrary process id through the daemon admin path.
     pub async fn kill_by_pid(&self, request: KillByPidRequest) -> Result<KillOutcome, ClientError> {
-        match self.request(RuntimeRpc::KillByPid { request }).await? {
-            RuntimeResponse::KillByPid(payload) => Ok(payload.response.outcome),
-            response => unexpected_response("KillByPid", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::KillByPid { request },
+            "KillByPid",
+            runtime_payload!(KillByPid, payload => payload.response.outcome),
+        )
+        .await
     }
 
     /// Query runtime lifecycle status.
     pub async fn status(&self, filter: StatusFilter) -> Result<StatusPayload, ClientError> {
-        match self
-            .request(RuntimeRpc::Status {
+        self.request_expected(
+            RuntimeRpc::Status {
                 request: filter.into(),
-            })
-            .await?
-        {
-            RuntimeResponse::Status(payload) => Ok(payload),
-            response => unexpected_response("Status", &response),
-        }
+            },
+            "Status",
+            runtime_payload!(Status, payload => payload),
+        )
+        .await
     }
 
     /// Send a text nudge to a runtime session and return the delivery outcome.
@@ -91,18 +117,22 @@ impl RuntimeClient {
         &self,
         request: lilo_rm_core::NudgeRequest,
     ) -> Result<lilo_rm_core::NudgeResponse, ClientError> {
-        match self.request(RuntimeRpc::Nudge { request }).await? {
-            RuntimeResponse::Nudge(payload) => Ok(payload.response),
-            response => unexpected_response("Nudge", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::Nudge { request },
+            "Nudge",
+            runtime_payload!(Nudge, payload => payload.response),
+        )
+        .await
     }
 
     /// Capture scrollback for a runtime session.
     pub async fn capture(&self, request: CaptureRequest) -> Result<CaptureResponse, ClientError> {
-        match self.request(RuntimeRpc::Capture { request }).await? {
-            RuntimeResponse::Capture(payload) => Ok(payload.response),
-            response => unexpected_response("Capture", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::Capture { request },
+            "Capture",
+            runtime_payload!(Capture, payload => payload.response),
+        )
+        .await
     }
 
     /// Validate a user supplied spawn target string.
@@ -110,33 +140,36 @@ impl RuntimeClient {
         &self,
         target: &str,
     ) -> Result<ValidateTargetResponse, ClientError> {
-        match self
-            .request(RuntimeRpc::ValidateTarget {
+        self.request_expected(
+            RuntimeRpc::ValidateTarget {
                 request: ValidateTargetRequest {
                     target: target.to_owned(),
                 },
-            })
-            .await?
-        {
-            RuntimeResponse::ValidateTarget(payload) => Ok(payload.response),
-            response => unexpected_response("ValidateTarget", &response),
-        }
+            },
+            "ValidateTarget",
+            runtime_payload!(ValidateTarget, payload => payload.response),
+        )
+        .await
     }
 
     /// Query daemon diagnostics.
     pub async fn doctor(&self) -> Result<DoctorPayload, ClientError> {
-        match self.request(RuntimeRpc::Doctor).await? {
-            RuntimeResponse::Doctor(payload) => Ok(payload),
-            response => unexpected_response("Doctor", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::Doctor,
+            "Doctor",
+            runtime_payload!(Doctor, payload => payload),
+        )
+        .await
     }
 
     /// Query the daemon version and protocol capability payload.
     pub async fn version(&self) -> Result<VersionPayload, ClientError> {
-        match self.request(RuntimeRpc::Version).await? {
-            RuntimeResponse::Version(payload) => Ok(payload),
-            response => unexpected_response("Version", &response),
-        }
+        self.request_expected(
+            RuntimeRpc::Version,
+            "Version",
+            runtime_payload!(Version, payload => payload),
+        )
+        .await
     }
 
     /// Query one batch of lifecycle events.
@@ -271,7 +304,7 @@ async fn request_on_stream(
     rpc: RuntimeRpc,
 ) -> Result<RuntimeResponse, ClientError> {
     let (read_half, mut write_half) = stream.into_split();
-    write_json_line(&mut write_half, &rpc).await?;
+    write_json_line(&mut write_half, &LilodRpc::Runtime(rpc)).await?;
 
     let mut reader = BufReader::new(read_half);
     match read_json_line(&mut reader).await? {

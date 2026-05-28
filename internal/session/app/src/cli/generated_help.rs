@@ -9,11 +9,11 @@ pub const SESSION_RUN_ROLE_HELP: &str = "Role label recorded on the session.";
 #[rustfmt::skip]
 pub const SESSION_RUN_DIR_HELP: &str = "Filesystem directory used as the runtime's working directory. Relative paths resolve against the current shell cwd; the path must exist.";
 #[rustfmt::skip]
-pub const SESSION_RUN_NAMESPACE_HELP: &str = "Namespace slug for the session. Overrides SM_NAMESPACE and the user namespace context.";
+pub const SESSION_RUN_NAMESPACE_HELP: &str = "Namespace slug for the session. Overrides the user namespace context.";
 #[rustfmt::skip]
 pub const SESSION_RUN_LABELS_HELP: &str = "Session label as key=value.";
 #[rustfmt::skip]
-pub const SESSION_RUN_AGENT_CONFIG_HELP: &str = "Agent config name resolved as `~/.agm/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings).";
+pub const SESSION_RUN_AGENT_CONFIG_HELP: &str = "Agent config name resolved under `~/.lilo/config/session/agents/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings).";
 #[rustfmt::skip]
 pub const SESSION_RUN_ISOLATION_HELP: &str = "Runtime isolation policy. Accepted shapes are host, docker, or docker:PROFILE.";
 #[rustfmt::skip]

@@ -26,7 +26,7 @@ pub use lilo_rm_core::{IsolationPolicy, MountSpec};
 pub use mcp::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, MCP_PROTOCOL_VERSION, tool_error, tool_success,
 };
-pub use paths::{SmEndpoint, SmPaths, SmPathsError, rtmd_socket_path};
+pub use paths::{DaemonEndpoint, LiloPathError, LiloPaths};
 pub use proto::{
     CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest, DeleteResponse, DoctorFinding,
     DoctorRequest, DoctorResponse, LabelRequest, LabelResponse, ListRequest, ListResponse,
@@ -35,9 +35,9 @@ pub use proto::{
     MailStopCheckResponse, MailUnreadCount, McpBridgeRequest, McpBridgeResponse,
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceDeleteRequest,
     NamespaceDeleteResponse, NamespaceGetRequest, NamespaceGetResponse, NamespaceListRequest,
-    NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcRequest, RpcResponse,
-    RuntimeDoctorReport, ShutdownResponse, SpawnRequest, SpawnResponse, TargetError, WaitCondition,
-    WaitRequest, WaitResponse,
+    NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcResponse,
+    RuntimeDoctorReport, SessionRpc, ShutdownResponse, SpawnRequest, SpawnResponse, TargetError,
+    WaitCondition, WaitRequest, WaitResponse,
 };
 pub use types::{
     Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailStatus,

@@ -21,6 +21,12 @@ name = "sm"
 path = "src/main.rs"
 
 [dependencies]
+lilo-db.workspace = true
+lilo-im-core.workspace = true
+tokio-util.workspace = true
+lilo-wire.workspace = true
+lilo-runtime-daemon.workspace = true
+lilo-paths.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 lilo-rm-core.workspace = true
@@ -30,9 +36,11 @@ nix.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [build-dependencies]
+lilo-build-support.workspace = true
 lilo-session-core.workspace = true
 serde_json.workspace = true
 
@@ -40,9 +48,11 @@ serde_json.workspace = true
 assert_cmd.workspace = true
 chrono.workspace = true
 criterion.workspace = true
+lilo-db.workspace = true
 lilo-im-core.workspace = true
 lilo-im-store.workspace = true
 insta.workspace = true
+sqlx.workspace = true
 tempfile.workspace = true
 
 [[bench]]

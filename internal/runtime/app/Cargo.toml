@@ -26,6 +26,8 @@ anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true
 libc.workspace = true
+lilo-db.workspace = true
+lilo-paths.workspace = true
 lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
 lilo-runtime-daemon.workspace = true
@@ -39,12 +41,15 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [build-dependencies]
+lilo-build-support.workspace = true
 lilo-rm-core.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 lilo-runtime-platform = { workspace = true, features = ["test-support"] }
+lilo-wire.workspace = true
+sqlx.workspace = true
 tempfile.workspace = true
 
 [[bench]]

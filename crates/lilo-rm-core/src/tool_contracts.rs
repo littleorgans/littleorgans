@@ -141,23 +141,30 @@ impl ToolContract {
 
 impl ToolParam {
     fn schema_value(&self) -> Value {
-        let mut schema = kind_schema(
-            &self.kind,
-            self.format.as_deref(),
-            self.items_kind.as_ref(),
-            self.items_format.as_deref(),
-        );
-        schema["description"] = Value::String(self.mcp_description.clone());
-        schema
+        describe_schema(
+            kind_schema(
+                &self.kind,
+                self.format.as_deref(),
+                self.items_kind.as_ref(),
+                self.items_format.as_deref(),
+            ),
+            &self.mcp_description,
+        )
     }
 }
 
 impl ToolOutput {
     fn schema_value(&self) -> Value {
-        let mut schema = kind_schema(&self.kind, None, self.items_kind.as_ref(), None);
-        schema["description"] = Value::String(self.description.clone());
-        schema
+        describe_schema(
+            kind_schema(&self.kind, None, self.items_kind.as_ref(), None),
+            &self.description,
+        )
     }
+}
+
+fn describe_schema(mut schema: Value, description: &str) -> Value {
+    schema["description"] = Value::String(description.to_owned());
+    schema
 }
 
 fn kind_schema(

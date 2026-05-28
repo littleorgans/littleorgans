@@ -9,16 +9,17 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{
-    FAKE_RUNTIME_READY, RtmHarness, output_stderr, output_stdout, spawn_ok, spawn_output_ok,
-    wait_for_log, wait_for_status,
+    FAKE_RUNTIME_READY, RtmHarness, headless_spawn_command, headless_spawn_request_with_env,
+    output_stderr, output_stdout, spawn_ok, spawn_output_ok, wait_for_log, wait_for_log_contains,
+    wait_for_status,
 };
 use lilo_rm_core::{
-    ErrorCode, HeadlessSpawnTarget, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec,
-    NudgeFailureReason, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeKind,
-    RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnTarget, ValidateTargetOutcome,
-    ValidateTargetPayload, ValidateTargetRequest, ValidateTargetResponse, read_json_line_blocking,
-    write_json_line_blocking,
+    ErrorCode, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec, NudgeFailureReason,
+    NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse, RuntimeRpc,
+    SpawnRequest, ValidateTargetOutcome, ValidateTargetPayload, ValidateTargetRequest,
+    ValidateTargetResponse, read_json_line_blocking, write_json_line_blocking,
 };
+use lilo_wire::LilodRpc;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -97,18 +98,11 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
         .block_on(lilo_runtime_app::shared::request(
             harness.socket_path(),
             RuntimeRpc::Spawn {
-                request: SpawnRequest {
+                request: headless_spawn_request_with_env(
                     session_id,
-                    runtime: RuntimeKind::Claude,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: vec![LaunchEnv::new("RTM_TEST_STDIO_SENTINELS", "1")],
-                    mounts: Vec::new(),
-                    cwd: harness.rtm_home().to_path_buf(),
-                    target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
-                    force: false,
-                    shell_resume: None,
-                },
+                    harness.rtm_home(),
+                    vec![LaunchEnv::new("RTM_TEST_STDIO_SENTINELS", "1")],
+                ),
             },
         ))
         .expect("headless spawn");
@@ -122,7 +116,11 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
     assert_eq!(payload.lifecycle.tmux_pane, None);
     assert_eq!(
         log_dir,
-        harness.rtm_home().join("logs").join(session_id.to_string())
+        harness
+            .rtm_home()
+            .join("logs")
+            .join("runtimes")
+            .join(session_id.to_string())
     );
     assert_eq!(stdout_path, log_dir.join("stdout.log"));
     assert_eq!(stderr_path, log_dir.join("stderr.log"));
@@ -150,7 +148,11 @@ fn headless_spawn_cwd_flag_overrides_caller_cwd() {
     spawn_output_ok(output, "claude");
 
     wait_for_log(
-        caller_cwd.join("logs").join(&session_id).join("stdout.log"),
+        caller_cwd
+            .join("logs")
+            .join("runtimes")
+            .join(&session_id)
+            .join("stdout.log"),
         &format!("{FAKE_RUNTIME_READY} {}\n", runtime_cwd.display()),
     );
 }
@@ -175,7 +177,7 @@ fn headless_spawn_env_flag_forwards_caller_explicit_duplicate_and_empty_values()
         .arg("--env")
         .arg("CLAUDE_CODE_EMPTY=")
         .env_clear()
-        .env("RTM_SOCKET_PATH", harness.socket_path())
+        .env("LILO_SOCKET_PATH", harness.socket_path())
         .env("CLAUDE_CODE_OAUTH_TOKEN", &token)
         .env("HOME", "/host/home")
         .env("USER", "host-user")
@@ -187,6 +189,7 @@ fn headless_spawn_env_flag_forwards_caller_explicit_duplicate_and_empty_values()
     let stdout_path = harness
         .rtm_home()
         .join("logs")
+        .join("runtimes")
         .join(&session_id)
         .join("stdout.log");
     let stdout = wait_for_log_contains(&stdout_path, &format!("CLAUDE_CODE_OAUTH_TOKEN={token}\n"));
@@ -288,7 +291,7 @@ fn docker_spawn_env_flag_reaches_container_and_runtime() {
         .arg("--env")
         .arg("CLAUDE_CODE_EMPTY=")
         .env_clear()
-        .env("RTM_SOCKET_PATH", harness.socket_path())
+        .env("LILO_SOCKET_PATH", harness.socket_path())
         .env("CLAUDE_CODE_OAUTH_TOKEN", &token)
         .env("HOME", "/host/home")
         .env("USER", "host-user")
@@ -493,31 +496,8 @@ fn assert_spawn_conflict(
     assert!(stderr.contains(identity), "{stderr}");
 }
 
-fn wait_for_log_contains(path: &std::path::Path, expected: &str) -> String {
-    common::wait_until(Duration::from_secs(5), || {
-        let contents = std::fs::read_to_string(path).ok()?;
-        contents.contains(expected).then_some(contents)
-    })
-    .unwrap_or_else(|| {
-        let observed = std::fs::read_to_string(path);
-        panic!(
-            "log {} never contained {expected:?}, observed {observed:?}",
-            path.display()
-        )
-    })
-}
-
 fn spawn_capture_command(session_id: Uuid) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rtm"));
-    command
-        .arg("spawn")
-        .arg("--runtime")
-        .arg("claude")
-        .arg("--session-id")
-        .arg(session_id.to_string())
-        .arg("--target")
-        .arg("headless");
-    command
+    headless_spawn_command(session_id)
 }
 
 fn capture_spawn_request(mut command: Command) -> (SpawnRequest, std::process::Output) {
@@ -530,7 +510,7 @@ fn capture_spawn_request(mut command: Command) -> (SpawnRequest, std::process::O
     let handle = thread::spawn(move || accept_spawn_request(&listener));
 
     let output = command
-        .env("RTM_SOCKET_PATH", &socket_path)
+        .env("LILO_SOCKET_PATH", &socket_path)
         .output()
         .expect("spawn client");
     let request = handle.join().expect("capture thread");
@@ -556,12 +536,15 @@ fn accept_spawn_request(listener: &UnixListener) -> SpawnRequest {
 
 fn read_spawn_request(stream: UnixStream) -> SpawnRequest {
     let mut reader = BufReader::new(stream);
-    let rpc: RuntimeRpc = read_json_line_blocking(&mut reader).expect("read captured request");
+    let rpc: LilodRpc = read_json_line_blocking(&mut reader).expect("read captured request");
     write_json_line_blocking(
         reader.get_mut(),
         &RuntimeResponse::error(ErrorCode::SpawnConflict, "captured spawn request"),
     )
     .expect("write captured response");
+    let LilodRpc::Runtime(rpc) = rpc else {
+        panic!("unexpected captured substrate rpc: {rpc:?}");
+    };
     let RuntimeRpc::Spawn { request } = rpc else {
         panic!("unexpected captured rpc: {rpc:?}");
     };
@@ -570,7 +553,7 @@ fn read_spawn_request(stream: UnixStream) -> SpawnRequest {
 
 fn request_raw(harness: &RtmHarness, rpc: &RuntimeRpc) -> RuntimeResponse {
     let mut stream = UnixStream::connect(harness.socket_path()).expect("connect daemon");
-    write_json_line_blocking(&mut stream, rpc).expect("write request");
+    write_json_line_blocking(&mut stream, &LilodRpc::Runtime(rpc.clone())).expect("write request");
     let mut reader = BufReader::new(stream);
     read_json_line_blocking(&mut reader).expect("read response")
 }

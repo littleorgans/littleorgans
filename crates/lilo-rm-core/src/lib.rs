@@ -27,6 +27,7 @@ pub mod mcp;
 pub mod path_shaped_envs;
 pub mod proto;
 pub mod spawn_context;
+pub(crate) mod string_serde;
 pub mod tool_contracts;
 pub mod types;
 mod version;
@@ -47,8 +48,12 @@ pub use launcher::{
     LaunchEnv, LaunchSpec, LauncherError, RuntimeLauncher, ShellResume, upsert_launch_env,
 };
 pub use mcp::{
-    JsonRpcError, JsonRpcRequest, JsonRpcResponse, MCP_PROTOCOL_VERSION, McpBridgeRequest,
-    McpBridgeResponse, json_rpc_error, json_rpc_failure, json_rpc_result, tool_error, tool_success,
+    HostMountPolicyError, JsonRpcError, JsonRpcRequest, JsonRpcResponse, MCP_PROTOCOL_VERSION,
+    McpBridgeRequest, McpBridgeResponse, McpRequest, ToolCallRequest,
+    ensure_mounts_allowed_for_isolation, json_rpc_error, json_rpc_failure,
+    json_rpc_response_from_result, json_rpc_result, parse_json_rpc_line, prepare_mcp_request,
+    serialize_json_rpc_response, tool_call_request, tool_error, tool_error_with_meta_key,
+    tool_success,
 };
 pub use path_shaped_envs::{
     CLAUDE_PATH_SHAPED_ENVS, PathShapedEnv, PathValueShape, claude_path_shaped_env,

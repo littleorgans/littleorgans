@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/lilo",
+    "crates/lilo-build-support",
     "crates/lilo-im-core",
     "crates/lilo-im-store",
     "crates/lilo-im-stub",
@@ -8,6 +9,8 @@ members = [
     "crates/lilo-paths",
     "crates/lilo-rm-core",
     "crates/lilo-rm-client",
+    "internal/db",
+    "internal/wire",
     "internal/identity/service",
     "internal/runtime/platform",
     "internal/runtime/launchers",
@@ -19,6 +22,7 @@ members = [
     "internal/session/driver",
     "internal/session/daemon",
     "internal/session/app",
+    "tests/integration",
     "tools/xtask",
 ]
 resolver = "3"
@@ -42,9 +46,12 @@ criterion = "0.5"
 indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1.43.2", features = ["json", "redactions"] }
 libc = "0.2.186"
+lilo-build-support = { path = "crates/lilo-build-support" }
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
+lilo-db = { path = "internal/db" }
+lilo-wire = { path = "internal/wire" }
 lilo-identity-service = { path = "internal/identity/service" }
 lilo-paths = { path = "crates/lilo-paths", version = "0.8.0" }
 lilo-rm-client = { path = "crates/lilo-rm-client", version = "0.8.0" }
@@ -60,7 +67,6 @@ lilo-session-daemon = { path = "internal/session/daemon" }
 lilo-session-driver = { path = "internal/session/driver" }
 lilo-session-store = { path = "internal/session/store" }
 nix = { version = "0.30", features = ["process", "signal", "socket", "term", "user"] }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sqlx = { version = "0.8.3", features = ["chrono", "migrate", "runtime-tokio", "sqlite", "uuid"] }
@@ -78,6 +84,7 @@ tokio = { version = "1.48.0", features = [
     "sync",
     "time",
 ] }
+tokio-util = "0.7"
 toml = "0.8.23"
 tracing = "0.1.41"
 # `json` feature retained beyond the runtime-matters baseline because

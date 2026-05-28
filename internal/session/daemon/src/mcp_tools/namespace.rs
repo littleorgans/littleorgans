@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use lilo_session_core::{
-    NamespaceGetRequest, NamespaceListRequest, RpcRequest, RpcResponse, tool_success,
+    NamespaceGetRequest, NamespaceListRequest, RpcResponse, SessionRpc, tool_success,
 };
 use serde_json::{Value, json};
 
@@ -24,7 +24,7 @@ pub(crate) async fn namespace_list(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::NamespaceList {
+            SessionRpc::NamespaceList {
                 request: NamespaceListRequest::default(),
             },
         )
@@ -63,7 +63,7 @@ async fn namespace_record_by_slug(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::NamespaceGet {
+            SessionRpc::NamespaceGet {
                 request: NamespaceGetRequest {
                     slug: slug.to_string(),
                 },

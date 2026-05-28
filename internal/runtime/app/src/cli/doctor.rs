@@ -1,13 +1,16 @@
 use anyhow::{Result, bail};
 use lilo_rm_core::{RuntimeResponse, RuntimeRpc};
 
-use crate::cli::output::{self, OutputArgs};
+use crate::cli::output::OutputArgs;
 
 pub async fn run(output_args: OutputArgs) -> Result<()> {
-    let socket_path = crate::shared::socket_path()?;
-    let response = crate::shared::request(&socket_path, RuntimeRpc::Doctor).await?;
-    match response {
-        RuntimeResponse::Doctor(payload) => output::emit(&output_args, &payload.doctor),
-        other => bail!("unexpected doctor response: {other:?}"),
-    }
+    super::version::emit_rpc_response(
+        &output_args,
+        RuntimeRpc::Doctor,
+        |response| match response {
+            RuntimeResponse::Doctor(payload) => Ok(payload.doctor),
+            other => bail!("unexpected doctor response: {other:?}"),
+        },
+    )
+    .await
 }

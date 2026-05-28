@@ -1,138 +1,61 @@
 mod common;
-use common::{LOCAL_UID, TestDaemon, local_context};
-use lilo_rm_core::{CaptureError, CaptureResponse, PaneSnapshot};
-use lilo_session_core::{
-    CaptureRequest, IsolationPolicy, RpcRequest, RpcResponse, RuntimeKind, SpawnRequest,
+use common::{
+    LOCAL_UID, TestDaemon, handle_spawn, headless_spawn_request, local_context, spawn_request,
 };
+use lilo_rm_core::{CaptureError, CaptureResponse};
+use lilo_session_core::{CaptureRequest, RpcResponse, SessionRpc};
 
 #[tokio::test]
-async fn spawn_validates_target_and_persists_tmux_pane() {
+async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    daemon.driver.set_spawn_tmux_pane("test:0.0");
 
-    let response = daemon
-        .state
-        .handle(
-            context,
-            RpcRequest::Spawn {
-                request: Box::new(SpawnRequest {
-                    runtime: RuntimeKind::Claude,
-                    role: "engineer".to_string(),
-                    workspace: daemon.dir.path().display().to_string(),
-                    dir: None,
-                    namespace: None,
-                    target: "tmux:test:0.0".to_string(),
-                    agent_config: None,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: Vec::new(),
-                    mounts: Vec::new(),
-                    shell_resume: None,
-                    labels: Vec::new(),
-                    force: false,
-                }),
-            },
-        )
-        .await;
+    let request = headless_spawn_request("engineer", daemon.dir.path().display().to_string());
+    let response = handle_spawn(&daemon, context, request).await;
 
     let RpcResponse::Spawned { response } = response.response else {
         panic!("expected spawn response");
     };
-    assert_eq!(response.session.tmux_pane.as_deref(), Some("test:0.0"));
-    assert_eq!(daemon.driver.launches()[0].target, "tmux:test:0.0");
+    assert_eq!(response.session.tmux_pane, None);
+    assert!(response.session.runtime_pid > 0);
 }
 
 #[tokio::test]
 async fn spawn_rejects_invalid_target_before_launch() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
-
-    let response = spawn_with_target(&daemon, "tmux:not-a-pane").await;
-
-    let RpcResponse::Error { message } = response.response else {
-        panic!("expected target validation error");
-    };
-    assert!(message.contains("invalid runtime target"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
+    assert_spawn_rejects_target("tmux:not-a-pane", "invalid runtime target").await;
 }
 
 #[tokio::test]
 async fn spawn_rejects_tmux_pane_dead_target_before_launch() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
-
-    let response = spawn_with_target(&daemon, "tmux:dead:0.0").await;
-
-    let RpcResponse::Error { message } = response.response else {
-        panic!("expected target validation error");
-    };
-    assert!(message.contains("tmux pane is unavailable"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
+    assert_spawn_rejects_target("tmux:dead:0.0", "tmux address dead:0.0 is not alive").await;
 }
 
 #[tokio::test]
 async fn spawn_rejects_unsupported_target_before_launch() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
+    assert_spawn_rejects_target("ssh:host", "invalid runtime target: ssh:host").await;
+}
 
-    let response = spawn_with_target(&daemon, "ssh:host").await;
+async fn assert_spawn_rejects_target(target: &str, expected: &str) {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let response = spawn_with_target(&daemon, target).await;
 
     let RpcResponse::Error { message } = response.response else {
         panic!("expected target validation error");
     };
-    assert!(message.contains("unsupported runtime target"), "{message}");
-    assert!(daemon.driver.launches().is_empty());
+    assert!(message.contains(expected), "{message}");
 }
 
 #[tokio::test]
-async fn capture_delegates_to_driver_for_selected_session() {
+async fn capture_reports_runtime_headless_failure() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    daemon
-        .driver
-        .set_capture(CaptureResponse::Captured(PaneSnapshot {
-            content: "pane text\n".to_string(),
-            captured_at_ms: 10,
-            scrollback_lines_requested: 20,
-            scrollback_lines_included: 1,
-            pane_history_lines: 1,
-        }));
     let session = common::spawn_test_session(&daemon, &context, "engineer").await;
 
     let response = daemon
         .state
         .handle(
             context,
-            RpcRequest::Capture {
-                request: CaptureRequest {
-                    session_id: session.id,
-                    scrollback_lines: Some(20),
-                },
-            },
-        )
-        .await;
-
-    let RpcResponse::Capture { response } = response.response else {
-        panic!("expected capture response");
-    };
-    let CaptureResponse::Captured(snapshot) = response.capture else {
-        panic!("expected captured snapshot");
-    };
-    assert_eq!(snapshot.content, "pane text\n");
-}
-
-#[tokio::test]
-async fn capture_surfaces_pane_unavailable_failure() {
-    let daemon = TestDaemon::new(LOCAL_UID).await;
-    let context = local_context();
-    daemon
-        .driver
-        .set_capture(CaptureResponse::Failed(CaptureError::PaneUnavailable));
-    let session = common::spawn_test_session(&daemon, &context, "engineer").await;
-
-    let response = daemon
-        .state
-        .handle(
-            context,
-            RpcRequest::Capture {
+            SessionRpc::Capture {
                 request: CaptureRequest {
                     session_id: session.id,
                     scrollback_lines: Some(20),
@@ -146,7 +69,7 @@ async fn capture_surfaces_pane_unavailable_failure() {
     };
     assert_eq!(
         response.capture,
-        CaptureResponse::Failed(CaptureError::PaneUnavailable)
+        CaptureResponse::Failed(CaptureError::NotATmuxTarget)
     );
 }
 
@@ -154,28 +77,10 @@ async fn spawn_with_target(
     daemon: &TestDaemon,
     target: &str,
 ) -> lilo_session_daemon::handler::HandlerResult {
-    daemon
-        .state
-        .handle(
-            local_context(),
-            RpcRequest::Spawn {
-                request: Box::new(SpawnRequest {
-                    runtime: RuntimeKind::Claude,
-                    role: "engineer".to_string(),
-                    workspace: daemon.dir.path().display().to_string(),
-                    dir: None,
-                    namespace: None,
-                    target: target.to_string(),
-                    agent_config: None,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: Vec::new(),
-                    mounts: Vec::new(),
-                    shell_resume: None,
-                    labels: Vec::new(),
-                    force: false,
-                }),
-            },
-        )
-        .await
+    handle_spawn(
+        daemon,
+        local_context(),
+        spawn_request("engineer", daemon.dir.path().display().to_string(), target),
+    )
+    .await
 }

@@ -1,7 +1,11 @@
 mod common;
 use common::OrPanic as _;
+use common::{
+    assert_success, create_namespace, namespace_binding_contents as binding_contents, stderr,
+    stdout,
+};
 
-use std::process::{Command, Output};
+use std::process::Command;
 
 #[test]
 fn config_help_lists_set_context() {
@@ -66,14 +70,14 @@ fn set_context_uses_home_fallback_when_sm_home_is_unset() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["config", "set-context", "fallback"])
-        .env_remove("SM_HOME")
+        .env_remove("LILO_HOME")
         .env("HOME", home.path())
-        .env("SM_SOCKET_PATH", daemon.socket_path())
+        .env("LILO_SOCKET_PATH", daemon.socket_path())
         .output()
         .or_panic("sm config set-context fallback executes");
 
     assert_success("sm config set-context fallback", &output);
-    assert_eq!(binding_contents(&home.path().join(".sm")), "fallback\n");
+    assert_eq!(binding_contents(&home.path().join(".lilo")), "fallback\n");
 }
 
 #[test]
@@ -107,46 +111,23 @@ fn set_context_overwrites_binding_atomically() {
 
 #[test]
 fn set_context_daemon_unreachable_does_not_write() {
-    let sm_home = tempfile::tempdir().or_panic("sm home tempdir");
+    let sm_home = tempfile::tempdir().or_panic("lilo home tempdir");
 
     let output = Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["config", "set-context", "default"])
-        .env("SM_HOME", sm_home.path())
+        .env("LILO_HOME", sm_home.path())
         .env("HOME", sm_home.path())
         .output()
         .or_panic("sm config set-context default executes");
 
     assert!(!output.status.success());
     assert!(stderr(&output).contains("failed to connect"));
-    assert!(!sm_home.path().join("namespace").exists());
-}
-
-fn create_namespace(daemon: &common::DaemonFixture, name: &str) {
-    let output = daemon
-        .command()
-        .args(["create", "namespace", name])
-        .output()
-        .or_panic("sm create namespace executes");
-    assert_success("sm create namespace", &output);
-}
-
-fn binding_contents(dir: &std::path::Path) -> String {
-    std::fs::read_to_string(dir.join("namespace")).or_panic("binding file reads")
-}
-
-fn assert_success(command: &str, output: &Output) {
     assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
+        !sm_home
+            .path()
+            .join("config")
+            .join("session")
+            .join("namespace")
+            .exists()
     );
-}
-
-fn stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
 }

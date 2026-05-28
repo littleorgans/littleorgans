@@ -5,6 +5,7 @@ use lilo_rm_core::{
     SpawnRequest, SpawnTarget, TmuxAddress, TmuxSpawnTarget, read_json_line,
     read_json_line_blocking, write_json_line, write_json_line_blocking,
 };
+use lilo_wire::LilodRpc;
 use std::io::BufReader as StdBufReader;
 use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::PathBuf;
@@ -142,7 +143,7 @@ fn shim_env(config: &DaemonConfig) -> Result<Vec<LaunchEnv>> {
         .socket_path()
         .context("headless shim transport requires a Unix socket endpoint")?;
     Ok(vec![LaunchEnv {
-        key: "RTM_SOCKET_PATH".to_owned(),
+        key: "LILO_SOCKET_PATH".to_owned(),
         value: socket_path.to_string_lossy().into_owned(),
     }])
 }
@@ -155,7 +156,11 @@ pub async fn request_launch(
         .await
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     let (read_half, mut write_half) = stream.into_split();
-    write_json_line(&mut write_half, &RuntimeRpc::ShimLaunch { request }).await?;
+    write_json_line(
+        &mut write_half,
+        &LilodRpc::Runtime(RuntimeRpc::ShimLaunch { request }),
+    )
+    .await?;
 
     let mut reader = BufReader::new(read_half);
     launch_from_response(read_json_line(&mut reader).await?)
@@ -167,7 +172,10 @@ pub fn request_launch_blocking(
 ) -> Result<LaunchSpec> {
     let mut stream = StdUnixStream::connect(socket_path)
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
-    write_json_line_blocking(&mut stream, &RuntimeRpc::ShimLaunch { request })?;
+    write_json_line_blocking(
+        &mut stream,
+        &LilodRpc::Runtime(RuntimeRpc::ShimLaunch { request }),
+    )?;
 
     let mut reader = StdBufReader::new(stream);
     launch_from_response(read_json_line_blocking(&mut reader)?)
@@ -198,7 +206,7 @@ async fn send_shim_rpc(
         .await
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     let (read_half, mut write_half) = stream.into_split();
-    write_json_line(&mut write_half, &rpc).await?;
+    write_json_line(&mut write_half, &LilodRpc::Runtime(rpc)).await?;
 
     let mut reader = BufReader::new(read_half);
     ack_from_response(read_json_line(&mut reader).await?, label)
@@ -211,7 +219,7 @@ fn send_shim_rpc_blocking(
 ) -> Result<()> {
     let mut stream = StdUnixStream::connect(socket_path)
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
-    write_json_line_blocking(&mut stream, &rpc)?;
+    write_json_line_blocking(&mut stream, &LilodRpc::Runtime(rpc.clone()))?;
 
     let mut reader = StdBufReader::new(stream);
     ack_from_response(read_json_line_blocking(&mut reader)?, label)
@@ -237,33 +245,22 @@ fn ack_from_response(response: RuntimeResponse, label: &'static str) -> Result<(
 mod tests {
     use super::*;
     use crate::error::{RpcErrorContext, rpc_error_response};
-    use crate::reconcile::ReconcileConfig;
     use lilo_rm_core::{ErrorCode, RuntimeKind, RuntimeResponse};
     use lilo_runtime_platform::test_support::TmuxSession;
-    use lilo_runtime_store::StoreConfig;
     use std::path::PathBuf;
 
     fn test_config() -> DaemonConfig {
-        DaemonConfig {
-            endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm.sock"),
-            shim_path: PathBuf::from("/tmp/rtm-shim"),
-            log_root: PathBuf::from("/tmp/rtm/logs"),
-            store: StoreConfig {
-                db_path: PathBuf::from("/tmp/rtm.db"),
-            },
-            reconcile: ReconcileConfig::default(),
-            docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
-        }
+        DaemonConfig::test_fixture()
     }
 
     #[test]
     fn shim_env_only_contains_socket_path() {
         // Contract: the bootstrap env (the only env that ever rides through
         // tmux respawn-pane -e and is inherited by the shim process) is
-        // exactly {RTM_SOCKET_PATH}. Runtime env arrives over UDS.
+        // exactly {LILO_SOCKET_PATH}. Runtime env arrives over UDS.
         let env = shim_env(&test_config()).expect("shim env");
         assert_eq!(env.len(), 1, "bootstrap env widened unexpectedly: {env:?}");
-        assert_eq!(env[0].key, "RTM_SOCKET_PATH");
+        assert_eq!(env[0].key, "LILO_SOCKET_PATH");
         assert_eq!(env[0].value, "/tmp/rtm.sock");
     }
 

@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), forbid(unsafe_code))]
 
 pub mod cli;
+pub mod compose;
 pub mod mcp;
 pub mod tool_contracts;
 pub mod tool_docs;
@@ -22,7 +23,6 @@ pub async fn run() -> anyhow::Result<()> {
     }
 
     match Cli::parse().command {
-        Command::Daemon(args) => cli::daemon::run(args).await,
         Command::Run(args) => cli::run::run(args).await,
         Command::Create(args) => cli::namespace::create(args).await,
         Command::Config(args) => cli::config::run(args).await,
@@ -36,9 +36,6 @@ pub async fn run() -> anyhow::Result<()> {
         Command::Wait(args) => cli::wait::run(args).await,
         Command::Nudge(args) => cli::nudge::run(args).await,
         Command::Mcp(args) => cli::mcp::run(args).await,
-        Command::InternalDaemon => {
-            lilo_session_daemon::run_daemon(lilo_session_core::SmPaths::from_env()?).await
-        }
     }
 }
 

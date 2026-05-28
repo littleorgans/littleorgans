@@ -8,6 +8,7 @@
 
 mod backend;
 mod docker_argv;
+mod docker_command;
 mod docker_mount_plan;
 pub mod docker_preflight;
 mod docker_runtime;
@@ -16,6 +17,7 @@ mod error;
 pub mod event_channel;
 mod event_log;
 mod handler;
+mod identity;
 mod mcp_bridge;
 mod reconcile;
 mod runtime_kill;

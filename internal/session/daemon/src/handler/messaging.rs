@@ -19,11 +19,11 @@ impl DaemonState {
         context: &RequestContext,
         request: MailSendRequest,
     ) -> Result<RpcResponse> {
-        let recipients = self.resolve_selector(&request.to, "recipient")?;
+        let recipients = self.resolve_selector(&request.to, "recipient").await?;
         let sender_id = match request.from {
             Some(from) => {
                 let id = Uuid::parse_str(&from).context("invalid sender session id")?;
-                self.require_session(&id, "sender")?;
+                self.require_session(&id, "sender").await?;
                 id
             }
             None => Uuid::nil(),
@@ -57,7 +57,9 @@ impl DaemonState {
         context: &RequestContext,
         request: MailReadRequest,
     ) -> Result<RpcResponse> {
-        let recipients = self.resolve_selector(&request.selector, "recipient")?;
+        let recipients = self
+            .resolve_selector(&request.selector, "recipient")
+            .await?;
         let mut mail = Vec::new();
         let mut errors = Vec::new();
         for recipient in recipients {
@@ -75,20 +77,25 @@ impl DaemonState {
         })
     }
 
-    pub(super) fn mail_check(&self, request: &MailCheckRequest) -> Result<RpcResponse> {
-        let counts = self.mail_counts(&request.selector)?;
-        let unread = total_unread(&counts);
-        Ok(RpcResponse::MailChecked {
-            response: MailCheckResponse { unread, counts },
+    pub(super) async fn mail_check(&self, request: &MailCheckRequest) -> Result<RpcResponse> {
+        self.mail_count_response(&request.selector, |unread, counts| {
+            RpcResponse::MailChecked {
+                response: MailCheckResponse { unread, counts },
+            }
         })
+        .await
     }
 
-    pub(super) fn mail_stop_check(&self, request: &MailStopCheckRequest) -> Result<RpcResponse> {
-        let counts = self.mail_counts(&request.selector)?;
-        let unread = total_unread(&counts);
-        Ok(RpcResponse::MailStopChecked {
-            response: MailStopCheckResponse { unread, counts },
+    pub(super) async fn mail_stop_check(
+        &self,
+        request: &MailStopCheckRequest,
+    ) -> Result<RpcResponse> {
+        self.mail_count_response(&request.selector, |unread, counts| {
+            RpcResponse::MailStopChecked {
+                response: MailStopCheckResponse { unread, counts },
+            }
         })
+        .await
     }
 
     pub(super) async fn nudge(
@@ -96,7 +103,7 @@ impl DaemonState {
         context: &RequestContext,
         request: NudgeRequest,
     ) -> Result<RpcResponse> {
-        let recipients = self.resolve_selector(&request.to, "recipient")?;
+        let recipients = self.resolve_selector(&request.to, "recipient").await?;
         let mut nudges = Vec::new();
         let mut errors = Vec::new();
         for recipient in recipients {
@@ -136,8 +143,9 @@ impl DaemonState {
             sent_at: Utc::now(),
             read_at: None,
         };
-        self.store()?
+        self.store()
             .insert_mail(&mail)
+            .await
             .context("failed to persist mail")?;
         Ok(mail)
     }
@@ -155,22 +163,22 @@ impl DaemonState {
                 &session_resource(recipient_id),
             )
             .await?;
-        self.store()?
+        self.store()
             .read_unread_mail(&recipient_id, Utc::now(), peek)
+            .await
             .context("failed to read mail")
     }
 
-    fn mail_counts(&self, selector: &Selector) -> Result<Vec<MailUnreadCount>> {
-        let recipients = self.resolve_selector(selector, "recipient")?;
-        recipients
-            .iter()
-            .map(|session| {
-                Ok(MailUnreadCount {
-                    session_id: session.id.to_string(),
-                    unread: self.unread_mail_count(&session.id)?,
-                })
-            })
-            .collect()
+    async fn mail_counts(&self, selector: &Selector) -> Result<Vec<MailUnreadCount>> {
+        let recipients = self.resolve_selector(selector, "recipient").await?;
+        let mut counts = Vec::new();
+        for session in recipients {
+            counts.push(MailUnreadCount {
+                session_id: session.id.to_string(),
+                unread: self.unread_mail_count(&session.id).await?,
+            });
+        }
+        Ok(counts)
     }
 
     async fn nudge_one(
@@ -199,11 +207,21 @@ impl DaemonState {
         })
     }
 
-    fn unread_mail_count(&self, recipient_id: &Uuid) -> Result<usize> {
-        self.require_session(recipient_id, "recipient")?;
-        self.store()?
+    async fn unread_mail_count(&self, recipient_id: &Uuid) -> Result<usize> {
+        self.require_session(recipient_id, "recipient").await?;
+        self.store()
             .count_unread_mail(recipient_id)
+            .await
             .context("failed to count unread mail")
+    }
+
+    async fn mail_count_response<F>(&self, selector: &Selector, response: F) -> Result<RpcResponse>
+    where
+        F: FnOnce(usize, Vec<MailUnreadCount>) -> RpcResponse,
+    {
+        let counts = self.mail_counts(selector).await?;
+        let unread = total_unread(&counts);
+        Ok(response(unread, counts))
     }
 }
 

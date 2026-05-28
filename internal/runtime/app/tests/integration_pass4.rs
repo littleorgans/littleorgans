@@ -7,12 +7,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use common::{
-    RtmHarness, output_stdout, runtime_event_line_count, status_pid, terminate_process,
-    wait_for_headless_runtime_ready, wait_for_status, wait_for_status_timeout, wait_until,
+    RtmHarness, status_pid, terminate_process, wait_for_events_since,
+    wait_for_headless_runtime_ready, wait_for_status, wait_for_status_timeout,
     wait_until_not_alive,
 };
 use lilo_rm_core::StatusFilter;
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
 
 #[test]
@@ -62,15 +62,6 @@ fn pass4_restart_reconciles_sqlite_lifecycles() {
     assert_eq!(states.get(&sid3).map(String::as_str), Some("Running"));
 }
 
-fn wait_for_events_since(harness: &RtmHarness, cursor: u64, expected: usize) -> String {
-    wait_until(Duration::from_secs(5), || {
-        let output = harness.events_since(cursor);
-        let stdout = output_stdout(output);
-        (runtime_event_line_count(&stdout) == expected).then_some(stdout)
-    })
-    .unwrap_or_else(|| panic!("events after cursor {cursor} never reached {expected}"))
-}
-
 fn spawn(harness: &RtmHarness, session_id: &str, runtime: &str) {
     let output = harness.spawn_runtime(session_id, runtime);
     assert!(
@@ -82,11 +73,8 @@ fn spawn(harness: &RtmHarness, session_id: &str, runtime: &str) {
 fn persisted_states(db_path: &Path) -> HashMap<String, String> {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
-        let store = LifecycleStore::open(StoreConfig {
-            db_path: db_path.to_path_buf(),
-        })
-        .await
-        .expect("store");
+        let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
+        let store = LifecycleStore::open(&db);
         store
             .list(&StatusFilter::empty())
             .await

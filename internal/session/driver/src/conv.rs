@@ -1,8 +1,45 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use lilo_rm_core::{KillOutcome, Lifecycle, LifecycleState, LogAvailability};
+use lilo_rm_core::{
+    KillOutcome, Lifecycle, LifecycleState, RuntimeKind as RuntimeRuntimeKind,
+    SpawnRequest as RuntimeSpawnRequest, SpawnTarget as RuntimeSpawnTarget, SpawnedPayload,
+};
+use lilo_session_core::{
+    RuntimeKind, paths::lifecycle_transcript_path as session_lifecycle_transcript_path,
+};
+use uuid::Uuid;
 
-use crate::driver::{DriverError, DriverProbe};
+use crate::driver::{DriverError, DriverProbe, SpawnLaunch, SpawnedProcess};
+
+pub fn runtime_spawn_request(
+    session_id: Uuid,
+    launch: &SpawnLaunch,
+) -> Result<RuntimeSpawnRequest, DriverError> {
+    Ok(RuntimeSpawnRequest {
+        session_id,
+        runtime: runtime_kind(launch.runtime),
+        isolation: launch.isolation.clone(),
+        image: launch.image.clone(),
+        env: launch.env.clone(),
+        mounts: launch.mounts.clone(),
+        cwd: launch.cwd.clone(),
+        target: RuntimeSpawnTarget::from_str(&launch.target)
+            .map_err(|_| DriverError::InvalidTarget(launch.target.clone()))?,
+        force: launch.force,
+        shell_resume: launch.shell_resume.clone(),
+    })
+}
+
+pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, DriverError> {
+    Ok(SpawnedProcess {
+        runtime_pid: runtime_pid(&payload.lifecycle)?,
+        log_dir: payload.log_dir,
+        stdout_path: payload.stdout_path,
+        stderr_path: payload.stderr_path,
+        tmux_pane: payload.lifecycle.tmux_pane.map(|pane| pane.to_string()),
+    })
+}
 
 pub(crate) fn lifecycle_to_probe(
     lifecycle: &Lifecycle,
@@ -51,15 +88,6 @@ pub(crate) fn lifecycle_to_probe(
     }
 }
 
-pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
-    match lifecycle.log_availability.as_ref() {
-        Some(LogAvailability::Headless { stdout_path, .. }) => Some(stdout_path.clone()),
-        Some(LogAvailability::TmuxPaneSnapshot | LogAvailability::Unavailable { .. }) | None => {
-            None
-        }
-    }
-}
-
 pub(crate) fn lifecycle_state_label(state: &LifecycleState) -> String {
     match state {
         LifecycleState::Forking => "forking".to_string(),
@@ -76,6 +104,23 @@ pub(crate) fn kill_outcome_label(outcome: KillOutcome) -> String {
         KillOutcome::AlreadyExited => "already_exited".to_string(),
         other => format!("unknown ({other:?})"),
     }
+}
+
+pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
+    session_lifecycle_transcript_path(lifecycle)
+}
+
+fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
+    match runtime {
+        RuntimeKind::Claude => RuntimeRuntimeKind::Claude,
+        RuntimeKind::Codex => RuntimeRuntimeKind::Codex,
+    }
+}
+
+fn runtime_pid(lifecycle: &Lifecycle) -> Result<u32, DriverError> {
+    lifecycle
+        .runtime_pid
+        .ok_or_else(|| DriverError::MissingRuntimePid(lifecycle.session_id.to_string()))
 }
 
 #[cfg(test)]

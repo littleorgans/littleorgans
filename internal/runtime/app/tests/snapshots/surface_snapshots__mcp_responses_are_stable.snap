@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-cli/tests/surface_snapshots.rs
+source: internal/runtime/app/tests/surface_snapshots.rs
+assertion_line: 134
 expression: snapshot
 ---
 {
@@ -261,12 +262,12 @@ expression: snapshot
     "result": {
       "content": [
         {
-          "text": "{\"process_exit_watchers\":0,\"shim_sockets\":0,\"event_waiters\":0}",
+          "text": "{\"event_waiters\":\"[count]\",\"process_exit_watchers\":\"[count]\",\"shim_sockets\":\"[count]\"}",
           "type": "text"
         }
       ],
       "structuredContent": {
-        "event_waiters": 0,
+        "event_waiters": "[count]",
         "process_exit_watchers": "[count]",
         "shim_sockets": "[count]"
       }

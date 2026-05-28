@@ -1,16 +1,15 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
-use lilo_session_core::{DEFAULT_NAMESPACE, Label, LabelOp, Namespace, Selector};
-use rusqlite::params;
+use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
 use crate::test_support::OrPanic as _;
 
 use super::*;
 
-#[test]
-fn inserts_and_lists_sessions() {
-    let store = SqliteStore::open_in_memory().or_panic("store opens");
+#[tokio::test]
+async fn inserts_and_lists_sessions() {
+    let (_dir, store) = SqliteStore::open_temp().await;
     let now = Utc::now();
     let session = Session {
         id: Uuid::now_v7(),
@@ -33,23 +32,30 @@ fn inserts_and_lists_sessions() {
         labels: Vec::new(),
     };
 
-    store.insert_session(&session).or_panic("session inserts");
+    store
+        .insert_session(&session)
+        .await
+        .or_panic("session inserts");
 
     assert_eq!(
-        store.list_sessions(None).or_panic("sessions list"),
+        store.list_sessions(None).await.or_panic("sessions list"),
         vec![session]
     );
 }
 
-#[test]
-fn marks_session_terminated() {
-    let store = SqliteStore::open_in_memory().or_panic("store opens");
+#[tokio::test]
+async fn marks_session_terminated() {
+    let (_dir, store) = SqliteStore::open_temp().await;
     let session = test_session("general", "test", Vec::new());
-    store.insert_session(&session).or_panic("session inserts");
+    store
+        .insert_session(&session)
+        .await
+        .or_panic("session inserts");
 
     let terminated_at = Utc::now();
     let terminated = store
         .mark_session_terminated(&session.id, Some(137), terminated_at)
+        .await
         .or_panic("session updates")
         .or_panic("session exists");
 
@@ -58,16 +64,20 @@ fn marks_session_terminated() {
     assert_eq!(terminated.terminated_at, Some(terminated_at));
 }
 
-#[test]
-fn records_transcript_path_without_runtime_session() {
-    let store = SqliteStore::open_in_memory().or_panic("store opens");
+#[tokio::test]
+async fn records_transcript_path_without_runtime_session() {
+    let (_dir, store) = SqliteStore::open_temp().await;
     let session = test_session("engineer", "test", Vec::new());
-    store.insert_session(&session).or_panic("session inserts");
+    store
+        .insert_session(&session)
+        .await
+        .or_panic("session inserts");
     let transcript = std::path::Path::new("/tmp/rtmd-stdout.log");
 
     let recorded_at = Utc::now();
     let updated = store
         .record_transcript_path(&session.id, transcript, recorded_at)
+        .await
         .or_panic("transcript records")
         .or_panic("session exists");
 
@@ -78,15 +88,16 @@ fn records_transcript_path_without_runtime_session() {
     let later = recorded_at + chrono::Duration::seconds(30);
     let unchanged = store
         .record_transcript_path(&session.id, transcript, later)
+        .await
         .or_panic("transcript no-ops")
         .or_panic("session exists");
 
     assert_eq!(unchanged.updated_at, recorded_at);
 }
 
-#[test]
-fn selector_queries_return_sessions_with_labels() {
-    let store = SqliteStore::open_in_memory().or_panic("store opens");
+#[tokio::test]
+async fn selector_queries_return_sessions_with_labels() {
+    let (_dir, store) = SqliteStore::open_temp().await;
     let auth_pm = test_session(
         "pm",
         "test",
@@ -118,13 +129,17 @@ fn selector_queries_return_sessions_with_labels() {
         }],
     );
     for session in [&auth_pm, &auth_engineer, &ui_engineer] {
-        store.insert_session(session).or_panic("session inserts");
+        store
+            .insert_session(session)
+            .await
+            .or_panic("session inserts");
     }
 
     let engineers = store
         .list_sessions_by_selector(&Selector::Role {
             name: "engineer".to_string(),
         })
+        .await
         .or_panic("role selector resolves");
     assert_eq!(
         session_ids(&engineers),
@@ -138,6 +153,7 @@ fn selector_queries_return_sessions_with_labels() {
                 value: "auth".to_string(),
             },
         })
+        .await
         .or_panic("label selector resolves");
     assert_eq!(session_ids(&auth_area), vec![auth_pm.id, auth_engineer.id]);
     assert_eq!(
@@ -161,6 +177,7 @@ fn selector_queries_return_sessions_with_labels() {
                 values: vec!["auth".to_string(), "ui".to_string()],
             },
         })
+        .await
         .or_panic("label in selector resolves");
     assert_eq!(
         session_ids(&in_area),
@@ -168,9 +185,9 @@ fn selector_queries_return_sessions_with_labels() {
     );
 }
 
-#[test]
-fn selector_queries_filter_by_namespace_dir_and_scope() {
-    let store = SqliteStore::open_in_memory().or_panic("store opens");
+#[tokio::test]
+async fn selector_queries_filter_by_namespace_dir_and_scope() {
+    let (_dir, store) = SqliteStore::open_temp().await;
     let alpha = Namespace::new("alpha").or_panic("namespace");
     let beta = Namespace::new("beta").or_panic("namespace");
     let mut alpha_engineer = test_session("engineer", "/tmp/alpha", Vec::new());
@@ -182,14 +199,19 @@ fn selector_queries_filter_by_namespace_dir_and_scope() {
     for namespace in [&alpha, &beta] {
         store
             .create_namespace(namespace, Utc::now())
+            .await
             .or_panic("namespace creates");
     }
     for session in [&alpha_engineer, &alpha_pm, &beta_engineer] {
-        store.insert_session(session).or_panic("session inserts");
+        store
+            .insert_session(session)
+            .await
+            .or_panic("session inserts");
     }
 
     let alpha_sessions = store
         .list_sessions_by_selector(&Selector::Namespace { namespace: alpha })
+        .await
         .or_panic("namespace selector resolves");
     assert_eq!(
         session_ids(&alpha_sessions),
@@ -200,6 +222,7 @@ fn selector_queries_filter_by_namespace_dir_and_scope() {
         .list_sessions_by_selector(&Selector::Dir {
             path: PathBuf::from("/tmp/beta"),
         })
+        .await
         .or_panic("dir selector resolves");
     assert_eq!(session_ids(&beta_dir_sessions), vec![beta_engineer.id]);
 
@@ -212,70 +235,32 @@ fn selector_queries_filter_by_namespace_dir_and_scope() {
                 },
             ],
         })
+        .await
         .or_panic("scoped selector resolves");
     assert_eq!(session_ids(&scoped_engineers), vec![beta_engineer.id]);
 }
 
-#[test]
-fn migrates_pass1_schema() {
-    let path = std::env::temp_dir().join(format!("lilo-session-store-{}.db", Uuid::now_v7()));
-    let created_at = Utc::now().to_rfc3339();
+#[tokio::test]
+async fn persists_sessions_across_reopen() {
+    let dir = tempfile::tempdir().or_panic("tempdir creates");
+    let path = dir.path().join("lilo.db");
+    let session = test_session("general", "test", Vec::new());
     {
-        let connection = rusqlite::Connection::open(&path).or_panic("v0 database opens");
-        connection
-            .execute_batch(
-                "CREATE TABLE sessions (
-                    id TEXT PRIMARY KEY NOT NULL,
-                    runtime TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    workspace TEXT NOT NULL,
-                    state TEXT NOT NULL,
-                    runtime_pid INTEGER NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );",
-            )
-            .or_panic("v0 schema creates");
-        connection
-            .execute(
-                "INSERT INTO sessions
-                    (id, runtime, role, workspace, state, runtime_pid, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    Uuid::now_v7().to_string(),
-                    RuntimeKind::Claude.to_string(),
-                    "general",
-                    "test",
-                    SessionState::Running.to_string(),
-                    42,
-                    created_at,
-                    created_at,
-                ],
-            )
-            .or_panic("v0 row inserts");
+        let db = lilo_db::LiloDb::open_path(&path).await.or_panic("db opens");
+        let store = SqliteStore::open(&db);
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
     }
 
-    let store = SqliteStore::open(&path).or_panic("store migrates");
-    let sessions = store.list_sessions(None).or_panic("sessions list");
+    let db = lilo_db::LiloDb::open_path(&path)
+        .await
+        .or_panic("db reopens");
+    let store = SqliteStore::open(&db);
+    let sessions = store.list_sessions(None).await.or_panic("sessions list");
 
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0].started_at, sessions[0].created_at);
-    assert_eq!(sessions[0].terminated_at, None);
-    assert_eq!(sessions[0].exit_code, None);
-    assert_eq!(sessions[0].runtime_session, None);
-    assert_eq!(sessions[0].transcript_path, None);
-    assert_eq!(sessions[0].agent_config, None);
-    assert_eq!(
-        store.list_namespaces().or_panic("namespaces list")[0].namespace,
-        Namespace::default()
-    );
-    let session_namespace = store
-        .get_session_namespace(&sessions[0].id)
-        .or_panic("session namespace loads")
-        .or_panic("session namespace exists");
-    assert_eq!(session_namespace.namespace.as_str(), DEFAULT_NAMESPACE);
-    assert_eq!(session_namespace.dir.to_string_lossy(), "test");
-    let _ = std::fs::remove_file(path);
+    assert_eq!(sessions, vec![session]);
 }
 
 fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {

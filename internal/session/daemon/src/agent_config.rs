@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
+use lilo_paths::{LiloHome, LiloPaths, expand_home_path};
 use lilo_session_core::is_agent_config_path_like;
 use lilo_session_driver::LaunchEnv;
 use serde::Deserialize;
@@ -21,14 +22,11 @@ pub fn resolve_agent_config(requested: Option<&str>) -> Result<Option<ResolvedAg
     let Some(requested) = requested else {
         return Ok(None);
     };
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("HOME is required for agent config resolution"))?;
-    resolve_agent_config_with_home(requested, &home).map(Some)
+    let path = agent_config_path_from_env(requested)?;
+    resolve_agent_config_at_path(requested, path).map(Some)
 }
 
-fn resolve_agent_config_with_home(requested: &str, home: &Path) -> Result<ResolvedAgentConfig> {
-    let path = agent_config_path(requested, home);
+fn resolve_agent_config_at_path(requested: &str, path: PathBuf) -> Result<ResolvedAgentConfig> {
     if !path.is_file() {
         bail!(
             "agent config not found: {requested} (looked for {})",
@@ -51,21 +49,19 @@ fn resolve_agent_config_with_home(requested: &str, home: &Path) -> Result<Resolv
     })
 }
 
-fn agent_config_path(requested: &str, home: &Path) -> PathBuf {
+fn agent_config_path_from_env(requested: &str) -> Result<PathBuf> {
     if is_agent_config_path_like(requested) {
-        return expand_home(requested, home);
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        return expand_home_path(requested, home.as_deref())
+            .ok_or_else(|| anyhow!("HOME is required to expand agent config path {requested}"));
     }
-    home.join(".agm").join(requested).join("agent.toml")
+
+    let home = LiloHome::from_env().context("failed to resolve LILO_HOME for agent config")?;
+    Ok(named_agent_config_path(requested, &LiloPaths::new(home)))
 }
 
-fn expand_home(value: &str, home: &Path) -> PathBuf {
-    if value == "~" {
-        return home.to_path_buf();
-    }
-    if let Some(rest) = value.strip_prefix("~/") {
-        return home.join(rest);
-    }
-    PathBuf::from(value)
+fn named_agent_config_path(requested: &str, paths: &LiloPaths) -> PathBuf {
+    paths.agent_config_dir(requested).join("agent.toml")
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -156,9 +152,10 @@ mod tests {
     use crate::test_support::{ErrOrPanic as _, OrPanic as _};
 
     #[test]
-    fn resolves_named_agent_config_from_home_agm() {
+    fn resolves_named_agent_config_from_lilo_home() {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let config_dir = dir.path().join(".agm/demo-agent");
+        let paths = lilo_paths(dir.path().join("lilo"));
+        let config_dir = paths.agent_config_dir("demo-agent");
         fs::create_dir_all(&config_dir).or_panic("config dir creates");
         fs::write(
             config_dir.join("agent.toml"),
@@ -166,10 +163,14 @@ mod tests {
         )
         .or_panic("config writes");
 
-        let resolved =
-            resolve_agent_config_with_home("demo-agent", dir.path()).or_panic("config resolves");
+        let resolved = resolve_agent_config_at_path(
+            "demo-agent",
+            named_agent_config_path("demo-agent", &paths),
+        )
+        .or_panic("config resolves");
 
         assert_eq!(resolved.requested, "demo-agent");
+        assert_eq!(resolved.path, config_dir.join("agent.toml"));
         assert_eq!(
             resolved.env,
             vec![
@@ -186,9 +187,10 @@ mod tests {
     }
 
     #[test]
-    fn bare_toml_filename_resolves_as_home_agm_name() {
+    fn bare_toml_filename_resolves_as_lilo_named_config() {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let config_dir = dir.path().join(".agm/tools.toml");
+        let paths = lilo_paths(dir.path().join("lilo"));
+        let config_dir = paths.agent_config_dir("tools.toml");
         fs::create_dir_all(&config_dir).or_panic("config dir creates");
         fs::write(
             config_dir.join("agent.toml"),
@@ -196,10 +198,39 @@ mod tests {
         )
         .or_panic("config writes");
 
-        let resolved =
-            resolve_agent_config_with_home("tools.toml", dir.path()).or_panic("config resolves");
+        let resolved = resolve_agent_config_at_path(
+            "tools.toml",
+            named_agent_config_path("tools.toml", &paths),
+        )
+        .or_panic("config resolves");
 
         assert_eq!(resolved.path, config_dir.join("agent.toml"));
+    }
+
+    #[test]
+    fn legacy_agm_named_config_is_ignored() {
+        let dir = tempfile::tempdir().or_panic("tempdir creates");
+        let paths = lilo_paths(dir.path().join("lilo"));
+        let legacy_config_dir = dir.path().join(".agm/demo-agent");
+        fs::create_dir_all(&legacy_config_dir).or_panic("legacy config dir creates");
+        fs::write(
+            legacy_config_dir.join("agent.toml"),
+            "[env]\nHELIOY_AGENT_NAME = \"legacy\"\n",
+        )
+        .or_panic("legacy config writes");
+
+        let error = resolve_agent_config_at_path(
+            "demo-agent",
+            named_agent_config_path("demo-agent", &paths),
+        )
+        .err_or_panic("legacy config is ignored");
+
+        assert!(error.to_string().contains("agent config not found"));
+        assert!(
+            error
+                .to_string()
+                .contains(&paths.agent_config_dir("demo-agent").display().to_string())
+        );
     }
 
     #[test]
@@ -208,9 +239,9 @@ mod tests {
         let path = dir.path().join("agent.toml");
         fs::write(&path, "[env]\nHELIOY_AGENT_NAME = \"explicit\"\n").or_panic("config writes");
 
+        let requested = path.to_str().or_panic("path is utf8").to_string();
         let resolved =
-            resolve_agent_config_with_home(path.to_str().or_panic("path is utf8"), dir.path())
-                .or_panic("config resolves");
+            resolve_agent_config_at_path(&requested, path.clone()).or_panic("config resolves");
 
         assert_eq!(resolved.requested, path.to_string_lossy());
         assert_eq!(
@@ -259,8 +290,12 @@ mod tests {
     #[test]
     fn missing_agent_config_is_structured_error() {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let error = resolve_agent_config_with_home("missing-agent", dir.path())
-            .err_or_panic("missing config fails");
+        let paths = lilo_paths(dir.path().join("lilo"));
+        let error = resolve_agent_config_at_path(
+            "missing-agent",
+            named_agent_config_path("missing-agent", &paths),
+        )
+        .err_or_panic("missing config fails");
 
         assert!(error.to_string().contains("agent config not found"));
         assert!(error.to_string().contains("missing-agent"));
@@ -271,6 +306,11 @@ mod tests {
         let path = dir.path().join("agent.toml");
         fs::write(&path, content).or_panic("config writes");
 
-        resolve_agent_config_with_home(path.to_str().or_panic("path is utf8"), dir.path())
+        let requested = path.to_str().or_panic("path is utf8").to_string();
+        resolve_agent_config_at_path(&requested, path)
+    }
+
+    fn lilo_paths(root: PathBuf) -> LiloPaths {
+        LiloPaths::new(LiloHome::from_path(root).or_panic("lilo home"))
     }
 }

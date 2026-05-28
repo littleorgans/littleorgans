@@ -3,6 +3,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::string_serde::{deserialize_string_parsed, serialize_string};
+
 pub const RUNTIME_PROTOCOL_VERSION: &str = "0.6";
 
 pub const RUNTIME_PROTOCOL_CAPABILITIES: &[RuntimeCapability] = &[
@@ -124,7 +126,7 @@ impl Serialize for RuntimeCapability {
     where
         S: Serializer,
     {
-        serializer.serialize_str(self.as_str())
+        serialize_string(self.as_str(), serializer)
     }
 }
 
@@ -133,9 +135,7 @@ impl<'de> Deserialize<'de> for RuntimeCapability {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserialize_string_parsed(deserializer)
     }
 }
 

@@ -4,19 +4,16 @@ use std::path::Path;
 
 use common::shared_test_support::ErrOrPanic as _;
 use common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context};
-use lilo_session_core::{IsolationPolicy, MountSpec};
 use serde_json::{Value, json};
 
-const IMAGE: &str = "runtime-matters-claude:local";
-
 #[tokio::test]
-async fn agent_run_isolation_and_image_reach_spawn_driver() {
-    assert_run_tool_launch("agent_run").await;
+async fn agent_run_spawns_session_via_runtime_service() {
+    assert_run_tool_spawns_session("agent_run").await;
 }
 
 #[tokio::test]
-async fn session_run_isolation_and_image_reach_spawn_driver() {
-    assert_run_tool_launch("session_run").await;
+async fn session_run_spawns_session_via_runtime_service() {
+    assert_run_tool_spawns_session("session_run").await;
 }
 
 #[tokio::test]
@@ -52,7 +49,6 @@ async fn agent_run_unknown_isolation_returns_structured_mcp_error() {
         message.contains("invalid isolation policy kubernetes"),
         "{message}"
     );
-    assert!(daemon.driver.launches().is_empty());
 }
 
 #[tokio::test]
@@ -83,49 +79,22 @@ async fn session_run_mounts_reject_host_isolation() {
             .contains("--mount is docker-only and cannot be used with --isolation host"),
         "{error}"
     );
-    assert!(daemon.driver.launches().is_empty());
 }
 
-async fn assert_run_tool_launch(tool_name: &str) {
+async fn assert_run_tool_spawns_session(tool_name: &str) {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let mut arguments = run_arguments(daemon.dir.path(), "docker", Some(IMAGE));
-    let expected_mounts = vec![
-        MountSpec {
-            source: "/host/config".into(),
-            target: "/container/config".into(),
-            read_only: true,
-        },
-        MountSpec {
-            source: "/host/cache".into(),
-            target: "/container/cache".into(),
-            read_only: false,
-        },
-    ];
-    arguments
-        .as_object_mut()
-        .or_panic("run arguments are an object")
-        .insert(
-            "mounts".to_string(),
-            json!([
-                "/host/config:/container/config",
-                "/host/cache:/container/cache:rw"
-            ]),
-        );
+    let arguments = run_arguments(daemon.dir.path(), "host", None);
 
     let response =
         lilo_session_daemon::mcp_tools::call_tool(&daemon.state, &context, tool_name, &arguments)
             .await
             .or_panic("run tool succeeds");
-    assert!(response["structuredContent"]["session"]["id"].is_string());
-
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert_eq!(
-        launch.isolation,
-        IsolationPolicy::Docker(lilo_rm_core::IsolationProfile::default())
-    );
-    assert_eq!(launch.image.as_deref(), Some(IMAGE));
-    assert_eq!(launch.mounts, expected_mounts);
+    let session = &response["structuredContent"]["session"];
+    assert!(session["id"].is_string());
+    assert_eq!(session["role"], "engineer");
+    assert_eq!(session["dir"], daemon.dir.path().display().to_string());
+    assert_eq!(session["runtime"], "claude");
 }
 
 fn run_arguments(dir: &Path, isolation: &str, image: Option<&str>) -> Value {

@@ -30,8 +30,9 @@ pub(crate) use config_namespace::{
 pub(crate) use handshake::initialize_and_tools_list_follow_mcp_shape;
 #[allow(unused_imports)]
 pub(crate) use helpers::{
-    assert_deprecation_hint, assert_nudged_ids, assert_session_ids, call_tool, create_namespace,
-    find_tool, spawn_agent, spawn_agent_in_namespace, spawn_agent_with_labels, tool_names,
+    assert_deprecation_hint, assert_nudged_ids, assert_session_ids, audited_flow_actions,
+    call_tool, create_namespace, find_tool, spawn_agent, spawn_agent_in_namespace,
+    spawn_agent_with_labels, tool_names,
 };
 #[allow(unused_imports)]
 pub(crate) use mail::tools_call_can_send_read_check_mail_and_nudge;

@@ -8,6 +8,8 @@ use super::raw::RawToolsToml;
 use super::render::rust_const_name;
 
 include!(concat!(env!("OUT_DIR"), "/tool_sources.rs"));
+#[path = "../tool_sources.rs"]
+mod tool_sources;
 
 static REGISTRY: OnceLock<ToolContractRegistry> = OnceLock::new();
 
@@ -22,11 +24,7 @@ pub fn contract_registry() -> &'static ToolContractRegistry {
 fn bundled_tool_sources() -> String {
     let mut content = String::new();
     for (_, source) in TOOL_SOURCE_FILES {
-        content.push_str(source);
-        if !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push('\n');
+        tool_sources::append_tool_source(&mut content, source);
     }
     content
 }

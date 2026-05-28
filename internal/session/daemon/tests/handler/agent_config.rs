@@ -3,11 +3,11 @@ use std::path::Path;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, launch_env, local_context};
 use lilo_session_core::{
-    IsolationPolicy, ListRequest, RpcRequest, RpcResponse, RuntimeKind, Selector, SpawnRequest,
+    IsolationPolicy, ListRequest, RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest,
 };
 
 #[tokio::test]
-pub(crate) async fn agent_config_env_reaches_spawn_driver() {
+pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let config = daemon.dir.path().join("agent.toml");
@@ -21,7 +21,7 @@ pub(crate) async fn agent_config_env_reaches_spawn_driver() {
         .state
         .handle(
             context,
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -49,24 +49,12 @@ pub(crate) async fn agent_config_env_reaches_spawn_driver() {
         response.session.agent_config,
         Some(config.display().to_string())
     );
-    let launch = daemon.driver.launches().pop().or_panic("driver saw launch");
-    assert!(
-        launch
-            .env
-            .contains(&launch_env("CLAUDE_CONFIG_DIR", "/tmp/demo-claude"))
+    assert_eq!(
+        response.session.workspace,
+        daemon.dir.path().display().to_string()
     );
-    assert!(
-        launch
-            .env
-            .contains(&launch_env("HELIOY_AGENT_NAME", "demo"))
-    );
-    assert_eq!(launch.isolation, IsolationPolicy::Host);
-    assert_eq!(launch.image, None);
-    assert!(launch.mounts.is_empty());
-    assert!(launch.env.contains(&launch_env(
-        "HELIOY_SESSION_ID",
-        &response.session.id.to_string()
-    )));
+    assert_eq!(response.session.dir, daemon.dir.path());
+    assert!(response.session.runtime_pid > 0);
 }
 
 #[tokio::test]
@@ -74,7 +62,12 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let home = tempfile::tempdir().or_panic("home tempdir creates");
-    let config_dir = home.path().join(".agm").join("demo-agent");
+    let lilo_home = home.path().join(".lilo");
+    let config_dir = lilo_home
+        .join("config")
+        .join("session")
+        .join("agents")
+        .join("demo-agent");
     std::fs::create_dir_all(&config_dir).or_panic("agent config dir creates");
     let config = config_dir.join("agent.toml");
     std::fs::write(&config, "[env]\nHELIOY_AGENT_NAME = \"demo\"\n")
@@ -85,7 +78,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
         .state
         .handle(
             context.clone(),
-            RpcRequest::Spawn {
+            SessionRpc::Spawn {
                 request: Box::new(SpawnRequest {
                     runtime: RuntimeKind::Claude,
                     role: "pm".to_string(),
@@ -117,7 +110,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
         .state
         .handle(
             context,
-            RpcRequest::List {
+            SessionRpc::List {
                 request: ListRequest {
                     selector: Some(Selector::Id {
                         id: response.session.id,

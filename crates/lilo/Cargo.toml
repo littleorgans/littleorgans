@@ -13,10 +13,26 @@ name = "lilo"
 path = "src/main.rs"
 
 [dependencies]
+lilo-runtime-app.workspace = true
+tokio.workspace = true
+nix.workspace = true
+lilo-session-daemon.workspace = true
+lilo-session-core.workspace = true
+lilo-session-app.workspace = true
+lilo-paths.workspace = true
+lilo-db.workspace = true
+anyhow.workspace = true
 clap.workspace = true
 lilo-common = { path = "../lilo-common", version = "0.8.0" }
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[build-dependencies]
+lilo-build-support.workspace = true
 
 [lints]
 workspace = true

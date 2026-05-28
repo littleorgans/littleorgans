@@ -1,16 +1,16 @@
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use lilo_session_core::{
-    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcRequest,
-    RpcResponse, tool_success,
+    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcResponse,
+    Selector, SessionRpc, tool_success,
 };
 use serde_json::{Value, json};
 
 use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
+use super::agent::session_tool_response_error;
 use super::args::{
     optional_bool, optional_string, required_selector, required_string, scoped_required_selector,
-    unexpected_response,
 };
 
 pub(crate) async fn mail_send(
@@ -21,7 +21,7 @@ pub(crate) async fn mail_send(
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::MailSend {
+            SessionRpc::MailSend {
                 request: MailSendRequest {
                     from: optional_string(arguments, "from").map(ToString::to_string),
                     to: required_selector(arguments, "to")?,
@@ -35,8 +35,7 @@ pub(crate) async fn mail_send(
             format!("sent {} mail item(s)", response.mail.len()),
             &json!({ "mail": response.mail, "errors": response.errors }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -47,11 +46,11 @@ pub(crate) async fn mail_read(
 ) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
-            RpcRequest::MailRead {
+            SessionRpc::MailRead {
                 request: MailReadRequest {
                     selector,
                     peek: optional_bool(arguments, "peek").unwrap_or(false),
@@ -67,8 +66,7 @@ pub(crate) async fn mail_read(
                 &json!({ "mail": response.mail, "errors": response.errors }),
             ))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -77,16 +75,11 @@ pub(crate) async fn mail_check(
     context: &RequestContext,
     arguments: &Value,
 ) -> Result<Value> {
-    let selector = required_selector(arguments, "selector")
-        .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
-    mail_count_tool(
-        state,
-        context,
-        RpcRequest::MailCheck {
+    mail_count_from_args(state, context, arguments, |selector| {
+        SessionRpc::MailCheck {
             request: MailCheckRequest { selector },
-        },
-    )
+        }
+    })
     .await
 }
 
@@ -95,23 +88,30 @@ pub(crate) async fn mail_stop_check(
     context: &RequestContext,
     arguments: &Value,
 ) -> Result<Value> {
+    mail_count_from_args(state, context, arguments, |selector| {
+        SessionRpc::MailStopCheck {
+            request: MailStopCheckRequest { selector },
+        }
+    })
+    .await
+}
+
+async fn mail_count_from_args(
+    state: &DaemonState,
+    context: &RequestContext,
+    arguments: &Value,
+    request: impl FnOnce(Selector) -> SessionRpc,
+) -> Result<Value> {
     let selector = required_selector(arguments, "selector")
         .or_else(|_| required_selector(arguments, "from"))?;
-    let selector = scoped_required_selector(state, context, arguments, selector)?;
-    mail_count_tool(
-        state,
-        context,
-        RpcRequest::MailStopCheck {
-            request: MailStopCheckRequest { selector },
-        },
-    )
-    .await
+    let selector = scoped_required_selector(state, context, arguments, selector).await?;
+    mail_count_tool(state, context, request(selector)).await
 }
 
 async fn mail_count_tool(
     state: &DaemonState,
     context: &RequestContext,
-    request: RpcRequest,
+    request: SessionRpc,
 ) -> Result<Value> {
     match state.handle_direct(context.clone(), request).await.response {
         RpcResponse::MailChecked { response } => {
@@ -120,8 +120,7 @@ async fn mail_count_tool(
         RpcResponse::MailStopChecked { response } => {
             Ok(unread_tool_response(response.unread, &response.counts))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 

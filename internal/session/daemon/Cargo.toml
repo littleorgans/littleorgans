@@ -14,26 +14,33 @@ name = "lilo_session_daemon"
 path = "src/lib.rs"
 
 [dependencies]
+lilo-paths.workspace = true
+lilo-wire.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
+lilo-db.workspace = true
+lilo-identity-service.workspace = true
 lilo-im-core.workspace = true
 lilo-im-store.workspace = true
-lilo-im-stub.workspace = true
 lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
+lilo-runtime-daemon.workspace = true
+lilo-runtime-store.workspace = true
 lilo-session-core.workspace = true
 lilo-session-driver.workspace = true
 lilo-session-store.workspace = true
 nix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
 toml.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
-async-trait.workspace = true
+lilo-runtime-launchers.workspace = true
 tempfile.workspace = true
 
 [lints]

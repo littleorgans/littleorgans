@@ -3,7 +3,8 @@ use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use lilo_rm_core::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, KillByPidRequest, MCP_PROTOCOL_VERSION,
-    StatusFilter, StatusResponse, json_rpc_error, json_rpc_failure, json_rpc_result,
+    McpRequest, StatusFilter, StatusResponse, json_rpc_response_from_result, parse_json_rpc_line,
+    prepare_mcp_request, serialize_json_rpc_response, tool_call_request,
     tool_contracts::contract_registry, tool_error, tool_success,
 };
 use serde_json::{Value, json};
@@ -11,47 +12,26 @@ use serde_json::{Value, json};
 use crate::server::ServerState;
 
 pub(crate) async fn handle_line(state: &Arc<ServerState>, line: &str) -> Option<String> {
-    let response = match serde_json::from_str::<JsonRpcRequest>(line) {
+    let response = match parse_json_rpc_line(line) {
         Ok(request) => handle_request(state, request).await?,
-        Err(error) => json_rpc_failure(
-            Value::Null,
-            json_rpc_error(-32700, format!("Parse error: {error}")),
-        ),
+        Err(response) => *response,
     };
-    Some(serde_json::to_string(&response).unwrap_or_else(|error| {
-        json!({
-            "jsonrpc": "2.0",
-            "id": Value::Null,
-            "error": {
-                "code": -32603,
-                "message": format!("Internal error: {error}"),
-            },
-        })
-        .to_string()
-    }))
+    Some(serialize_json_rpc_response(&response))
 }
 
 async fn handle_request(
     state: &Arc<ServerState>,
     request: JsonRpcRequest,
 ) -> Option<JsonRpcResponse> {
-    let id = request.id.unwrap_or(Value::Null);
-    if request.method.starts_with("notifications/") {
-        return None;
-    }
-
-    let result = match request.method.as_str() {
-        "initialize" => Ok(initialize_result()),
-        "ping" => Ok(json!({})),
-        "tools/list" => Ok(contract_registry().tool_list_value()),
-        "tools/call" => handle_tool_call(state, request.params).await,
-        other => Err(json_rpc_error(-32601, format!("Method not found: {other}"))),
+    let (id, request) = prepare_mcp_request(request)?;
+    let result = match request {
+        Ok(McpRequest::Initialize) => Ok(initialize_result()),
+        Ok(McpRequest::Ping) => Ok(json!({})),
+        Ok(McpRequest::ToolsList) => Ok(contract_registry().tool_list_value()),
+        Ok(McpRequest::ToolsCall(params)) => handle_tool_call(state, params).await,
+        Err(error) => Err(error),
     };
-
-    Some(match result {
-        Ok(result) => json_rpc_result(id, result),
-        Err(error) => json_rpc_failure(id, error),
-    })
+    Some(json_rpc_response_from_result(id, result))
 }
 
 fn initialize_result() -> Value {
@@ -71,20 +51,14 @@ async fn handle_tool_call(
     state: &Arc<ServerState>,
     params: Option<Value>,
 ) -> Result<Value, JsonRpcError> {
-    let params = params.ok_or_else(|| json_rpc_error(-32602, "Missing params"))?;
-    let name = params
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or_else(|| json_rpc_error(-32602, "Missing tool name"))?;
-    let arguments = params
-        .get("arguments")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let tool_call = tool_call_request(params)?;
 
-    Ok(match call_tool(state, name, arguments).await {
-        Ok(value) => value,
-        Err(error) => tool_error(error.to_string()),
-    })
+    Ok(
+        match call_tool(state, &tool_call.name, tool_call.arguments).await {
+            Ok(value) => value,
+            Err(error) => tool_error(error.to_string()),
+        },
+    )
 }
 
 async fn call_tool(state: &Arc<ServerState>, name: &str, arguments: Value) -> Result<Value> {

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use lilo_session_core::Mail;
-use rusqlite::{Row, params, params_from_iter};
+use sqlx::Row;
+use sqlx::sqlite::SqliteRow;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -10,7 +11,7 @@ use super::time::{parse_optional_timestamp, parse_timestamp};
 #[derive(Debug, Error)]
 pub enum MailRowError {
     #[error(transparent)]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(#[from] sqlx::Error),
     #[error(transparent)]
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
@@ -20,83 +21,85 @@ pub enum MailRowError {
 }
 
 impl SqliteStore {
-    pub fn insert_mail(&self, mail: &Mail) -> Result<(), MailRowError> {
-        self.connection.execute(
-            "INSERT INTO mail (id, sender_id, recipient_id, content, sent_at, read_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                mail.id.to_string(),
-                mail.sender_id.to_string(),
-                mail.recipient_id.to_string(),
-                &mail.content,
-                mail.sent_at.to_rfc3339(),
-                mail.read_at.map(|timestamp| timestamp.to_rfc3339()),
-            ],
-        )?;
+    pub async fn insert_mail(&self, mail: &Mail) -> Result<(), MailRowError> {
+        sqlx::query(
+            "INSERT INTO session_mail (id, sender_id, recipient_id, content, sent_at, read_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(mail.id.to_string())
+        .bind(mail.sender_id.to_string())
+        .bind(mail.recipient_id.to_string())
+        .bind(&mail.content)
+        .bind(mail.sent_at.to_rfc3339())
+        .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    pub fn count_unread_mail(&self, recipient_id: &Uuid) -> Result<usize, MailRowError> {
-        let count = self.connection.query_row(
-            "SELECT COUNT(*) FROM mail WHERE recipient_id = ?1 AND read_at IS NULL",
-            [recipient_id.to_string()],
-            |row| row.get::<_, i64>(0),
-        )?;
+    pub async fn count_unread_mail(&self, recipient_id: &Uuid) -> Result<usize, MailRowError> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM session_mail WHERE recipient_id = ? AND read_at IS NULL",
+        )
+        .bind(recipient_id.to_string())
+        .fetch_one(&self.pool)
+        .await?;
         usize::try_from(count).map_err(|_| integer_out_of_range("unread_count", count))
     }
 
-    pub fn read_unread_mail(
-        &mut self,
+    pub async fn read_unread_mail(
+        &self,
         recipient_id: &Uuid,
         read_at: DateTime<Utc>,
         peek: bool,
     ) -> Result<Vec<Mail>, MailRowError> {
-        let mail = self.list_unread_mail(recipient_id)?;
+        let mail = self.list_unread_mail(recipient_id).await?;
         if !peek && !mail.is_empty() {
-            let tx = self.connection.transaction()?;
+            let mut tx = self.pool.begin().await?;
             for item in &mail {
-                tx.execute(
-                    "UPDATE mail SET read_at = ?1 WHERE id = ?2 AND read_at IS NULL",
-                    params![read_at.to_rfc3339(), item.id.to_string()],
-                )?;
+                sqlx::query("UPDATE session_mail SET read_at = ? WHERE id = ? AND read_at IS NULL")
+                    .bind(read_at.to_rfc3339())
+                    .bind(item.id.to_string())
+                    .execute(&mut *tx)
+                    .await?;
             }
-            tx.commit()?;
+            tx.commit().await?;
         }
         Ok(mail)
     }
 
-    fn list_unread_mail(&self, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError> {
+    async fn list_unread_mail(&self, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError> {
         self.query_mail(
-            "SELECT * FROM mail
-             WHERE recipient_id = ?1 AND read_at IS NULL
+            "SELECT * FROM session_mail
+             WHERE recipient_id = ? AND read_at IS NULL
              ORDER BY sent_at",
             [recipient_id.to_string()],
         )
+        .await
     }
 
-    fn query_mail<const N: usize>(
+    async fn query_mail<const N: usize>(
         &self,
         sql: &str,
         params: [String; N],
     ) -> Result<Vec<Mail>, MailRowError> {
-        let mut statement = self.connection.prepare(sql)?;
-        let mut rows = statement.query(params_from_iter(params))?;
-        let mut mail = Vec::new();
-        while let Some(row) = rows.next()? {
-            mail.push(mail_from_row(row)?);
+        let mut query = sqlx::query(sql);
+        for param in params {
+            query = query.bind(param);
         }
-        Ok(mail)
+        let rows = query.fetch_all(&self.pool).await?;
+        rows.iter().map(mail_from_row).collect()
     }
 }
 
-fn mail_from_row(row: &Row<'_>) -> Result<Mail, MailRowError> {
+fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
     Ok(Mail {
-        id: Uuid::parse_str(&row.get::<_, String>("id")?)?,
-        sender_id: Uuid::parse_str(&row.get::<_, String>("sender_id")?)?,
-        recipient_id: Uuid::parse_str(&row.get::<_, String>("recipient_id")?)?,
-        content: row.get("content")?,
-        sent_at: parse_timestamp(&row.get::<_, String>("sent_at")?)?,
-        read_at: parse_optional_timestamp(row.get::<_, Option<String>>("read_at")?)?,
+        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        sender_id: Uuid::parse_str(&row.try_get::<String, _>("sender_id")?)?,
+        recipient_id: Uuid::parse_str(&row.try_get::<String, _>("recipient_id")?)?,
+        content: row.try_get("content")?,
+        sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
+        read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
     })
 }
 
@@ -111,9 +114,9 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn mail_round_trip_marks_read() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
+    #[tokio::test]
+    async fn mail_round_trip_marks_read() {
+        let (_dir, store) = SqliteStore::open_temp().await;
         let now = Utc::now();
         let mail = Mail {
             id: Uuid::now_v7(),
@@ -124,31 +127,34 @@ mod tests {
             read_at: None,
         };
 
-        store.insert_mail(&mail).or_panic("mail inserts");
+        store.insert_mail(&mail).await.or_panic("mail inserts");
 
         assert_eq!(
             store
                 .count_unread_mail(&mail.recipient_id)
+                .await
                 .or_panic("unread count"),
             1
         );
         assert_eq!(
             store
                 .read_unread_mail(&mail.recipient_id, Utc::now(), false)
+                .await
                 .or_panic("mail reads"),
             vec![mail.clone()]
         );
         assert_eq!(
             store
                 .count_unread_mail(&mail.recipient_id)
+                .await
                 .or_panic("unread count"),
             0
         );
     }
 
-    #[test]
-    fn peek_keeps_mail_unread() {
-        let mut store = SqliteStore::open_in_memory().or_panic("store opens");
+    #[tokio::test]
+    async fn peek_keeps_mail_unread() {
+        let (_dir, store) = SqliteStore::open_temp().await;
         let mail = Mail {
             id: Uuid::now_v7(),
             sender_id: Uuid::now_v7(),
@@ -158,23 +164,25 @@ mod tests {
             read_at: None,
         };
 
-        store.insert_mail(&mail).or_panic("mail inserts");
+        store.insert_mail(&mail).await.or_panic("mail inserts");
         let read = store
             .read_unread_mail(&mail.recipient_id, Utc::now(), true)
+            .await
             .or_panic("mail peeks");
 
         assert_eq!(read, vec![mail.clone()]);
         assert_eq!(
             store
                 .count_unread_mail(&mail.recipient_id)
+                .await
                 .or_panic("unread count"),
             1
         );
     }
 
-    #[test]
-    fn unread_count_stays_fast_on_populated_mail_table() {
-        let store = SqliteStore::open_in_memory().or_panic("store opens");
+    #[tokio::test]
+    async fn unread_count_stays_fast_on_populated_mail_table() {
+        let (_dir, store) = SqliteStore::open_temp().await;
         let recipient_id = Uuid::now_v7();
         for index in 0..1_000 {
             store
@@ -186,12 +194,14 @@ mod tests {
                     sent_at: Utc::now(),
                     read_at: None,
                 })
+                .await
                 .or_panic("mail inserts");
         }
 
         let started = std::time::Instant::now();
         let unread = store
             .count_unread_mail(&recipient_id)
+            .await
             .or_panic("unread count");
 
         assert_eq!(unread, 1_000);

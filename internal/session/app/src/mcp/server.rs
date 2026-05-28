@@ -1,11 +1,10 @@
 use anyhow::{Result, bail};
-use lilo_session_core::{McpBridgeRequest, RpcRequest, RpcResponse, SmEndpoint, SmPaths};
+use lilo_session_core::{McpBridgeRequest, RpcResponse, SessionRpc};
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 use crate::mcp::transport::write_line;
 
-pub async fn run_stdio_bridge(_paths: SmPaths) -> Result<()> {
-    let endpoint = SmEndpoint::from_env()?;
+pub async fn run_stdio_bridge() -> Result<()> {
     let stdin = BufReader::new(io::stdin());
     let mut lines = stdin.lines();
     let mut stdout = io::stdout();
@@ -14,15 +13,12 @@ pub async fn run_stdio_bridge(_paths: SmPaths) -> Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let response = lilo_session_daemon::send_request(
-            &endpoint,
-            &RpcRequest::McpBridge {
-                request: McpBridgeRequest {
-                    line,
-                    caller_session_id: std::env::var("HELIOY_SESSION_ID").ok(),
-                },
+        let response = crate::cli::client::send_request(&SessionRpc::McpBridge {
+            request: McpBridgeRequest {
+                line,
+                caller_session_id: std::env::var("HELIOY_SESSION_ID").ok(),
             },
-        )
+        })
         .await?;
 
         match response {

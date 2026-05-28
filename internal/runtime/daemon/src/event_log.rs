@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -13,6 +14,7 @@ use lilo_rm_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, Notify};
+use uuid::Uuid;
 
 const EVENT_LOG_SYNC_BATCH: usize = 32;
 const EVENT_LOG_SYNC_INTERVAL: Duration = Duration::from_millis(100);
@@ -38,9 +40,42 @@ pub(crate) struct EventLog {
 struct EventLogInner {
     file: File,
     events: Vec<EventLogEntry>,
+    seen_event_keys: HashSet<EventLogKey>,
     next_seq: EventCursor,
     events_since_sync: usize,
     last_sync: Instant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct EventLogKey {
+    session_id: Uuid,
+    kind: EventLogKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum EventLogKind {
+    Running,
+    Terminated,
+    Lost,
+}
+
+impl EventLogKey {
+    fn from_event(event: &RuntimeEvent) -> Self {
+        match event {
+            RuntimeEvent::Running { session_id, .. } => Self {
+                session_id: *session_id,
+                kind: EventLogKind::Running,
+            },
+            RuntimeEvent::Terminated { session_id, .. } => Self {
+                session_id: *session_id,
+                kind: EventLogKind::Terminated,
+            },
+            RuntimeEvent::Lost { session_id, .. } => Self {
+                session_id: *session_id,
+                kind: EventLogKind::Lost,
+            },
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -67,6 +102,10 @@ impl EventLog {
         }
         recover_partial_tail(&path)?;
         let events = read_entries(&path)?;
+        let seen_event_keys = events
+            .iter()
+            .map(|entry| EventLogKey::from_event(&entry.event))
+            .collect();
         let next_seq = events.last().map_or(1, |entry| entry.seq.saturating_add(1));
         let file = open_append_file(&path)?;
         Ok(Self {
@@ -76,6 +115,7 @@ impl EventLog {
             inner: Mutex::new(EventLogInner {
                 file,
                 events,
+                seen_event_keys,
                 next_seq,
                 events_since_sync: 0,
                 last_sync: Instant::now(),
@@ -84,10 +124,26 @@ impl EventLog {
     }
 
     pub(crate) async fn append(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
+        self.append_recorded_event(event, current_timestamp_ms()?, true)
+            .await
+    }
+
+    async fn append_recorded_event(
+        &self,
+        event: RuntimeEvent,
+        ts_ms: u64,
+        sync_after_append: bool,
+    ) -> Result<RuntimeEvent> {
         let mut inner = self.inner.lock().await;
+        if !inner
+            .seen_event_keys
+            .insert(EventLogKey::from_event(&event))
+        {
+            return Ok(event);
+        }
         let entry = EventLogEntry {
             seq: inner.next_seq,
-            ts_ms: current_timestamp_ms()?,
+            ts_ms,
             event,
         };
         inner.next_seq = inner.next_seq.saturating_add(1);
@@ -98,8 +154,10 @@ impl EventLog {
             .write_all(b"\n")
             .context("failed to append event log newline")?;
         inner.events.push(entry.clone());
-        inner.events_since_sync += 1;
-        sync_if_due(&mut inner)?;
+        if sync_after_append {
+            inner.events_since_sync += 1;
+            sync_if_due(&mut inner)?;
+        }
         compact_if_due(&self.path, &mut inner)?;
         drop(inner);
         self.append_notify.notify_waiters();
@@ -165,21 +223,7 @@ impl EventLog {
         event: RuntimeEvent,
         ts_ms: u64,
     ) -> Result<RuntimeEvent> {
-        let mut inner = self.inner.lock().await;
-        let entry = EventLogEntry {
-            seq: inner.next_seq,
-            ts_ms,
-            event,
-        };
-        inner.next_seq = inner.next_seq.saturating_add(1);
-        let record = EventLogRecord::from_entry(&entry)?;
-        serde_json::to_writer(&mut inner.file, &record).context("failed to encode event log")?;
-        inner.file.write_all(b"\n")?;
-        inner.events.push(entry.clone());
-        compact_if_due(&self.path, &mut inner)?;
-        drop(inner);
-        self.append_notify.notify_waiters();
-        Ok(entry.event)
+        self.append_recorded_event(event, ts_ms, false).await
     }
 }
 
@@ -363,6 +407,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn append_dedups_by_session_and_event_kind() {
+        let temp = TempDir::new().expect("temp");
+        let log = EventLog::open(temp.path()).expect("open");
+        let event = running_event();
+        log.append(event.clone()).await.expect("append first");
+        log.append(event).await.expect("append duplicate");
+
+        let batch = log.events_since(Some(0)).await.expect("events");
+        assert_eq!(batch.events.len(), 1);
+        assert_eq!(batch.cursor, 1);
+    }
+
+    #[tokio::test]
     async fn recovery_drops_partial_tail() {
         let temp = TempDir::new().expect("temp");
         let log = EventLog::open(temp.path()).expect("open");
@@ -388,8 +445,8 @@ mod tests {
         let temp = TempDir::new().expect("temp");
         let log = EventLog::open(temp.path()).expect("open");
         let old_ms = old_timestamp_ms();
-        for _ in 0..=EVENT_LOG_RETENTION_MIN_EVENTS {
-            log.append_with_ts(running_event(), old_ms)
+        for index in 0..=EVENT_LOG_RETENTION_MIN_EVENTS {
+            log.append_with_ts(running_event_for(index), old_ms)
                 .await
                 .expect("append");
         }
@@ -404,8 +461,8 @@ mod tests {
         let temp = TempDir::new().expect("temp");
         let log = EventLog::open(temp.path()).expect("open");
         let event_count = EVENT_LOG_RETENTION_MIN_EVENTS + 1;
-        for _ in 0..event_count {
-            log.append(running_event()).await.expect("append");
+        for index in 0..event_count {
+            log.append(running_event_for(index)).await.expect("append");
         }
 
         assert_all_events_readable_from_start(&log, event_count).await;
@@ -417,8 +474,8 @@ mod tests {
         let log = EventLog::open(temp.path()).expect("open");
         let old_ms = old_timestamp_ms();
         let event_count = EVENT_LOG_RETENTION_MIN_EVENTS - 1;
-        for _ in 0..event_count {
-            log.append_with_ts(running_event(), old_ms)
+        for index in 0..event_count {
+            log.append_with_ts(running_event_for(index), old_ms)
                 .await
                 .expect("append");
         }
@@ -442,8 +499,12 @@ mod tests {
     }
 
     fn running_event() -> RuntimeEvent {
+        running_event_for(1)
+    }
+
+    fn running_event_for(index: usize) -> RuntimeEvent {
         RuntimeEvent::Running {
-            session_id: Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").unwrap(),
+            session_id: Uuid::parse_str(&format!("018f6e28-0000-7000-8000-{index:012}")).unwrap(),
             runtime_pid: 42,
             start_time: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
         }
