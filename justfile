@@ -54,6 +54,9 @@ test-doc:
 lilo *ARGS:
     cargo run -p lilo --bin lilo -- {{ARGS}}
 
+codegen *ARGS:
+    cargo run -p xtask -- codegen {{ARGS}}
+
 # Install
 
 install: install-release

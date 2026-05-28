@@ -56,6 +56,23 @@ enum Command {
 }
 
 #[derive(Debug, Args)]
+pub struct OperatorArgs {
+    #[command(subcommand)]
+    pub command: OperatorCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum OperatorCommand {
+    #[command(about = "Spawn a runtime process for a session.")]
+    Spawn(spawn::SpawnArgs),
+    #[command(about = "Signal a runtime session by id, or a process by pid.")]
+    Kill(kill::KillArgs),
+    #[command(about = cli_help::STATUS_ABOUT)]
+    Status(status::StatusArgs),
+    Events(events::EventsArgs),
+}
+
+#[derive(Debug, Args)]
 pub struct VersionArgs {
     #[command(flatten)]
     output: output::OutputArgs,
@@ -69,19 +86,32 @@ pub struct DoctorArgs {
 
 impl Cli {
     pub async fn run(self) -> Result<()> {
-        match self.command {
-            Command::Spawn(args) => spawn::run(args).await,
-            Command::Kill(args) => kill::run(args).await,
-            Command::Nudge(args) => nudge::run(args).await,
-            Command::Capture(args) => capture::run(args).await,
-            Command::ValidateTarget(args) => validate_target::run(args).await,
-            Command::Status(args) => status::run(args).await,
-            Command::Mcp => mcp::run().await,
-            Command::Version(args) => version::run(args.output).await,
-            Command::Doctor(args) => doctor::run(args.output).await,
-            Command::Events(args) => events::run(args).await,
-            Command::Initdb => initdb::run().await,
-            Command::Shim(args) => shim::run(args).await,
-        }
+        dispatch(self.command).await
+    }
+}
+
+pub async fn run_operator(args: OperatorArgs) -> Result<()> {
+    match args.command {
+        OperatorCommand::Spawn(args) => spawn::run(args).await,
+        OperatorCommand::Kill(args) => kill::run(args).await,
+        OperatorCommand::Status(args) => status::run(args).await,
+        OperatorCommand::Events(args) => events::run(args).await,
+    }
+}
+
+async fn dispatch(command: Command) -> Result<()> {
+    match command {
+        Command::Spawn(args) => spawn::run(args).await,
+        Command::Kill(args) => kill::run(args).await,
+        Command::Nudge(args) => nudge::run(args).await,
+        Command::Capture(args) => capture::run(args).await,
+        Command::ValidateTarget(args) => validate_target::run(args).await,
+        Command::Status(args) => status::run(args).await,
+        Command::Mcp => mcp::run().await,
+        Command::Version(args) => version::run(args.output).await,
+        Command::Doctor(args) => doctor::run(args.output).await,
+        Command::Events(args) => events::run(args).await,
+        Command::Initdb => initdb::run().await,
+        Command::Shim(args) => shim::run(args).await,
     }
 }

@@ -13,7 +13,7 @@ mod test_support;
 
 use clap::Parser;
 
-use cli::cli_def::{Cli, Command};
+use cli::cli_def::Cli;
 
 pub const VERSION: &str = env!("SM_CLI_VERSION");
 
@@ -22,21 +22,7 @@ pub async fn run() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    match Cli::parse().command {
-        Command::Run(args) => cli::run::run(args).await,
-        Command::Create(args) => cli::namespace::create(args).await,
-        Command::Config(args) => cli::config::run(args).await,
-        Command::Get(args) => cli::get::run(args).await,
-        Command::Delete(args) => cli::delete::run(args).await,
-        Command::Doctor(args) => cli::doctor::run(args).await,
-        Command::Mail(args) => cli::mail::run(args).await,
-        Command::Label(args) => cli::label::run(args).await,
-        Command::Logs(args) => cli::logs::run(args).await,
-        Command::Capture(args) => cli::capture::run(args).await,
-        Command::Wait(args) => cli::wait::run(args).await,
-        Command::Nudge(args) => cli::nudge::run(args).await,
-        Command::Mcp(args) => cli::mcp::run(args).await,
-    }
+    cli::dispatch(Cli::parse().command).await
 }
 
 fn render_bare_leaf_help() -> anyhow::Result<bool> {

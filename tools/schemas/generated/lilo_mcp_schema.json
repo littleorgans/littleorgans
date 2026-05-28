@@ -1,0 +1,33 @@
+{
+  "description": "Local-first Little Organs control plane",
+  "input_schema": {
+    "properties": {
+      "command": {
+        "enum": [
+          "run",
+          "create",
+          "get",
+          "delete",
+          "label",
+          "mail",
+          "nudge",
+          "capture",
+          "logs",
+          "wait",
+          "mcp",
+          "runtime",
+          "session",
+          "identity",
+          "doctor",
+          "daemon"
+        ],
+        "type": "string"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  },
+  "name": "lilo"
+}
