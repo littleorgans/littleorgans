@@ -83,16 +83,6 @@ pub(crate) fn run_missing_named_agent_config_surfaces_resolved_path() {
     let stderr = stderr(&run);
     assert!(stderr.contains("agent config not found: does-not-exist"));
     assert!(stderr.contains("looked for"));
-    assert!(
-        stderr.contains(
-            &daemon
-                .dir
-                .path()
-                .join(".agm")
-                .join("does-not-exist")
-                .join("agent.toml")
-                .display()
-                .to_string()
-        )
-    );
+    assert!(stderr.contains("config/session/agents/does-not-exist/agent.toml"));
+    assert!(!stderr.contains(".agm"));
 }

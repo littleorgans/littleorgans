@@ -62,7 +62,12 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let home = tempfile::tempdir().or_panic("home tempdir creates");
-    let config_dir = home.path().join(".agm").join("demo-agent");
+    let lilo_home = home.path().join(".lilo");
+    let config_dir = lilo_home
+        .join("config")
+        .join("session")
+        .join("agents")
+        .join("demo-agent");
     std::fs::create_dir_all(&config_dir).or_panic("agent config dir creates");
     let config = config_dir.join("agent.toml");
     std::fs::write(&config, "[env]\nHELIOY_AGENT_NAME = \"demo\"\n")
