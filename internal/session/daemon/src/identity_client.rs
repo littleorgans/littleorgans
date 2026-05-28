@@ -40,10 +40,7 @@ pub fn spawn_resource(request: &SpawnRequest, session_id: Uuid) -> ResourceSpec 
 }
 
 pub fn session_resource(session_id: Uuid) -> ResourceSpec {
-    ResourceSpec {
-        session_id: Some(session_id),
-        ..Default::default()
-    }
+    ResourceSpec::session(session_id)
 }
 
 fn identity_runtime(runtime: RuntimeKind) -> IdentityRuntimeKind {

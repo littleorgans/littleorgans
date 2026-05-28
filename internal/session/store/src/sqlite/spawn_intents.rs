@@ -40,12 +40,24 @@ pub enum SpawnIntentStatus {
     Aborted,
 }
 
+const STATUS_PENDING: &str = "pending";
+const STATUS_RESOLVED: &str = "resolved";
+const STATUS_ABORTED: &str = "aborted";
+
 impl SpawnIntentStatus {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => STATUS_PENDING,
+            Self::Resolved => STATUS_RESOLVED,
+            Self::Aborted => STATUS_ABORTED,
+        }
+    }
+
     fn parse(value: String) -> Result<Self, SpawnIntentError> {
         match value.as_str() {
-            "pending" => Ok(Self::Pending),
-            "resolved" => Ok(Self::Resolved),
-            "aborted" => Ok(Self::Aborted),
+            STATUS_PENDING => Ok(Self::Pending),
+            STATUS_RESOLVED => Ok(Self::Resolved),
+            STATUS_ABORTED => Ok(Self::Aborted),
             _ => Err(SpawnIntentError::UnknownStatus(value)),
         }
     }
@@ -154,6 +166,34 @@ pub struct SessionSpawnIntent {
     pub aborted_reason: Option<String>,
 }
 
+enum SpawnIntentStatusUpdate<'a> {
+    Resolved,
+    Aborted { reason: &'a str },
+}
+
+impl SpawnIntentStatusUpdate<'_> {
+    const fn status(&self) -> SpawnIntentStatus {
+        match self {
+            Self::Resolved => SpawnIntentStatus::Resolved,
+            Self::Aborted { .. } => SpawnIntentStatus::Aborted,
+        }
+    }
+
+    const fn resolved_at(&self, now_ms: i64) -> Option<i64> {
+        match self {
+            Self::Resolved => Some(now_ms),
+            Self::Aborted { .. } => None,
+        }
+    }
+
+    fn aborted_reason(&self) -> Option<&str> {
+        match self {
+            Self::Resolved => None,
+            Self::Aborted { reason } => Some(reason),
+        }
+    }
+}
+
 impl SqliteStore {
     pub async fn insert_pending_spawn_intent(
         &self,
@@ -212,9 +252,10 @@ impl SqliteStore {
             "SELECT session_id, operation_id, status, spawn_request_json, session_draft_json,
                     created_at, updated_at, resolved_at, aborted_reason
              FROM session_spawn_intents
-             WHERE status = 'pending'
+             WHERE status = ?
              ORDER BY created_at",
         )
+        .bind(SpawnIntentStatus::Pending.as_str())
         .fetch_all(&self.pool)
         .await?;
         rows.iter().map(intent_from_row).collect()
@@ -234,10 +275,11 @@ where
         "INSERT INTO session_spawn_intents
             (session_id, operation_id, status, spawn_request_json, session_draft_json,
              created_at, updated_at, resolved_at, aborted_reason)
-         VALUES (?, ?, 'pending', ?, ?, ?, ?, NULL, NULL)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
     )
     .bind(intent.session_id.to_string())
     .bind(&intent.operation_id)
+    .bind(SpawnIntentStatus::Pending.as_str())
     .bind(spawn_request_json)
     .bind(session_draft_json)
     .bind(intent.created_at)
@@ -255,17 +297,13 @@ async fn resolve_spawn_intent_with<'e, E>(
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
 {
-    sqlx::query(
-        "UPDATE session_spawn_intents
-         SET status = 'resolved', updated_at = ?, resolved_at = ?, aborted_reason = NULL
-         WHERE session_id = ?",
+    update_spawn_intent_status_with(
+        executor,
+        session_id,
+        now_ms,
+        SpawnIntentStatusUpdate::Resolved,
     )
-    .bind(now_ms)
-    .bind(now_ms)
-    .bind(session_id.to_string())
-    .execute(executor)
-    .await?;
-    Ok(())
+    .await
 }
 
 async fn abort_spawn_intent_with<'e, E>(
@@ -277,13 +315,34 @@ async fn abort_spawn_intent_with<'e, E>(
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
 {
+    update_spawn_intent_status_with(
+        executor,
+        session_id,
+        now_ms,
+        SpawnIntentStatusUpdate::Aborted { reason },
+    )
+    .await
+}
+
+async fn update_spawn_intent_status_with<'e, E>(
+    executor: E,
+    session_id: Uuid,
+    now_ms: i64,
+    update: SpawnIntentStatusUpdate<'_>,
+) -> Result<(), SpawnIntentError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    let aborted_reason = update.aborted_reason().map(str::to_owned);
     sqlx::query(
         "UPDATE session_spawn_intents
-         SET status = 'aborted', updated_at = ?, aborted_reason = ?
+         SET status = ?, updated_at = ?, resolved_at = ?, aborted_reason = ?
          WHERE session_id = ?",
     )
+    .bind(update.status().as_str())
     .bind(now_ms)
-    .bind(reason)
+    .bind(update.resolved_at(now_ms))
+    .bind(aborted_reason)
     .bind(session_id.to_string())
     .execute(executor)
     .await?;

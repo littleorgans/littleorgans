@@ -1018,6 +1018,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap",
+ "lilo-build-support",
  "lilo-common",
  "lilo-db",
  "lilo-paths",
@@ -1032,6 +1033,10 @@ dependencies = [
  "tempfile",
  "tokio",
 ]
+
+[[package]]
+name = "lilo-build-support"
+version = "0.8.0"
 
 [[package]]
 name = "lilo-common"
@@ -1093,6 +1098,7 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "insta",
+ "lilo-common",
  "lilo-im-core",
  "lilo-im-stub",
  "nix",
@@ -1185,6 +1191,7 @@ dependencies = [
  "clap",
  "insta",
  "libc",
+ "lilo-build-support",
  "lilo-db",
  "lilo-paths",
  "lilo-rm-client",
@@ -1256,6 +1263,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "lilo-common",
  "lilo-db",
  "lilo-paths",
  "lilo-rm-core",
@@ -1276,6 +1284,7 @@ dependencies = [
  "clap",
  "criterion",
  "insta",
+ "lilo-build-support",
  "lilo-db",
  "lilo-im-core",
  "lilo-im-store",

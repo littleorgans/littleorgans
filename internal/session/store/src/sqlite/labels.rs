@@ -1,5 +1,5 @@
 use lilo_session_core::{Label, LabelMutation, Session};
-use sqlx::{Row, SqliteConnection};
+use sqlx::{Executor, Row, Sqlite, SqliteConnection};
 use uuid::Uuid;
 
 use super::{SessionRowError, SqliteStore};
@@ -64,17 +64,7 @@ impl SqliteStore {
     }
 
     async fn upsert_label(&self, id: &Uuid, label: &Label) -> Result<(), SessionRowError> {
-        sqlx::query(
-            "INSERT INTO session_labels (session_id, key, value)
-             VALUES (?, ?, ?)
-             ON CONFLICT(session_id, key) DO UPDATE SET value = excluded.value",
-        )
-        .bind(id.to_string())
-        .bind(&label.key)
-        .bind(&label.value)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        upsert_label_with(&self.pool, id, label).await
     }
 
     async fn remove_label(&self, id: &Uuid, key: &str) -> Result<(), SessionRowError> {
@@ -92,6 +82,17 @@ async fn upsert_label_in(
     id: &Uuid,
     label: &Label,
 ) -> Result<(), SessionRowError> {
+    upsert_label_with(&mut *conn, id, label).await
+}
+
+async fn upsert_label_with<'e, E>(
+    executor: E,
+    id: &Uuid,
+    label: &Label,
+) -> Result<(), SessionRowError>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     sqlx::query(
         "INSERT INTO session_labels (session_id, key, value)
          VALUES (?, ?, ?)
@@ -100,7 +101,7 @@ async fn upsert_label_in(
     .bind(id.to_string())
     .bind(&label.key)
     .bind(&label.value)
-    .execute(conn)
+    .execute(executor)
     .await?;
     Ok(())
 }

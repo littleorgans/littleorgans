@@ -6,7 +6,7 @@ mod env;
 mod lilo;
 mod runtime;
 
-pub use lilo::{DaemonEndpoint, LiloHome, LiloPathError, LiloPaths};
+pub use lilo::{DaemonEndpoint, LiloHome, LiloPathError, LiloPaths, expand_home_path};
 pub use runtime::{
     RuntimeEndpoint, RuntimePathError, event_log_path, shim_path, shim_path_from_env,
 };

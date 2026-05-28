@@ -1,67 +1,14 @@
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::Value;
 
-pub const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
+pub use lilo_rm_core::mcp::{
+    JsonRpcError, JsonRpcRequest, JsonRpcResponse, MCP_PROTOCOL_VERSION, McpRequest,
+    ToolCallRequest, json_rpc_error, json_rpc_failure, json_rpc_response_from_result,
+    json_rpc_result, parse_json_rpc_line, prepare_mcp_request, serialize_json_rpc_response,
+    tool_call_request, tool_error_with_meta_key, tool_success,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct JsonRpcRequest {
-    #[serde(rename = "jsonrpc")]
-    pub jsonrpc: String,
-    pub id: Option<Value>,
-    pub method: String,
-    #[serde(default)]
-    pub params: Option<Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: String,
-    pub id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-pub fn tool_success<T>(text: String, structured: &T) -> Value
-where
-    T: Serialize,
-{
-    let structured_content = match serde_json::to_value(structured) {
-        Ok(value) => value,
-        Err(error) => panic!("structured MCP result serializes: {error}"),
-    };
-
-    let mut content_item = Map::new();
-    content_item.insert("type".to_string(), Value::String("text".to_string()));
-    content_item.insert("text".to_string(), Value::String(text));
-
-    let mut result = Map::new();
-    result.insert(
-        "content".to_string(),
-        Value::Array(vec![Value::Object(content_item)]),
-    );
-    result.insert("structuredContent".to_string(), structured_content);
-    Value::Object(result)
-}
+const SESSION_TOOL_ERROR_META_KEY: &str = "sm_tool_error";
 
 pub fn tool_error(message: impl Into<String>) -> Value {
-    let message = message.into();
-    json!({
-        "content": [{"type": "text", "text": format!("ERROR: {message}")}],
-        "_meta": {
-            "sm_tool_error": {
-                "is_error": true,
-                "message": message
-            }
-        }
-    })
+    tool_error_with_meta_key(SESSION_TOOL_ERROR_META_KEY, message)
 }

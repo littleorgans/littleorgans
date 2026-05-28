@@ -3,7 +3,6 @@ use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::process::Command;
 
 #[path = "src/tool_contracts.rs"]
 mod tool_contracts;
@@ -36,100 +35,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     write_schema_outputs(&manifest_dir, &registry)?;
     write_docs_outputs(&manifest_dir, &registry)?;
-    emit_cli_version()?;
+    lilo_build_support::emit_cli_version("SM_CLI_VERSION");
     Ok(())
-}
-
-fn emit_cli_version() -> Result<(), Box<dyn Error>> {
-    emit_git_rerun_directives();
-    println!("cargo:rerun-if-env-changed=LILO_GIT_SHA");
-    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
-    println!("cargo:rerun-if-env-changed=LILO_VERSION_INCLUDE_GIT_SHA");
-
-    let package_version = std::env::var("CARGO_PKG_VERSION")?;
-    let version = match (include_git_sha(), build_git_sha()) {
-        (true, Some(sha)) => format!("{package_version}+{sha}"),
-        _ => package_version,
-    };
-    println!("cargo:rustc-env=SM_CLI_VERSION={version}");
-    Ok(())
-}
-
-fn emit_git_rerun_directives() {
-    let Some(head_path) = git_path("HEAD") else {
-        return;
-    };
-    emit_rerun_if_path_exists(Path::new(&head_path));
-
-    if let Some(packed_refs) = git_path("packed-refs") {
-        emit_rerun_if_path_exists(Path::new(&packed_refs));
-    }
-
-    let Ok(head) = fs::read_to_string(&head_path) else {
-        return;
-    };
-    if let Some(ref_path) = head.trim().strip_prefix("ref: ")
-        && let Some(resolved) = git_path(ref_path)
-    {
-        emit_rerun_if_path_exists(Path::new(&resolved));
-    }
-}
-
-fn emit_rerun_if_path_exists(path: &Path) {
-    if path.exists() {
-        println!("cargo:rerun-if-changed={}", path.display());
-    }
-}
-
-fn git_path(rel: &str) -> Option<String> {
-    Command::new("git")
-        .args(["rev-parse", "--git-path", rel])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-}
-
-fn include_git_sha() -> bool {
-    matches!(
-        std::env::var("LILO_VERSION_INCLUDE_GIT_SHA").as_deref(),
-        Ok("1" | "true")
-    )
-}
-
-fn build_git_sha() -> Option<String> {
-    explicit_git_sha().or_else(git_head_sha)
-}
-
-fn explicit_git_sha() -> Option<String> {
-    std::env::var("LILO_GIT_SHA")
-        .ok()
-        .and_then(|sha| short_sha(&sha))
-        .or_else(|| {
-            std::env::var("GITHUB_SHA")
-                .ok()
-                .and_then(|sha| short_sha(&sha))
-        })
-}
-
-fn git_head_sha() -> Option<String> {
-    Command::new("git")
-        .args(["rev-parse", "--short=7", "HEAD"])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .and_then(|stdout| short_sha(&stdout))
-}
-
-fn short_sha(sha: &str) -> Option<String> {
-    let trimmed = sha.trim();
-    if trimmed.len() < 7 {
-        return None;
-    }
-    Some(trimmed[..7].to_string())
 }
 
 fn write_schema_outputs(

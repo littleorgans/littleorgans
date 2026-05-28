@@ -111,6 +111,17 @@ impl LiloPaths {
     }
 }
 
+#[must_use]
+pub fn expand_home_path(value: &str, home: Option<&Path>) -> Option<PathBuf> {
+    if value == "~" {
+        return home.map(Path::to_path_buf);
+    }
+    if let Some(rest) = value.strip_prefix("~/") {
+        return home.map(|home| home.join(rest));
+    }
+    Some(PathBuf::from(value))
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct DaemonEndpoint {
@@ -214,6 +225,31 @@ mod tests {
             paths.db_path(),
             PathBuf::from(DEFAULT_HOME).join("data/lilo.db")
         );
+    }
+
+    #[test]
+    fn home_expansion_rewrites_only_home_prefixes() {
+        let home = Path::new("/tmp/home");
+
+        assert_eq!(expand_home_path("~", Some(home)), Some(home.to_path_buf()));
+        assert_eq!(
+            expand_home_path("~/agent.toml", Some(home)),
+            Some(home.join("agent.toml"))
+        );
+        assert_eq!(
+            expand_home_path("~user/agent.toml", None),
+            Some("~user/agent.toml".into())
+        );
+        assert_eq!(
+            expand_home_path("/tmp/agent.toml", None),
+            Some("/tmp/agent.toml".into())
+        );
+    }
+
+    #[test]
+    fn home_expansion_requires_home_for_home_prefixes() {
+        assert_eq!(expand_home_path("~", None), None);
+        assert_eq!(expand_home_path("~/agent.toml", None), None);
     }
 
     #[test]

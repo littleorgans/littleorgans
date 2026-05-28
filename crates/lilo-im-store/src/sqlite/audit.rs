@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use lilo_common::sql::WhereClause;
 use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Principal, ResourceSpec,
 };
@@ -9,6 +10,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::schema::AUDIT_TABLE;
+
+const AUDIT_ROW_COLUMNS: &str = "\
+id, timestamp, principal, action, resource, decision, session_ref, notes, policy_id, \
+evaluation_trace, denial_reason";
+const AUDIT_ROW_PLACEHOLDERS: &str = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -91,7 +97,7 @@ pub async fn record_audit_in_tx(
 }
 
 #[derive(Debug)]
-struct AuditRecord {
+struct EncodedAuditRow {
     id: String,
     timestamp: String,
     principal: String,
@@ -105,7 +111,26 @@ struct AuditRecord {
     denial_reason: Option<String>,
 }
 
-impl AuditRecord {
+impl EncodedAuditRow {
+    fn from_audit_row(row: &AuditRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: row.id.to_string(),
+            timestamp: row.timestamp.to_rfc3339(),
+            principal: serialize_json(&row.principal)?,
+            action: serialize_json(&row.action)?,
+            resource: serialize_json(&row.resource)?,
+            decision: serialize_json(&row.decision)?,
+            session_ref: row
+                .session_ref
+                .as_ref()
+                .map(std::string::ToString::to_string),
+            notes: row.notes.clone(),
+            policy_id: row.policy_id.clone(),
+            evaluation_trace: row.evaluation_trace.clone(),
+            denial_reason: row.denial_reason.clone(),
+        })
+    }
+
     fn from_row(row: &SqliteRow) -> Result<Self, StoreError> {
         Ok(Self {
             id: row.try_get("id")?,
@@ -156,23 +181,22 @@ async fn query_audit_rows(
 ) -> Result<Vec<AuditRow>, StoreError> {
     let mut query = QueryBuilder::<Sqlite>::new(format!(
         "\
-SELECT id, timestamp, principal, action, resource, decision, session_ref, notes,
-       policy_id, evaluation_trace, denial_reason
+SELECT {AUDIT_ROW_COLUMNS}
 FROM {AUDIT_TABLE}",
     ));
-    let mut has_where = false;
+    let mut where_clause = WhereClause::new();
     if let Some(principal) = filters.principal {
-        push_where(&mut query, &mut has_where);
+        query.push(where_clause.predicate_prefix());
         query
             .push("principal = ")
             .push_bind(serialize_json(&principal)?);
     }
     if let Some(action) = filters.action {
-        push_where(&mut query, &mut has_where);
+        query.push(where_clause.predicate_prefix());
         query.push("action = ").push_bind(serialize_json(&action)?);
     }
     if let Some(since) = filters.since {
-        push_where(&mut query, &mut has_where);
+        query.push(where_clause.predicate_prefix());
         query.push("timestamp >= ").push_bind(since.to_rfc3339());
     }
     query.push(" ORDER BY rowid ASC");
@@ -183,8 +207,8 @@ FROM {AUDIT_TABLE}",
 
     let rows = query.build().fetch_all(pool).await?;
     rows.into_iter()
-        .map(|row| AuditRecord::from_row(&row))
-        .map(|record| record.and_then(AuditRecord::try_into_audit_row))
+        .map(|row| EncodedAuditRow::from_row(&row))
+        .map(|record| record.and_then(EncodedAuditRow::try_into_audit_row))
         .collect()
 }
 
@@ -196,36 +220,24 @@ async fn insert_audit_row_with<'e, E>(executor: E, row: &AuditRow) -> Result<(),
 where
     E: Executor<'e, Database = Sqlite>,
 {
+    let encoded = EncodedAuditRow::from_audit_row(row)?;
     let sql = format!(
-        "\
-INSERT INTO {AUDIT_TABLE} (
-    id, timestamp, principal, action, resource, decision, session_ref, notes,
-    policy_id, evaluation_trace, denial_reason
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO {AUDIT_TABLE} ({AUDIT_ROW_COLUMNS}) VALUES ({AUDIT_ROW_PLACEHOLDERS})",
     );
 
     sqlx::query(&sql)
-        .bind(row.id.to_string())
-        .bind(row.timestamp.to_rfc3339())
-        .bind(serialize_json(&row.principal)?)
-        .bind(serialize_json(&row.action)?)
-        .bind(serialize_json(&row.resource)?)
-        .bind(serialize_json(&row.decision)?)
-        .bind(row.session_ref.map(|id| id.to_string()))
-        .bind(row.notes.as_deref())
-        .bind(row.policy_id.as_deref())
-        .bind(row.evaluation_trace.as_deref())
-        .bind(row.denial_reason.as_deref())
+        .bind(encoded.id)
+        .bind(encoded.timestamp)
+        .bind(encoded.principal)
+        .bind(encoded.action)
+        .bind(encoded.resource)
+        .bind(encoded.decision)
+        .bind(encoded.session_ref)
+        .bind(encoded.notes)
+        .bind(encoded.policy_id)
+        .bind(encoded.evaluation_trace)
+        .bind(encoded.denial_reason)
         .execute(executor)
         .await?;
     Ok(())
-}
-
-fn push_where(query: &mut QueryBuilder<'_, Sqlite>, has_where: &mut bool) {
-    if *has_where {
-        query.push(" AND ");
-    } else {
-        query.push(" WHERE ");
-        *has_where = true;
-    }
 }

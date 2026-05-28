@@ -172,6 +172,16 @@ pub struct ResourceSpec {
     pub labels: HashMap<String, String>,
 }
 
+impl ResourceSpec {
+    #[must_use]
+    pub fn session(session_id: Uuid) -> Self {
+        Self {
+            session_id: Some(session_id),
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capability {
     pub name: String,
@@ -187,13 +197,27 @@ pub struct Authorized {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use uuid::Uuid;
 
-    use super::Principal;
+    use super::{Principal, ResourceSpec};
 
     #[test]
     fn serializes_local_principal_with_stable_kind_tag() {
         let value = serde_json::to_value(Principal::Local(501)).unwrap();
 
         assert_eq!(value, json!({ "kind": "Local", "uid": 501 }));
+    }
+
+    #[test]
+    fn session_resource_spec_sets_only_session_id() {
+        let session_id = Uuid::nil();
+
+        assert_eq!(
+            ResourceSpec::session(session_id),
+            ResourceSpec {
+                session_id: Some(session_id),
+                ..ResourceSpec::default()
+            }
+        );
     }
 }

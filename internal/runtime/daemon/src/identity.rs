@@ -68,25 +68,21 @@ async fn authorize_shim_callback(
     // Shim callbacks are local control-plane continuations from a process this
     // daemon launched on the same host. They are accepted only for local peer
     // credentials and are still audited through the identity client.
+    let resource = ResourceSpec::session(session_id);
     identity
-        .authorize(
-            principal,
-            Action::ShimCallback,
-            &ResourceSpec {
-                session_id: Some(session_id),
-                ..Default::default()
-            },
-        )
+        .authorize(principal, Action::ShimCallback, &resource)
         .await
 }
 
 fn runtime_authorization(rpc: &RuntimeRpc) -> (Action, ResourceSpec) {
     match rpc {
         RuntimeRpc::ValidateTarget { .. } => (Action::Spawn, ResourceSpec::default()),
-        RuntimeRpc::Kill { request } => (Action::Kill, session_resource(request.session_id)),
+        RuntimeRpc::Kill { request } => (Action::Kill, ResourceSpec::session(request.session_id)),
         RuntimeRpc::KillByPid { .. } => (Action::Kill, ResourceSpec::default()),
         RuntimeRpc::Nudge { .. } => (Action::Nudge, ResourceSpec::default()),
-        RuntimeRpc::Capture { request } => (Action::Logs, session_resource(request.session_id)),
+        RuntimeRpc::Capture { request } => {
+            (Action::Logs, ResourceSpec::session(request.session_id))
+        }
         RuntimeRpc::Status { request } => (Action::List, status_resource(request)),
         RuntimeRpc::Version | RuntimeRpc::Watchers | RuntimeRpc::Events { .. } => {
             (Action::Read, ResourceSpec::default())
@@ -120,13 +116,6 @@ fn status_resource(request: &StatusRequest) -> ResourceSpec {
         session_id: request
             .session_id
             .or_else(|| request.session_ids.first().copied()),
-        ..Default::default()
-    }
-}
-
-fn session_resource(session_id: uuid::Uuid) -> ResourceSpec {
-    ResourceSpec {
-        session_id: Some(session_id),
         ..Default::default()
     }
 }

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use lilo_session_core::{
     DoctorRequest, LogsRequest, NudgeRequest, RpcResponse, SessionRpc, WaitCondition, WaitRequest,
     tool_success,
@@ -10,9 +10,9 @@ use serde_json::{Value, json};
 use crate::handler::DaemonState;
 use crate::identity_client::RequestContext;
 
+use super::agent::session_tool_response_error;
 use super::args::{
     optional_u64, required_selector, required_string, scoped_required_selector, selector_from_id,
-    unexpected_response,
 };
 
 pub(crate) async fn nudge(
@@ -46,8 +46,7 @@ pub(crate) async fn nudge(
                 "errors": response.errors
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -79,8 +78,7 @@ pub(crate) async fn logs(
                 "content": response.content
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -114,8 +112,7 @@ pub(crate) async fn wait(
             format!("wait matched: {}", response.matched),
             &json!({ "matched": response.matched, "sessions": response.sessions }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -142,7 +139,6 @@ pub(crate) async fn doctor(
                 "findings": response.findings
             }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }

@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
+use lilo_rm_core::ensure_mounts_allowed_for_isolation;
 use lilo_session_core::{
     CaptureRequest, DeleteRequest, IsolationPolicy, LabelMutation, LabelRequest, ListRequest,
     RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest, normalize_agent_config_request,
@@ -17,6 +18,13 @@ use super::args::{
     optional_u64, required_selector, required_string, scoped_optional_selector,
     scoped_required_selector, selector_from_id, unexpected_response,
 };
+
+pub(super) fn session_tool_response_error(response: &RpcResponse) -> anyhow::Error {
+    match response {
+        RpcResponse::Error { message } => anyhow!(message.clone()),
+        other => unexpected_response(other),
+    }
+}
 
 pub(crate) async fn agent_run(
     state: &DaemonState,
@@ -43,9 +51,7 @@ pub(crate) async fn agent_run(
         .unwrap_or_default();
     let image = optional_string(arguments, "image").map(str::to_string);
     let mounts = optional_mounts(arguments)?;
-    if isolation.is_host() && !mounts.is_empty() {
-        anyhow::bail!("--mount is docker-only and cannot be used with --isolation host");
-    }
+    ensure_mounts_allowed_for_isolation(&isolation, &mounts)?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -74,8 +80,7 @@ pub(crate) async fn agent_run(
             let text = format!("spawned {}", response.session.id);
             Ok(tool_success(text, &json!({ "session": response.session })))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -103,8 +108,7 @@ pub(crate) async fn agent_list(
                 &json!({ "sessions": response.sessions }),
             ))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -140,8 +144,7 @@ pub(crate) async fn agent_get(
                 &json!({ "session": session }),
             ))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -177,8 +180,7 @@ pub(crate) async fn agent_capture(
             format!("captured {}", response.session.id),
             &json!({ "session": response.session, "capture": response.capture }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -213,8 +215,7 @@ pub(crate) async fn agent_delete(
                 &json!({ "sessions": response.sessions, "errors": response.errors }),
             ))
         }
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }
 
@@ -238,7 +239,6 @@ pub(crate) async fn agent_label(
             format!("labeled {} session(s)", response.sessions.len()),
             &json!({ "sessions": response.sessions, "errors": response.errors }),
         )),
-        RpcResponse::Error { message } => Err(anyhow!(message)),
-        other => Err(unexpected_response(&other)),
+        other => Err(session_tool_response_error(&other)),
     }
 }

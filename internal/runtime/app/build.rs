@@ -1,12 +1,11 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use lilo_rm_core::tool_contracts::{ToolContract, ToolRegistry, contract_registry};
 
 fn main() {
-    emit_cli_version();
+    lilo_build_support::emit_cli_version("RTM_CLI_VERSION");
     println!("cargo:rerun-if-changed=../../../crates/lilo-rm-core/tools.toml");
 
     let manifest_dir = PathBuf::from(
@@ -21,102 +20,6 @@ fn main() {
 
     write_generated_sources(&manifest_dir, registry);
     write_readme(&repo_root.join("crates/lilo-rm-core/README.md"), registry);
-}
-
-fn emit_cli_version() {
-    emit_git_rerun_directives();
-    println!("cargo:rerun-if-env-changed=LILO_GIT_SHA");
-    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
-    println!("cargo:rerun-if-env-changed=LILO_VERSION_INCLUDE_GIT_SHA");
-
-    let package_version = std::env::var("CARGO_PKG_VERSION")
-        .unwrap_or_else(|error| panic!("CARGO_PKG_VERSION set: {error}"));
-    let version = match (include_git_sha(), build_git_sha()) {
-        (true, Some(sha)) => format!("{package_version}+{sha}"),
-        _ => package_version,
-    };
-    println!("cargo:rustc-env=RTM_CLI_VERSION={version}");
-}
-
-fn emit_git_rerun_directives() {
-    // Resolve git directives via `git rev-parse --git-path` so the paths
-    // work in both the main repo (.git is a directory) and a worktree (.git
-    // is a pointer file at <main>/.git/worktrees/<name>/). Only emit
-    // `cargo:rerun-if-changed` for paths that currently exist; otherwise
-    // cargo flags the build script as stale on every invocation and forces
-    // every downstream crate to recompile. Packed-refs and unpacked-ref
-    // files toggle existence based on git GC state, so we tolerate either.
-    let Some(head_path) = git_path("HEAD") else {
-        return;
-    };
-    emit_rerun_if_path_exists(Path::new(&head_path));
-
-    if let Some(packed_refs) = git_path("packed-refs") {
-        emit_rerun_if_path_exists(Path::new(&packed_refs));
-    }
-
-    let Ok(head) = fs::read_to_string(&head_path) else {
-        return;
-    };
-    if let Some(ref_path) = head.trim().strip_prefix("ref: ")
-        && let Some(resolved) = git_path(ref_path)
-    {
-        emit_rerun_if_path_exists(Path::new(&resolved));
-    }
-}
-
-fn emit_rerun_if_path_exists(path: &Path) {
-    if path.exists() {
-        println!("cargo:rerun-if-changed={}", path.display());
-    }
-}
-
-fn git_path(rel: &str) -> Option<String> {
-    Command::new("git")
-        .args(["rev-parse", "--git-path", rel])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-}
-
-fn include_git_sha() -> bool {
-    matches!(
-        std::env::var("LILO_VERSION_INCLUDE_GIT_SHA").as_deref(),
-        Ok("1" | "true" | "yes")
-    )
-}
-
-fn build_git_sha() -> Option<String> {
-    explicit_git_sha().or_else(git_head_sha)
-}
-
-fn explicit_git_sha() -> Option<String> {
-    std::env::var("LILO_GIT_SHA")
-        .ok()
-        .and_then(|sha| short_sha(&sha))
-        .or_else(|| {
-            std::env::var("GITHUB_SHA")
-                .ok()
-                .and_then(|sha| short_sha(&sha))
-        })
-}
-
-fn git_head_sha() -> Option<String> {
-    Command::new("git")
-        .args(["rev-parse", "--short=7", "HEAD"])
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .and_then(|stdout| short_sha(&stdout))
-}
-
-fn short_sha(value: &str) -> Option<String> {
-    let sha = value.trim().chars().take(7).collect::<String>();
-    (!sha.is_empty() && sha.chars().all(|ch| ch.is_ascii_hexdigit())).then_some(sha)
 }
 
 fn write_generated_sources(manifest_dir: &Path, registry: &ToolRegistry) {

@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use lilo_paths::{LiloHome, LiloPaths};
+use lilo_paths::{LiloHome, LiloPaths, expand_home_path};
 use lilo_session_core::is_agent_config_path_like;
 use lilo_session_driver::LaunchEnv;
 use serde::Deserialize;
@@ -52,7 +52,8 @@ fn resolve_agent_config_at_path(requested: &str, path: PathBuf) -> Result<Resolv
 fn agent_config_path_from_env(requested: &str) -> Result<PathBuf> {
     if is_agent_config_path_like(requested) {
         let home = std::env::var_os("HOME").map(PathBuf::from);
-        return expand_home(requested, home.as_deref());
+        return expand_home_path(requested, home.as_deref())
+            .ok_or_else(|| anyhow!("HOME is required to expand agent config path {requested}"));
     }
 
     let home = LiloHome::from_env().context("failed to resolve LILO_HOME for agent config")?;
@@ -61,20 +62,6 @@ fn agent_config_path_from_env(requested: &str) -> Result<PathBuf> {
 
 fn named_agent_config_path(requested: &str, paths: &LiloPaths) -> PathBuf {
     paths.agent_config_dir(requested).join("agent.toml")
-}
-
-fn expand_home(value: &str, home: Option<&Path>) -> Result<PathBuf> {
-    if value == "~" {
-        return home
-            .map(Path::to_path_buf)
-            .ok_or_else(|| anyhow!("HOME is required to expand agent config path {value}"));
-    }
-    if let Some(rest) = value.strip_prefix("~/") {
-        return home
-            .map(|home| home.join(rest))
-            .ok_or_else(|| anyhow!("HOME is required to expand agent config path {value}"));
-    }
-    Ok(PathBuf::from(value))
 }
 
 #[derive(Debug, Default, Deserialize)]

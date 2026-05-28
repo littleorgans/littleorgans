@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget};
+use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget, ensure_mounts_allowed_for_isolation};
 use lilo_session_core::{
     Label, Namespace, RpcResponse, SessionRpc, SpawnRequest, agent_config_uses_home_prefix,
     is_agent_config_path_like, normalize_agent_config_request,
@@ -14,7 +14,7 @@ use crate::cli::output::print_session_line;
 
 pub async fn run(args: RunArgs) -> Result<()> {
     let isolation = args.isolation.unwrap_or_default();
-    reject_host_mounts(&isolation, &args.mounts)?;
+    ensure_mounts_allowed_for_isolation(&isolation, &args.mounts)?;
     spawn_session(
         args.session,
         args.target,
@@ -96,13 +96,6 @@ async fn spawn_session(
             other.kind()
         ),
     }
-}
-
-fn reject_host_mounts(isolation: &IsolationPolicy, mounts: &[MountSpec]) -> Result<()> {
-    if isolation.is_host() && !mounts.is_empty() {
-        bail!("--mount is docker-only and cannot be used with --isolation host");
-    }
-    Ok(())
 }
 
 fn normalize_cli_agent_config(agent_config: Option<&str>) -> Result<Option<String>> {
