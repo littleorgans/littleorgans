@@ -8,6 +8,7 @@
 
 mod backend;
 mod docker_argv;
+mod docker_command;
 mod docker_mount_plan;
 pub mod docker_preflight;
 mod docker_runtime;

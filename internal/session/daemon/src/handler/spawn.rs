@@ -10,6 +10,7 @@ use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
 use lilo_session_driver::{SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
+use sqlx::{Sqlite, pool::PoolConnection};
 use uuid::Uuid;
 
 use crate::agent_config::{ResolvedAgentConfig, resolve_agent_config};
@@ -105,12 +106,11 @@ impl DaemonState {
     ) -> Result<()> {
         let lifecycle_store = self.lifecycle_store();
         let mut conn = self
-            .store
-            .pool()
-            .acquire()
-            .await
-            .context("failed to acquire session spawn Tx A connection")?;
-        begin_immediate_tx(&mut conn, "session spawn Tx A").await?;
+            .begin_spawn_tx(
+                "session spawn Tx A",
+                "failed to acquire session spawn Tx A connection",
+            )
+            .await?;
         if let Err(error) = self
             .identity
             .authorize_in_tx(
@@ -201,12 +201,11 @@ impl DaemonState {
 
         let lifecycle_store = self.lifecycle_store();
         let mut conn = self
-            .store
-            .pool()
-            .acquire()
-            .await
-            .context("failed to acquire session spawn Tx B connection")?;
-        begin_immediate_tx(&mut conn, "session spawn Tx B").await?;
+            .begin_spawn_tx(
+                "session spawn Tx B",
+                "failed to acquire session spawn Tx B connection",
+            )
+            .await?;
         let result = async {
             self.store
                 .insert_session_in(&mut conn, &session)
@@ -235,12 +234,11 @@ impl DaemonState {
     async fn abort_spawn_intent(&self, session_id: Uuid, reason: &str) -> Result<()> {
         let lifecycle_store = self.lifecycle_store();
         let mut conn = self
-            .store
-            .pool()
-            .acquire()
-            .await
-            .context("failed to acquire session spawn abort tx connection")?;
-        begin_immediate_tx(&mut conn, "session spawn abort tx").await?;
+            .begin_spawn_tx(
+                "session spawn abort tx",
+                "failed to acquire session spawn abort tx connection",
+            )
+            .await?;
         let result = async {
             self.store
                 .abort_spawn_intent_in(&mut conn, session_id, reason)
@@ -318,6 +316,16 @@ impl DaemonState {
 
     fn lifecycle_store(&self) -> LifecycleStore {
         LifecycleStore::from_pool(self.store.pool().clone())
+    }
+
+    async fn begin_spawn_tx(
+        &self,
+        label: &'static str,
+        acquire_context: &'static str,
+    ) -> Result<PoolConnection<Sqlite>> {
+        let mut conn = self.store.pool().acquire().await.context(acquire_context)?;
+        begin_immediate_tx(&mut conn, label).await?;
+        Ok(conn)
     }
 }
 

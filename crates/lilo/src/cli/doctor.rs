@@ -1,11 +1,11 @@
 use clap::Args;
 use lilo_common::diagnostic::Diagnostic;
 use lilo_db::LiloDb;
-use lilo_paths::{LiloHome, LiloPaths};
+use lilo_paths::LiloPaths;
 use serde::Serialize;
 use tokio::net::UnixStream;
 
-use super::Output;
+use super::{Output, resolve_lilo_paths};
 
 #[derive(Debug, Args)]
 pub struct DoctorCommand {}
@@ -123,35 +123,33 @@ impl DatabaseHealth {
         let path_label = path.display().to_string();
         match LiloDb::open(paths).await {
             Ok(db) => match DbPragmas::collect(&db).await {
-                Ok(pragmas) => DatabaseProbe {
-                    health: Self {
-                        path: path_label,
-                        status: "ok",
-                        pragmas,
-                        error: None,
-                    },
-                    db: Some(db),
-                },
-                Err(error) => DatabaseProbe {
-                    health: Self {
-                        path: path_label,
-                        status: "error",
-                        pragmas: DbPragmas::default(),
-                        error: Some(error),
-                    },
-                    db: Some(db),
-                },
+                Ok(pragmas) => Self::probe(path_label, "ok", pragmas, None, Some(db)),
+                Err(error) => Self::error_probe(path_label, error, Some(db)),
             },
-            Err(error) => DatabaseProbe {
-                health: Self {
-                    path: path_label,
-                    status: "error",
-                    pragmas: DbPragmas::default(),
-                    error: Some(error.to_string()),
-                },
-                db: None,
-            },
+            Err(error) => Self::error_probe(path_label, error.to_string(), None),
         }
+    }
+
+    fn probe(
+        path: String,
+        status: &'static str,
+        pragmas: DbPragmas,
+        error: Option<String>,
+        db: Option<LiloDb>,
+    ) -> DatabaseProbe {
+        DatabaseProbe {
+            health: Self {
+                path,
+                status,
+                pragmas,
+                error,
+            },
+            db,
+        }
+    }
+
+    fn error_probe(path: String, error: String, db: Option<LiloDb>) -> DatabaseProbe {
+        Self::probe(path, "error", DbPragmas::default(), Some(error), db)
     }
 }
 
@@ -240,15 +238,15 @@ async fn count(pool: &sqlx::SqlitePool, query: &'static str) -> i64 {
 }
 
 fn paths() -> Result<LiloPaths, Diagnostic> {
-    let home = LiloHome::from_env().map_err(|error| {
+    resolve_lilo_paths().map_err(|error| {
         Diagnostic::internal("failed to resolve lilo home").with_detail(error.to_string())
-    })?;
-    Ok(LiloPaths::new(home))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lilo_paths::LiloHome;
 
     #[tokio::test]
     async fn collected_status_has_backend_probe_shape() {

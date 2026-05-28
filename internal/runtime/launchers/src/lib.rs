@@ -10,15 +10,48 @@ mod codex;
 
 use std::sync::OnceLock;
 
+use claude::CLAUDE;
 pub use claude::ClaudeLauncher;
+use codex::CODEX;
 pub use codex::CodexLauncher;
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, LauncherError, RuntimeKind, RuntimeLauncher,
     SpawnRequest, SpawnTarget, upsert_launch_env,
 };
 
-static CLAUDE: ClaudeLauncher = ClaudeLauncher;
-static CODEX: CodexLauncher = CodexLauncher;
+pub struct BinaryLauncher {
+    kind: RuntimeKind,
+    binary: &'static str,
+    cache: &'static OnceLock<Result<String, LauncherError>>,
+}
+
+impl BinaryLauncher {
+    pub(crate) const fn new(
+        kind: RuntimeKind,
+        binary: &'static str,
+        cache: &'static OnceLock<Result<String, LauncherError>>,
+    ) -> Self {
+        Self {
+            kind,
+            binary,
+            cache,
+        }
+    }
+}
+
+impl RuntimeLauncher for BinaryLauncher {
+    fn kind(&self) -> RuntimeKind {
+        self.kind.clone()
+    }
+
+    fn argv(&self, _request: &SpawnRequest) -> Result<Vec<String>, LauncherError> {
+        resolved_argv(self.binary, self.cache)
+    }
+
+    fn env(&self, request: &SpawnRequest) -> Result<Vec<LaunchEnv>, LauncherError> {
+        Ok(runtime_env(request))
+    }
+}
 
 pub fn dispatch(kind: &RuntimeKind) -> Result<&'static dyn RuntimeLauncher, LauncherError> {
     match kind {

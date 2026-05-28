@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::process::Command as StdCommand;
+use std::process::{Command as StdCommand, Output};
 
 use anyhow::Result;
 use lilo_rm_core::{
@@ -9,6 +9,7 @@ use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::docker_argv::{self, container_name};
+use crate::docker_command::stderr_or;
 use crate::error::RuntimeFailure;
 
 pub(crate) fn docker_run_launch(
@@ -51,38 +52,36 @@ pub(crate) struct DockerCliRuntime;
 impl DockerCliRuntime {
     pub(crate) async fn running(&self, session_id: Uuid) -> Result<bool> {
         let output = Command::new("docker")
-            .arg("container")
-            .arg("inspect")
-            .arg(container_name(session_id))
-            .arg("--format")
-            .arg("{{.State.Running}}")
+            .args(container_running_args(session_id))
             .output()
             .await
             .map_err(|error| RuntimeFailure::docker_unavailable(error.to_string()))?;
 
-        if !output.status.success() {
-            return Ok(false);
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).trim() == "true")
+        Ok(container_running_from_output(&output))
     }
 }
 
 pub(crate) fn container_running_blocking(session_id: Uuid) -> Result<bool> {
     let output = StdCommand::new("docker")
-        .arg("container")
-        .arg("inspect")
-        .arg(container_name(session_id))
-        .arg("--format")
-        .arg("{{.State.Running}}")
+        .args(container_running_args(session_id))
         .output()
         .map_err(|error| RuntimeFailure::docker_unavailable(error.to_string()))?;
 
-    if !output.status.success() {
-        return Ok(false);
-    }
+    Ok(container_running_from_output(&output))
+}
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim() == "true")
+fn container_running_args(session_id: Uuid) -> [String; 5] {
+    [
+        "container".to_owned(),
+        "inspect".to_owned(),
+        container_name(session_id),
+        "--format".to_owned(),
+        "{{.State.Running}}".to_owned(),
+    ]
+}
+
+fn container_running_from_output(output: &Output) -> bool {
+    output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
 }
 
 pub(crate) async fn kill_container(session_id: Uuid, signal: RuntimeSignal) -> Result<KillOutcome> {
@@ -114,10 +113,5 @@ fn signal_number_arg(signal: RuntimeSignal) -> String {
 }
 
 fn command_stderr(stderr: &[u8]) -> String {
-    let message = String::from_utf8_lossy(stderr).trim().to_owned();
-    if message.is_empty() {
-        "docker command failed without stderr".to_owned()
-    } else {
-        message
-    }
+    stderr_or(stderr, "docker command failed without stderr")
 }

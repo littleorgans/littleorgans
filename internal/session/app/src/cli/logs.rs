@@ -9,6 +9,8 @@ use lilo_session_core::{LogsRequest, RpcResponse, Selector, SessionRpc};
 
 use crate::cli::cli_def::LogsArgs;
 
+use super::capture::unexpected_daemon_response;
+
 pub async fn run(args: LogsArgs) -> Result<()> {
     let response = crate::cli::client::send_request(&SessionRpc::Logs {
         request: LogsRequest {
@@ -30,10 +32,7 @@ pub async fn run(args: LogsArgs) -> Result<()> {
             Ok(())
         }
         RpcResponse::Error { message } => bail!(message),
-        other => bail!(
-            "unexpected daemon response: {} (please report)",
-            other.kind()
-        ),
+        other => Err(unexpected_daemon_response(&other)),
     }
 }
 

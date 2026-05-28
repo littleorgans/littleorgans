@@ -3,6 +3,7 @@ use lilo_rm_core::SpawnRequest;
 use serde::Deserialize;
 use tokio::process::Command;
 
+use crate::docker_command::stderr_or;
 use crate::error::RuntimeFailure;
 
 const RTM_DOCKER_IMAGE: &str = "RTM_DOCKER_IMAGE";
@@ -71,6 +72,34 @@ pub(crate) trait DockerImageInspector {
 
 pub(crate) struct DockerCliInspector;
 
+impl DockerCliInspector {
+    async fn image_inspect_metadata(
+        &self,
+        image: &str,
+        format: &str,
+        fallback: &str,
+    ) -> Result<String> {
+        let output = Command::new("docker")
+            .arg("image")
+            .arg("inspect")
+            .arg(image)
+            .arg("--format")
+            .arg(format)
+            .output()
+            .await
+            .map_err(|error| RuntimeFailure::docker_image_unavailable(error.to_string()))?;
+
+        if !output.status.success() {
+            return Err(RuntimeFailure::docker_image_unavailable(stderr_or(
+                &output.stderr,
+                fallback,
+            )));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    }
+}
+
 impl DockerImageInspector for DockerCliInspector {
     async fn ensure_available(&self) -> Result<()> {
         let output = Command::new("docker")
@@ -85,35 +114,25 @@ impl DockerImageInspector for DockerCliInspector {
             return Ok(());
         }
 
-        Err(RuntimeFailure::docker_unavailable(command_error_message(
+        Err(RuntimeFailure::docker_unavailable(stderr_or(
             &output.stderr,
             "docker version failed without stderr",
         )))
     }
 
     async fn image_user(&self, image: &str) -> Result<Option<String>> {
-        let output = Command::new("docker")
-            .arg("image")
-            .arg("inspect")
-            .arg(image)
-            .arg("--format")
-            .arg("{{json .Config.User}}")
-            .output()
-            .await
-            .map_err(|error| RuntimeFailure::docker_image_unavailable(error.to_string()))?;
+        let trimmed = self
+            .image_inspect_metadata(
+                image,
+                "{{json .Config.User}}",
+                "docker image inspect failed without stderr",
+            )
+            .await?;
 
-        if !output.status.success() {
-            return Err(RuntimeFailure::docker_image_unavailable(
-                command_error_message(&output.stderr, "docker image inspect failed without stderr"),
-            ));
-        }
-
-        let raw = String::from_utf8_lossy(&output.stdout);
-        let trimmed = raw.trim();
         if trimmed.is_empty() || trimmed == "null" {
             return Ok(None);
         }
-        let user = serde_json::from_str::<String>(trimmed).map_err(|error| {
+        let user = serde_json::from_str::<String>(&trimmed).map_err(|error| {
             RuntimeFailure::docker_image_metadata_unavailable(format!(
                 "docker image inspect returned invalid user metadata: {error}"
             ))
@@ -134,7 +153,7 @@ impl DockerImageInspector for DockerCliInspector {
 
         if !output.status.success() {
             return Err(RuntimeFailure::docker_image_metadata_unavailable(
-                command_error_message(
+                stderr_or(
                     &output.stderr,
                     "docker manifest inspect failed without stderr",
                 ),
@@ -145,24 +164,15 @@ impl DockerImageInspector for DockerCliInspector {
     }
 
     async fn image_architecture(&self, image: &str) -> Result<String> {
-        let output = Command::new("docker")
-            .arg("image")
-            .arg("inspect")
-            .arg(image)
-            .arg("--format")
-            .arg("{{json .Architecture}}")
-            .output()
-            .await
-            .map_err(|error| RuntimeFailure::docker_image_unavailable(error.to_string()))?;
+        let raw = self
+            .image_inspect_metadata(
+                image,
+                "{{json .Architecture}}",
+                "docker image inspect failed without stderr",
+            )
+            .await?;
 
-        if !output.status.success() {
-            return Err(RuntimeFailure::docker_image_unavailable(
-                command_error_message(&output.stderr, "docker image inspect failed without stderr"),
-            ));
-        }
-
-        let raw = String::from_utf8_lossy(&output.stdout);
-        let architecture = serde_json::from_str::<String>(raw.trim()).map_err(|error| {
+        let architecture = serde_json::from_str::<String>(&raw).map_err(|error| {
             RuntimeFailure::docker_image_metadata_unavailable(format!(
                 "docker image inspect returned invalid architecture metadata: {error}"
             ))
@@ -187,15 +197,6 @@ fn non_empty(value: &str) -> Option<String> {
         None
     } else {
         Some(trimmed.to_owned())
-    }
-}
-
-fn command_error_message(stderr: &[u8], fallback: &str) -> String {
-    let message = String::from_utf8_lossy(stderr).trim().to_owned();
-    if message.is_empty() {
-        fallback.to_owned()
-    } else {
-        message
     }
 }
 

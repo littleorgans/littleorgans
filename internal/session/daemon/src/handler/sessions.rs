@@ -1,10 +1,11 @@
+use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use lilo_im_core::Action;
 use lilo_session_core::{
     CaptureRequest, CaptureResponse, DeleteRequest, DeleteResponse, LabelRequest, LabelResponse,
-    ListRequest, ListResponse, RpcResponse, Session, SessionState,
+    ListRequest, ListResponse, RpcResponse, Selector, Session, SessionState, TargetError,
 };
 use uuid::Uuid;
 
@@ -61,15 +62,11 @@ impl DaemonState {
         context: &RequestContext,
         request: DeleteRequest,
     ) -> Result<RpcResponse> {
-        let targets = self.resolve_selector(&request.selector, "session").await?;
-        let mut sessions = Vec::new();
-        let mut errors = Vec::new();
-        for target in targets {
-            match self.delete_one(context, &request, target.id).await {
-                Ok(session) => sessions.push(session),
-                Err(error) => errors.push(target_error(&target.id, &error)),
-            }
-        }
+        let (sessions, errors) = self
+            .collect_target_sessions(&request.selector, |id| {
+                self.delete_one(context, &request, id)
+            })
+            .await?;
 
         Ok(RpcResponse::Deleted {
             response: DeleteResponse { sessions, errors },
@@ -81,15 +78,11 @@ impl DaemonState {
         context: &RequestContext,
         request: LabelRequest,
     ) -> Result<RpcResponse> {
-        let targets = self.resolve_selector(&request.selector, "session").await?;
-        let mut sessions = Vec::new();
-        let mut errors = Vec::new();
-        for target in targets {
-            match self.label_one(context, target.id, &request).await {
-                Ok(session) => sessions.push(session),
-                Err(error) => errors.push(target_error(&target.id, &error)),
-            }
-        }
+        let (sessions, errors) = self
+            .collect_target_sessions(&request.selector, |id| {
+                self.label_one(context, id, &request)
+            })
+            .await?;
         Ok(RpcResponse::Labeled {
             response: LabelResponse { sessions, errors },
         })
@@ -154,5 +147,26 @@ impl DaemonState {
             .await
             .context("failed to persist label")?
             .with_context(|| format!("unknown session: {target_id}"))
+    }
+
+    async fn collect_target_sessions<F, Fut>(
+        &self,
+        selector: &Selector,
+        mut apply: F,
+    ) -> Result<(Vec<Session>, Vec<TargetError>)>
+    where
+        F: FnMut(Uuid) -> Fut,
+        Fut: Future<Output = Result<Session>>,
+    {
+        let targets = self.resolve_selector(selector, "session").await?;
+        let mut sessions = Vec::new();
+        let mut errors = Vec::new();
+        for target in targets {
+            match apply(target.id).await {
+                Ok(session) => sessions.push(session),
+                Err(error) => errors.push(target_error(&target.id, &error)),
+            }
+        }
+        Ok((sessions, errors))
     }
 }

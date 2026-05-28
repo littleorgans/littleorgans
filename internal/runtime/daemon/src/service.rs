@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::server::{DaemonConfig, ServerState};
-use crate::{handler, reconcile};
+use crate::handler;
+use crate::server::{
+    DaemonConfig, ServerState, prepare_runtime_bootstrap, start_runtime_reconcile,
+};
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
-use lilo_identity_service::IdentityClient;
 use lilo_im_core::Principal;
 use lilo_rm_core::{RuntimeEvent, RuntimeResponse, RuntimeRpc};
-use lilo_runtime_store::LifecycleStore;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 
@@ -55,29 +55,14 @@ pub struct RuntimeService {
 impl RuntimeService {
     pub async fn build(ctx: RuntimeServiceContext) -> Result<Self> {
         let (config, db, local_uid) = ctx.into_parts();
-        lilo_runtime_launchers::warm_registry()
-            .context("failed to initialize launcher registry")?;
-        let store = LifecycleStore::open(&db);
-        let identity = IdentityClient::from_db(&db, local_uid);
-        let _ = config.socket_path()?;
-        let state = Arc::new(ServerState::new_with_identity(
-            config.clone(),
-            store,
-            identity,
-        )?);
-        reconcile::reconcile_startup(Arc::clone(&state), &reconcile::SystemProcessProbe).await?;
-        let (shutdown_tx, _) = broadcast::channel(8);
-        let reconcile_task = tokio::spawn(reconcile::run_periodic(
-            Arc::clone(&state),
-            reconcile::SystemProcessProbe,
-            shutdown_tx.subscribe(),
-            config.reconcile,
-        ));
+        let bootstrap = prepare_runtime_bootstrap(&config, &db, local_uid)?;
+        let state = bootstrap.into_state(config.clone())?;
+        let reconcile = start_runtime_reconcile(Arc::clone(&state), config.reconcile).await?;
         Ok(Self {
             config,
             state,
-            shutdown_tx,
-            reconcile_task: Mutex::new(Some(reconcile_task)),
+            shutdown_tx: reconcile.shutdown_tx,
+            reconcile_task: Mutex::new(Some(reconcile.reconcile_task)),
         })
     }
 

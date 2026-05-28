@@ -27,6 +27,7 @@ pub mod mcp;
 pub mod path_shaped_envs;
 pub mod proto;
 pub mod spawn_context;
+pub(crate) mod string_serde;
 pub mod tool_contracts;
 pub mod types;
 mod version;

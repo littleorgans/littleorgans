@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use lilo_rm_core::{CaptureError, CaptureResponse};
 
 use lilo_session_core::{CaptureRequest, RpcResponse, SessionRpc, humanize_capture_error};
@@ -21,11 +21,15 @@ pub async fn run(args: CaptureArgs) -> Result<()> {
         }
         RpcResponse::Capture { response } => print_capture(response.capture),
         RpcResponse::Error { message } => bail!(message),
-        other => bail!(
-            "unexpected daemon response: {} (please report)",
-            other.kind()
-        ),
+        other => Err(unexpected_daemon_response(&other)),
     }
+}
+
+pub(super) fn unexpected_daemon_response(response: &RpcResponse) -> anyhow::Error {
+    anyhow!(
+        "unexpected daemon response: {} (please report)",
+        response.kind()
+    )
 }
 
 fn print_capture(response: CaptureResponse) -> Result<()> {

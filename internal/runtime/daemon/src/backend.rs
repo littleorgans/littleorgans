@@ -64,8 +64,7 @@ impl RuntimeBackend for HostRuntimeBackend<'_> {
 
     async fn spawn(&self, request: &SpawnRequest, launch: &LaunchSpec) -> Result<SpawnEvidence> {
         let _ = launch;
-        let log_paths = shim_socket::launch_shim(self.config, request).await?;
-        Ok(SpawnEvidence { log_paths })
+        spawn_via_shim(self.config, request).await
     }
 }
 
@@ -90,9 +89,13 @@ impl RuntimeBackend for DockerRuntimeBackend<'_> {
 
     async fn spawn(&self, request: &SpawnRequest, launch: &LaunchSpec) -> Result<SpawnEvidence> {
         let _ = launch;
-        let log_paths = shim_socket::launch_shim(self.config, request).await?;
-        Ok(SpawnEvidence { log_paths })
+        spawn_via_shim(self.config, request).await
     }
+}
+
+async fn spawn_via_shim(config: &DaemonConfig, request: &SpawnRequest) -> Result<SpawnEvidence> {
+    let log_paths = shim_socket::launch_shim(config, request).await?;
+    Ok(SpawnEvidence { log_paths })
 }
 
 #[cfg(test)]

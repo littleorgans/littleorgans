@@ -121,9 +121,30 @@ impl<'de> Visitor<'de> for PrincipalVisitor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Action {
+macro_rules! count_actions {
+    ($($variant:ident),+ $(,)?) => {
+        <[()]>::len(&[$(count_actions!(@unit $variant)),+])
+    };
+    (@unit $variant:ident) => {
+        ()
+    };
+}
+
+macro_rules! define_actions {
+    ($($variant:ident),+ $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        pub enum Action {
+            $($variant),+
+        }
+
+        impl Action {
+            pub const ALL: [Self; count_actions!($($variant),+)] = [$(Self::$variant),+];
+        }
+    };
+}
+
+define_actions!(
     Spawn,
     Kill,
     List,
@@ -136,24 +157,7 @@ pub enum Action {
     Doctor,
     Daemon,
     ShimCallback,
-}
-
-impl Action {
-    pub const ALL: [Self; 12] = [
-        Self::Spawn,
-        Self::Kill,
-        Self::List,
-        Self::Read,
-        Self::Logs,
-        Self::MailSend,
-        Self::MailRead,
-        Self::Nudge,
-        Self::Link,
-        Self::Doctor,
-        Self::Daemon,
-        Self::ShimCallback,
-    ];
-}
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

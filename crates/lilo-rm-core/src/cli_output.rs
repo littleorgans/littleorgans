@@ -133,8 +133,8 @@ impl CliOutput for Vec<Lifecycle> {
                 lifecycle.session_id,
                 lifecycle.state,
                 lifecycle.runtime,
-                display_optional_u32(lifecycle.shim_pid),
-                display_optional_u32(lifecycle.runtime_pid),
+                display_optional_number(lifecycle.shim_pid),
+                display_optional_number(lifecycle.runtime_pid),
                 lifecycle
                     .start_time
                     .map_or_else(|| "-".to_owned(), |time| time.to_rfc3339()),
@@ -173,8 +173,8 @@ impl CliOutput for Vec<RuntimeEvent> {
                     f,
                     "runtime event=Terminated session_id={} exit_code={} signal={} evidence={}",
                     session_id,
-                    display_optional_i32(*exit_code),
-                    display_optional_i32(*signal),
+                    display_optional_number(*exit_code),
+                    display_optional_number(*signal),
                     evidence
                 )?,
                 RuntimeEvent::Lost {
@@ -219,7 +219,7 @@ impl CliOutput for RuntimeResponse {
                 "spawn OK; lifecycle state={}; runtime event={}; runtime_pid={} log_dir={} stdout_path={} stderr_path={}",
                 payload.lifecycle.state,
                 event_name(&payload.event),
-                display_optional_u32(payload.lifecycle.runtime_pid),
+                display_optional_number(payload.lifecycle.runtime_pid),
                 display_optional_path(payload.log_dir.as_deref()),
                 display_optional_path(payload.stdout_path.as_deref()),
                 display_optional_path(payload.stderr_path.as_deref())
@@ -359,11 +359,7 @@ fn event_name(event: &RuntimeEvent) -> &'static str {
     }
 }
 
-fn display_optional_u32(value: Option<u32>) -> String {
-    value.map_or_else(|| "-".to_owned(), |inner| inner.to_string())
-}
-
-fn display_optional_i32(value: Option<i32>) -> String {
+fn display_optional_number<T: ToString>(value: Option<T>) -> String {
     value.map_or_else(|| "-".to_owned(), |inner| inner.to_string())
 }
 

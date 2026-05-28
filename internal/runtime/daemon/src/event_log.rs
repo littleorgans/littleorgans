@@ -124,6 +124,16 @@ impl EventLog {
     }
 
     pub(crate) async fn append(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
+        self.append_recorded_event(event, current_timestamp_ms()?, true)
+            .await
+    }
+
+    async fn append_recorded_event(
+        &self,
+        event: RuntimeEvent,
+        ts_ms: u64,
+        sync_after_append: bool,
+    ) -> Result<RuntimeEvent> {
         let mut inner = self.inner.lock().await;
         if !inner
             .seen_event_keys
@@ -133,7 +143,7 @@ impl EventLog {
         }
         let entry = EventLogEntry {
             seq: inner.next_seq,
-            ts_ms: current_timestamp_ms()?,
+            ts_ms,
             event,
         };
         inner.next_seq = inner.next_seq.saturating_add(1);
@@ -144,8 +154,10 @@ impl EventLog {
             .write_all(b"\n")
             .context("failed to append event log newline")?;
         inner.events.push(entry.clone());
-        inner.events_since_sync += 1;
-        sync_if_due(&mut inner)?;
+        if sync_after_append {
+            inner.events_since_sync += 1;
+            sync_if_due(&mut inner)?;
+        }
         compact_if_due(&self.path, &mut inner)?;
         drop(inner);
         self.append_notify.notify_waiters();
@@ -211,27 +223,7 @@ impl EventLog {
         event: RuntimeEvent,
         ts_ms: u64,
     ) -> Result<RuntimeEvent> {
-        let mut inner = self.inner.lock().await;
-        if !inner
-            .seen_event_keys
-            .insert(EventLogKey::from_event(&event))
-        {
-            return Ok(event);
-        }
-        let entry = EventLogEntry {
-            seq: inner.next_seq,
-            ts_ms,
-            event,
-        };
-        inner.next_seq = inner.next_seq.saturating_add(1);
-        let record = EventLogRecord::from_entry(&entry)?;
-        serde_json::to_writer(&mut inner.file, &record).context("failed to encode event log")?;
-        inner.file.write_all(b"\n")?;
-        inner.events.push(entry.clone());
-        compact_if_due(&self.path, &mut inner)?;
-        drop(inner);
-        self.append_notify.notify_waiters();
-        Ok(entry.event)
+        self.append_recorded_event(event, ts_ms, false).await
     }
 }
 

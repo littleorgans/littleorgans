@@ -1,3 +1,4 @@
+mod bootstrap;
 mod config;
 mod events;
 mod runner;
@@ -10,6 +11,7 @@ mod watcher;
 pub use config::DaemonConfig;
 pub use runner::{run_daemon, run_daemon_with_db};
 
+pub(crate) use bootstrap::{prepare_runtime_bootstrap, start_runtime_reconcile};
 pub(crate) use state::ServerState;
 
 #[cfg(test)]

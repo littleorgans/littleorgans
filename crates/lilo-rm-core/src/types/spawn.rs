@@ -5,6 +5,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
+use crate::string_serde::{deserialize_string_parsed, serialize_display};
 use crate::{IsolationPolicy, LaunchEnv, RuntimeKind, RuntimeSignal, ShellResume};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -51,7 +52,7 @@ impl Serialize for TmuxAddress {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        serialize_display(self, serializer)
     }
 }
 
@@ -60,9 +61,7 @@ impl<'de> Deserialize<'de> for TmuxAddress {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
-            .parse()
-            .map_err(serde::de::Error::custom)
+        deserialize_string_parsed(deserializer)
     }
 }
 

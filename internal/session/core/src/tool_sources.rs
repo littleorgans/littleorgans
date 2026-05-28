@@ -26,13 +26,17 @@ pub fn read_tool_sources(paths: &[PathBuf]) -> Result<String, String> {
     for path in paths {
         let source = fs::read_to_string(path)
             .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        content.push_str(&source);
-        if !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push('\n');
+        append_tool_source(&mut content, &source);
     }
     Ok(content)
+}
+
+pub fn append_tool_source(content: &mut String, source: &str) {
+    content.push_str(source);
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push('\n');
 }
 
 pub fn render_tool_source_includes(repo_root: &Path, paths: &[PathBuf]) -> Result<String, String> {

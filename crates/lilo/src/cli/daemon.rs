@@ -4,13 +4,13 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use lilo_common::diagnostic::Diagnostic;
-use lilo_paths::{DaemonEndpoint, LiloHome, LiloPaths};
+use lilo_paths::{DaemonEndpoint, LiloPaths};
 use lilo_session_core::SessionRpc;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use serde::Serialize;
 
-use super::Output;
+use super::{Output, resolve_lilo_paths};
 
 #[derive(Debug, Parser)]
 pub struct DaemonCli {
@@ -125,8 +125,7 @@ fn remove_stale_files(paths: &LiloPaths) {
 }
 
 fn paths() -> Result<LiloPaths> {
-    let home = LiloHome::from_env()?;
-    Ok(LiloPaths::new(home))
+    Ok(resolve_lilo_paths()?)
 }
 
 fn print_status(output: Output, status: &DaemonStatus) {

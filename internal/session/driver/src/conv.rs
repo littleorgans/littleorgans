@@ -2,10 +2,12 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use lilo_rm_core::{
-    KillOutcome, Lifecycle, LifecycleState, LogAvailability, RuntimeKind as RuntimeRuntimeKind,
+    KillOutcome, Lifecycle, LifecycleState, RuntimeKind as RuntimeRuntimeKind,
     SpawnRequest as RuntimeSpawnRequest, SpawnTarget as RuntimeSpawnTarget, SpawnedPayload,
 };
-use lilo_session_core::RuntimeKind;
+use lilo_session_core::{
+    RuntimeKind, paths::lifecycle_transcript_path as session_lifecycle_transcript_path,
+};
 use uuid::Uuid;
 
 use crate::driver::{DriverError, DriverProbe, SpawnLaunch, SpawnedProcess};
@@ -86,15 +88,6 @@ pub(crate) fn lifecycle_to_probe(
     }
 }
 
-pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
-    match lifecycle.log_availability.as_ref() {
-        Some(LogAvailability::Headless { stdout_path, .. }) => Some(stdout_path.clone()),
-        Some(LogAvailability::TmuxPaneSnapshot | LogAvailability::Unavailable { .. }) | None => {
-            None
-        }
-    }
-}
-
 pub(crate) fn lifecycle_state_label(state: &LifecycleState) -> String {
     match state {
         LifecycleState::Forking => "forking".to_string(),
@@ -111,6 +104,10 @@ pub(crate) fn kill_outcome_label(outcome: KillOutcome) -> String {
         KillOutcome::AlreadyExited => "already_exited".to_string(),
         other => format!("unknown ({other:?})"),
     }
+}
+
+pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
+    session_lifecycle_transcript_path(lifecycle)
 }
 
 fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {

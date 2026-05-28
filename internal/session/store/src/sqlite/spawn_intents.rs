@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
-use lilo_rm_core::{
-    Lifecycle, LifecycleState, LogAvailability, SpawnRequest as RuntimeSpawnRequest,
+use lilo_rm_core::{Lifecycle, LifecycleState, SpawnRequest as RuntimeSpawnRequest};
+use lilo_session_core::{
+    Label, Namespace, RuntimeKind, Session, SessionState, paths::lifecycle_transcript_path,
 };
-use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection};
@@ -361,15 +361,6 @@ fn intent_from_row(row: &SqliteRow) -> Result<SessionSpawnIntent, SpawnIntentErr
         resolved_at: row.try_get("resolved_at")?,
         aborted_reason: row.try_get("aborted_reason")?,
     })
-}
-
-fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
-    match lifecycle.log_availability.as_ref() {
-        Some(LogAvailability::Headless { stdout_path, .. }) => Some(stdout_path.clone()),
-        Some(LogAvailability::TmuxPaneSnapshot | LogAvailability::Unavailable { .. }) | None => {
-            None
-        }
-    }
 }
 
 fn timestamp_millis(value: i64) -> Result<DateTime<Utc>, SpawnIntentError> {

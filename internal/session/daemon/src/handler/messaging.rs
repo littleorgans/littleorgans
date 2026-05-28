@@ -78,22 +78,24 @@ impl DaemonState {
     }
 
     pub(super) async fn mail_check(&self, request: &MailCheckRequest) -> Result<RpcResponse> {
-        let counts = self.mail_counts(&request.selector).await?;
-        let unread = total_unread(&counts);
-        Ok(RpcResponse::MailChecked {
-            response: MailCheckResponse { unread, counts },
+        self.mail_count_response(&request.selector, |unread, counts| {
+            RpcResponse::MailChecked {
+                response: MailCheckResponse { unread, counts },
+            }
         })
+        .await
     }
 
     pub(super) async fn mail_stop_check(
         &self,
         request: &MailStopCheckRequest,
     ) -> Result<RpcResponse> {
-        let counts = self.mail_counts(&request.selector).await?;
-        let unread = total_unread(&counts);
-        Ok(RpcResponse::MailStopChecked {
-            response: MailStopCheckResponse { unread, counts },
+        self.mail_count_response(&request.selector, |unread, counts| {
+            RpcResponse::MailStopChecked {
+                response: MailStopCheckResponse { unread, counts },
+            }
         })
+        .await
     }
 
     pub(super) async fn nudge(
@@ -211,6 +213,15 @@ impl DaemonState {
             .count_unread_mail(recipient_id)
             .await
             .context("failed to count unread mail")
+    }
+
+    async fn mail_count_response<F>(&self, selector: &Selector, response: F) -> Result<RpcResponse>
+    where
+        F: FnOnce(usize, Vec<MailUnreadCount>) -> RpcResponse,
+    {
+        let counts = self.mail_counts(selector).await?;
+        let unread = total_unread(&counts);
+        Ok(response(unread, counts))
     }
 }
 

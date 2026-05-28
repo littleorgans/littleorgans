@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
+use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
 
 use self::{daemon::DaemonCli, doctor::DoctorCommand};
 
@@ -97,59 +98,90 @@ impl Output {
     }
 }
 
-#[derive(Debug, Subcommand)]
-pub enum Command {
-    #[command(about = "Inspect local lilo health")]
-    Doctor(DoctorCommand),
-    Run(PlaceholderArgs),
-    Create(PlaceholderArgs),
-    Get(PlaceholderArgs),
-    Delete(PlaceholderArgs),
-    Label(PlaceholderArgs),
-    Mail(PlaceholderArgs),
-    Nudge(PlaceholderArgs),
-    Capture(PlaceholderArgs),
-    Logs(PlaceholderArgs),
-    Wait(PlaceholderArgs),
-    Mcp(PlaceholderArgs),
+pub(crate) fn resolve_lilo_paths() -> Result<LiloPaths, LiloPathError> {
+    let home = LiloHome::from_env()?;
+    Ok(LiloPaths::new(home))
+}
+
+macro_rules! define_commands {
+    ($(
+        $(#[$meta:meta])*
+        $variant:ident($payload:ty) => $name:literal
+    ),+ $(,)?) => {
+        #[derive(Debug, Subcommand)]
+        pub enum Command {
+            $(
+                #[command(name = $name)]
+                $(#[$meta])*
+                $variant($payload),
+            )+
+        }
+
+        impl Command {
+            fn not_implemented(&self) -> Diagnostic {
+                Diagnostic::domain(format!("{} is not yet implemented", self.name()))
+            }
+
+            fn name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant(_) => $name,)+
+                }
+            }
+        }
+    };
+}
+
+define_commands!(
+    #[command(next_help_heading = "Session commands", about = "Run an agent session")]
+    Run(PlaceholderArgs) => "run",
     #[command(
+        next_help_heading = "Session commands",
+        about = "Create a session, label, or other resource"
+    )]
+    Create(PlaceholderArgs) => "create",
+    #[command(next_help_heading = "Session commands", about = "Show sessions and other resources")]
+    Get(PlaceholderArgs) => "get",
+    #[command(
+        next_help_heading = "Session commands",
+        about = "Delete sessions and other resources"
+    )]
+    Delete(PlaceholderArgs) => "delete",
+    #[command(next_help_heading = "Session commands", about = "Update labels on a resource")]
+    Label(PlaceholderArgs) => "label",
+    #[command(next_help_heading = "Session commands", about = "Send mail to an agent")]
+    Mail(PlaceholderArgs) => "mail",
+    #[command(next_help_heading = "Session commands", about = "Nudge an agent")]
+    Nudge(PlaceholderArgs) => "nudge",
+    #[command(next_help_heading = "Session commands", about = "Capture session output")]
+    Capture(PlaceholderArgs) => "capture",
+    #[command(next_help_heading = "Session commands", about = "Tail session logs")]
+    Logs(PlaceholderArgs) => "logs",
+    #[command(next_help_heading = "Session commands", about = "Wait for a session condition")]
+    Wait(PlaceholderArgs) => "wait",
+    #[command(next_help_heading = "Session commands", about = "Run lilo as an MCP server")]
+    Mcp(PlaceholderArgs) => "mcp",
+    #[command(
+        next_help_heading = "Substrate operator commands",
         about = "Raw runtime operator namespace. runtime spawn never creates session records."
     )]
-    Runtime(PlaceholderArgs),
-    Session(PlaceholderArgs),
-    Identity(PlaceholderArgs),
-    Daemon(DaemonCli),
-    #[command(name = "__shim", hide = true)]
-    RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs),
-}
-
-impl Command {
-    fn not_implemented(&self) -> Diagnostic {
-        Diagnostic::domain(format!("{} is not yet implemented", self.name()))
-    }
-
-    fn name(&self) -> &'static str {
-        match self {
-            Self::Doctor(_) => "doctor",
-            Self::Run(_) => "run",
-            Self::Create(_) => "create",
-            Self::Get(_) => "get",
-            Self::Delete(_) => "delete",
-            Self::Label(_) => "label",
-            Self::Mail(_) => "mail",
-            Self::Nudge(_) => "nudge",
-            Self::Capture(_) => "capture",
-            Self::Logs(_) => "logs",
-            Self::Wait(_) => "wait",
-            Self::Mcp(_) => "mcp",
-            Self::Runtime(_) => "runtime",
-            Self::Session(_) => "session",
-            Self::Identity(_) => "identity",
-            Self::Daemon(_) => "daemon",
-            Self::RuntimeShim(_) => "__runtime-shim",
-        }
-    }
-}
+    Runtime(PlaceholderArgs) => "runtime",
+    #[command(
+        next_help_heading = "Substrate operator commands",
+        about = "Session substrate operator namespace"
+    )]
+    Session(PlaceholderArgs) => "session",
+    #[command(
+        next_help_heading = "Substrate operator commands",
+        about = "Identity substrate operator namespace"
+    )]
+    Identity(PlaceholderArgs) => "identity",
+    #[command(next_help_heading = "Diagnostics", about = "Inspect local lilo health")]
+    Doctor(DoctorCommand) => "doctor",
+    #[command(next_help_heading = "Daemon lifecycle", about = "Manage the local lilo daemon process")]
+    Daemon(DaemonCli) => "daemon",
+    #[command(hide = true)]
+    RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
+);
 
 #[derive(Debug, Args)]
 pub struct PlaceholderArgs {

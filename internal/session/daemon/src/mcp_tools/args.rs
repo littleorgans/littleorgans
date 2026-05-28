@@ -75,20 +75,9 @@ pub(super) fn optional_bool(arguments: &Value, field: &str) -> Option<bool> {
 }
 
 pub(super) fn optional_mounts(arguments: &Value) -> Result<Vec<MountSpec>> {
-    let Some(value) = arguments.get("mounts") else {
-        return Ok(Vec::new());
-    };
-    value
-        .as_array()
-        .ok_or_else(|| anyhow!("`mounts` must be an array of HOST:CONTAINER[:ro|:rw] strings"))?
-        .iter()
-        .map(|value| {
-            let mount = value
-                .as_str()
-                .ok_or_else(|| anyhow!("`mounts` entries must be strings"))?;
-            MountSpec::from_str(mount).map_err(Into::into)
-        })
-        .collect()
+    optional_string_array(arguments, "mounts", "HOST:CONTAINER[:ro|:rw]", |mount| {
+        MountSpec::from_str(mount).map_err(Into::into)
+    })
 }
 
 pub(super) fn required_selector(arguments: &Value, field: &str) -> Result<Selector> {
@@ -109,21 +98,31 @@ pub(super) fn selector_from_id(id: &str) -> Result<Selector> {
 }
 
 pub(super) fn optional_labels(arguments: &Value) -> Result<Vec<Label>> {
-    let Some(value) = arguments.get("labels") else {
+    optional_string_array(arguments, "labels", "key=value", |label| {
+        Label::from_str(label).map_err(Into::into)
+    })
+}
+
+fn optional_string_array<T>(
+    arguments: &Value,
+    field: &str,
+    entry_description: &str,
+    parse: impl Fn(&str) -> Result<T>,
+) -> Result<Vec<T>> {
+    let Some(value) = arguments.get(field) else {
         return Ok(Vec::new());
     };
-    let labels = value
+    value
         .as_array()
-        .ok_or_else(|| anyhow!("`labels` must be an array of key=value strings"))?
+        .ok_or_else(|| anyhow!("`{field}` must be an array of {entry_description} strings"))?
         .iter()
         .map(|value| {
-            let label = value
+            let item = value
                 .as_str()
-                .ok_or_else(|| anyhow!("`labels` entries must be strings"))?;
-            Label::from_str(label).map_err(Into::into)
+                .ok_or_else(|| anyhow!("`{field}` entries must be strings"))?;
+            parse(item)
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(labels)
+        .collect()
 }
 
 pub(super) fn unexpected_response(response: &RpcResponse) -> anyhow::Error {
