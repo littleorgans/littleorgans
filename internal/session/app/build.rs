@@ -15,9 +15,7 @@ mod tool_examples;
 mod tool_sources;
 
 use tool_contracts::ToolContractRegistry;
-use tool_docs::{
-    render_generated_instructions_rs, render_readme_md, render_server_instructions, render_skill_md,
-};
+use tool_docs::{render_generated_instructions_rs, render_readme_md, render_server_instructions};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=tools");
@@ -172,12 +170,6 @@ fn write_docs_outputs(
         &generate_cli_help(registry),
     )?;
 
-    let templates_dir = Path::new(manifest_dir).join("templates");
-    fs::create_dir_all(&templates_dir)?;
-    write_if_changed(
-        &templates_dir.join("SKILL.md"),
-        &render_skill_md(registry.skill(), registry.shared(), registry.tools()),
-    )?;
     write_if_changed(
         &Path::new(manifest_dir).join("README.md"),
         &render_readme_md(registry.skill(), registry.shared(), registry.tools()),

@@ -147,29 +147,6 @@ pub fn render_generated_instructions_rs(instructions: &str) -> String {
     )
 }
 
-pub fn render_skill_md(
-    skill: Option<&SkillConfig>,
-    shared: &SharedContent,
-    tools: &[ToolContract],
-) -> String {
-    let mut out = String::new();
-    out.push_str("---\n");
-    out.push_str("name: session-matters\n");
-    out.push_str("description: Control local Helioy sessions through smd via MCP tools.\n");
-    out.push_str("---\n\n");
-    out.push_str("# session-matters\n\n");
-    out.push_str("Use this skill when you need to run, list, inspect, or terminate local Helioy sessions.\n\n");
-    append_tool_table(&mut out, tools);
-    append_selector_grammar_section(&mut out, shared);
-    append_examples(&mut out);
-    if let Some(skill) = skill {
-        out.push('\n');
-        out.push_str(skill.workflow.trim());
-        out.push('\n');
-    }
-    out
-}
-
 pub fn render_readme_md(
     skill: Option<&SkillConfig>,
     shared: &SharedContent,
