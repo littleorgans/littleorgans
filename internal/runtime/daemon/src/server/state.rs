@@ -2,6 +2,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
+use lilo_identity_service::IdentityClient;
+#[cfg(test)]
+use lilo_im_store::SqliteAuditSink;
 use lilo_rm_core::{
     CaptureError, CaptureRequest, CaptureResponse, EventsRequest, KillByPidRequest,
     KillByPidResponse, KillOutcome, KillRequest, LaunchSpec, Lifecycle, LifecycleLogAvailability,
@@ -30,6 +33,7 @@ use super::{
 pub(crate) struct ServerState {
     config: DaemonConfig,
     store: LifecycleStore,
+    identity: IdentityClient,
     started_instant: Instant,
     spawn: SpawnCoordinator,
     termination: TerminationCoordinator,
@@ -39,11 +43,25 @@ pub(crate) struct ServerState {
 }
 
 impl ServerState {
+    #[cfg(test)]
     pub(crate) fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
+        let identity = IdentityClient::new(
+            SqliteAuditSink::with_pool(store.pool().clone()),
+            nix::unistd::getuid().as_raw(),
+        );
+        Self::new_with_identity(config, store, identity)
+    }
+
+    pub(crate) fn new_with_identity(
+        config: DaemonConfig,
+        store: LifecycleStore,
+        identity: IdentityClient,
+    ) -> Result<Self> {
         let event_log = EventLog::open(config.data_dir())?;
         Ok(Self {
             config,
             store,
+            identity,
             started_instant: Instant::now(),
             spawn: SpawnCoordinator::new(),
             termination: TerminationCoordinator::new(),
@@ -59,6 +77,10 @@ impl ServerState {
 
     pub(crate) fn store(&self) -> &LifecycleStore {
         &self.store
+    }
+
+    pub(crate) fn identity(&self) -> &IdentityClient {
+        &self.identity
     }
 
     pub(crate) fn uptime_secs(&self) -> u64 {

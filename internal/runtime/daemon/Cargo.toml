@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 lilo-im-core.workspace = true
+lilo-identity-service.workspace = true
 lilo-wire.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
@@ -24,6 +25,7 @@ lilo-rm-core.workspace = true
 lilo-runtime-launchers.workspace = true
 lilo-runtime-platform.workspace = true
 lilo-runtime-store.workspace = true
+nix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -32,7 +34,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+lilo-im-store.workspace = true
 lilo-runtime-platform = { workspace = true, features = ["test-support"] }
+sqlx.workspace = true
 tempfile.workspace = true
 
 [lints]

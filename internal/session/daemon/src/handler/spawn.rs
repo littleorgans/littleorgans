@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
+use lilo_db::{begin_immediate_tx, finish_immediate_tx};
 use lilo_im_core::{Action, Principal};
 use lilo_rm_core::{
     KillRequest, LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, RuntimeResponse, RuntimeRpc,
@@ -9,7 +10,6 @@ use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
 use lilo_session_driver::{SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
-use sqlx::SqliteConnection;
 use uuid::Uuid;
 
 use crate::agent_config::{ResolvedAgentConfig, resolve_agent_config};
@@ -110,7 +110,7 @@ impl DaemonState {
             .acquire()
             .await
             .context("failed to acquire session spawn Tx A connection")?;
-        begin_immediate_tx(&mut conn, "BEGIN IMMEDIATE", "session spawn Tx A").await?;
+        begin_immediate_tx(&mut conn, "session spawn Tx A").await?;
         if let Err(error) = self
             .identity
             .authorize_in_tx(
@@ -188,7 +188,7 @@ impl DaemonState {
             .acquire()
             .await
             .context("failed to acquire session spawn Tx B connection")?;
-        begin_immediate_tx(&mut conn, "BEGIN IMMEDIATE", "session spawn Tx B").await?;
+        begin_immediate_tx(&mut conn, "session spawn Tx B").await?;
         let result = async {
             self.store
                 .insert_session_in(&mut conn, &session)
@@ -222,7 +222,7 @@ impl DaemonState {
             .acquire()
             .await
             .context("failed to acquire session spawn abort tx connection")?;
-        begin_immediate_tx(&mut conn, "BEGIN IMMEDIATE", "session spawn abort tx").await?;
+        begin_immediate_tx(&mut conn, "session spawn abort tx").await?;
         let result = async {
             self.store
                 .abort_spawn_intent_in(&mut conn, session_id, reason)
@@ -300,38 +300,6 @@ impl DaemonState {
 
     fn lifecycle_store(&self) -> LifecycleStore {
         LifecycleStore::from_pool(self.store.pool().clone())
-    }
-}
-
-async fn begin_immediate_tx(
-    conn: &mut SqliteConnection,
-    begin_sql: &'static str,
-    label: &str,
-) -> Result<()> {
-    sqlx::query(begin_sql)
-        .execute(conn)
-        .await
-        .with_context(|| format!("failed to begin {label}"))
-        .map(|_| ())
-}
-
-async fn finish_immediate_tx<T>(
-    conn: &mut SqliteConnection,
-    result: Result<T>,
-    label: &str,
-) -> Result<T> {
-    match result {
-        Ok(value) => {
-            sqlx::query("COMMIT")
-                .execute(conn)
-                .await
-                .with_context(|| format!("failed to commit {label}"))?;
-            Ok(value)
-        }
-        Err(error) => {
-            let _ = sqlx::query("ROLLBACK").execute(conn).await;
-            Err(error)
-        }
     }
 }
 

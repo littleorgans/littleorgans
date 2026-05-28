@@ -1,4 +1,5 @@
 use crate::common::{self, DaemonFixture, OrPanic as _};
+use lilo_im_core::{Action, AuditRow};
 use serde_json::{Value, json};
 use std::path::Path;
 use std::process::Stdio;
@@ -161,4 +162,15 @@ pub(crate) fn assert_nudged_ids(response: &Value, expected: &[&str]) {
     actual.sort();
     expected.sort();
     assert_eq!(actual, expected);
+}
+
+pub(crate) fn audited_flow_actions(rows: &[AuditRow]) -> Vec<Action> {
+    rows.iter()
+        .filter(|row| {
+            row.action != Action::List
+                && (row.session_ref.is_some()
+                    || matches!(row.action, Action::Doctor | Action::Nudge))
+        })
+        .map(|row| row.action)
+        .collect()
 }

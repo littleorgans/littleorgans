@@ -1,6 +1,6 @@
 use crate::common::{self, DaemonFixture, OrPanic as _};
-use crate::{call_tool, spawn_agent};
-use lilo_im_core::{Action, AuditDecision};
+use crate::{audited_flow_actions, call_tool, spawn_agent};
+use lilo_im_core::{Action, AuditDecision, AuditRow};
 use serde_json::json;
 
 #[tokio::test]
@@ -93,16 +93,26 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
             .is_empty()
     );
 
-    let rows = daemon.audit_rows().await;
-    let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
+    assert_mail_flow_audit(&daemon.audit_rows().await);
+}
+
+fn assert_mail_flow_audit(rows: &[AuditRow]) {
+    let actions = audited_flow_actions(rows);
     assert_eq!(
         actions,
         vec![
             Action::Spawn,
             Action::Spawn,
+            Action::ShimCallback,
+            Action::ShimCallback,
+            Action::Spawn,
+            Action::Spawn,
+            Action::ShimCallback,
+            Action::ShimCallback,
             Action::MailSend,
             Action::MailRead,
-            Action::Nudge
+            Action::Nudge,
+            Action::Nudge,
         ]
     );
     assert!(rows.iter().all(|row| row.decision == AuditDecision::Allow));

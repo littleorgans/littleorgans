@@ -1,6 +1,9 @@
+mod client;
+
+pub use client::IdentityClient;
+
 use lilo_im_core::{Action, AuditRow, Authorizer, AuthzResult, Principal, ResourceSpec};
 use lilo_im_store::{AuditFilters, SqliteAuditSink, StoreError};
-use lilo_im_stub::StubAuthorizer;
 
 pub type Result<T> = std::result::Result<T, IdentityServiceError>;
 
@@ -28,27 +31,25 @@ pub enum IdentityServiceError {
 
 #[derive(Debug)]
 pub struct IdentityService {
-    audit_sink: SqliteAuditSink,
-    local_uid: u32,
+    client: IdentityClient,
 }
 
 impl IdentityService {
     #[must_use]
     pub fn build(config: IdentityConfig) -> Self {
         Self {
-            audit_sink: config.audit_sink,
-            local_uid: config.local_uid,
+            client: IdentityClient::new(config.audit_sink, config.local_uid),
         }
     }
 
     #[must_use]
     pub fn local_uid(&self) -> u32 {
-        self.local_uid
+        self.client.local_uid()
     }
 
     #[must_use]
     pub fn audit_sink(&self) -> &SqliteAuditSink {
-        &self.audit_sink
+        self.client.audit_sink()
     }
 
     pub async fn authorize(
@@ -57,26 +58,13 @@ impl IdentityService {
         action: Action,
         resource: &ResourceSpec,
     ) -> AuthzResult {
-        self.authorize_with_stub(principal, action, resource).await
+        self.client
+            .authorize_with_stub(principal, action, resource)
+            .await
     }
 
     pub async fn query_audit(&self, filters: AuditFilters) -> Result<Vec<AuditRow>> {
-        Ok(self.audit_sink.query_audit(filters).await?)
-    }
-
-    fn authorizer(&self) -> StubAuthorizer<'_, SqliteAuditSink> {
-        StubAuthorizer::new(&self.audit_sink, self.local_uid)
-    }
-
-    async fn authorize_with_stub(
-        &self,
-        principal: &Principal,
-        action: Action,
-        resource: &ResourceSpec,
-    ) -> AuthzResult {
-        self.authorizer()
-            .authorize(principal, action, resource)
-            .await
+        Ok(self.client.audit_sink().query_audit(filters).await?)
     }
 }
 
@@ -87,6 +75,8 @@ impl Authorizer for IdentityService {
         action: Action,
         resource: &ResourceSpec,
     ) -> AuthzResult {
-        self.authorize_with_stub(principal, action, resource).await
+        self.client
+            .authorize_with_stub(principal, action, resource)
+            .await
     }
 }

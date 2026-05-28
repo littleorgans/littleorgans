@@ -4,6 +4,7 @@ use crate::server::{DaemonConfig, ServerState};
 use crate::{handler, reconcile};
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
+use lilo_identity_service::IdentityClient;
 use lilo_im_core::Principal;
 use lilo_rm_core::{RuntimeEvent, RuntimeResponse, RuntimeRpc};
 use lilo_runtime_store::LifecycleStore;
@@ -12,11 +13,20 @@ use tokio::sync::broadcast;
 pub struct RuntimeServiceContext {
     config: DaemonConfig,
     db: LiloDb,
+    local_uid: u32,
 }
 
 impl RuntimeServiceContext {
     pub fn new(config: DaemonConfig, db: LiloDb) -> Self {
-        Self { config, db }
+        Self::new_with_local_uid(config, db, nix::unistd::getuid().as_raw())
+    }
+
+    pub fn new_with_local_uid(config: DaemonConfig, db: LiloDb, local_uid: u32) -> Self {
+        Self {
+            config,
+            db,
+            local_uid,
+        }
     }
 
     pub async fn from_env() -> Result<Self> {
@@ -29,8 +39,8 @@ impl RuntimeServiceContext {
         &self.config
     }
 
-    pub fn into_parts(self) -> (DaemonConfig, LiloDb) {
-        (self.config, self.db)
+    pub fn into_parts(self) -> (DaemonConfig, LiloDb, u32) {
+        (self.config, self.db, self.local_uid)
     }
 }
 
@@ -42,12 +52,17 @@ pub struct RuntimeService {
 
 impl RuntimeService {
     pub async fn build(ctx: RuntimeServiceContext) -> Result<Self> {
-        let (config, db) = ctx.into_parts();
+        let (config, db, local_uid) = ctx.into_parts();
         lilo_runtime_launchers::warm_registry()
             .context("failed to initialize launcher registry")?;
         let store = LifecycleStore::open(&db);
+        let identity = IdentityClient::from_db(&db, local_uid);
         let _ = config.socket_path()?;
-        let state = Arc::new(ServerState::new(config.clone(), store)?);
+        let state = Arc::new(ServerState::new_with_identity(
+            config.clone(),
+            store,
+            identity,
+        )?);
         reconcile::reconcile_startup(Arc::clone(&state), &reconcile::SystemProcessProbe).await?;
         let (shutdown_tx, _) = broadcast::channel(8);
         tokio::spawn(reconcile::run_periodic(
@@ -67,8 +82,8 @@ impl RuntimeService {
         &self.config
     }
 
-    pub async fn handle_rpc(&self, _principal: Principal, rpc: RuntimeRpc) -> RuntimeResponse {
-        let response = handler::handle_rpc(rpc, Arc::clone(&self.state)).await;
+    pub async fn handle_rpc(&self, principal: Principal, rpc: RuntimeRpc) -> RuntimeResponse {
+        let response = handler::handle_rpc(principal, rpc, Arc::clone(&self.state)).await;
         if matches!(response, RuntimeResponse::Stopping) {
             let _ = self.shutdown_tx.send(());
         }

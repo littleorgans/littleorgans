@@ -1,14 +1,7 @@
-use anyhow::{Context, Result};
-use lilo_db::LiloDb;
-use lilo_im_core::{
-    Action, AuditDecision, AuditRow, Authorizer, AuthzError, Principal, ResourceSpec,
-    RuntimeKind as IdentityRuntimeKind,
-};
-use lilo_im_store::SqliteAuditSink;
-use lilo_im_store::sqlite::record_audit_in_tx;
-use lilo_im_stub::StubAuthorizer;
+pub use lilo_identity_service::IdentityClient;
+
+use lilo_im_core::{Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_session_core::{RuntimeKind, SpawnRequest};
-use sqlx::SqliteConnection;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -29,74 +22,6 @@ impl RequestContext {
     pub fn with_mcp_caller_session_id(mut self, id: Uuid) -> Self {
         self.mcp_caller_session_id = Some(id);
         self
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct IdentityClient {
-    audit_sink: SqliteAuditSink,
-    local_uid: u32,
-}
-
-impl IdentityClient {
-    pub fn new(audit_sink: SqliteAuditSink, local_uid: u32) -> Self {
-        Self {
-            audit_sink,
-            local_uid,
-        }
-    }
-
-    pub async fn connect(path: impl AsRef<std::path::Path>, local_uid: u32) -> Result<Self> {
-        let db = LiloDb::open_path(path)
-            .await
-            .context("failed to open identity audit database")?;
-        Ok(Self::new(
-            SqliteAuditSink::with_pool(db.identity_pool().clone()),
-            local_uid,
-        ))
-    }
-
-    pub async fn authorize(
-        &self,
-        principal: &Principal,
-        action: Action,
-        resource: &ResourceSpec,
-    ) -> Result<()> {
-        let authorizer = StubAuthorizer::new(&self.audit_sink, self.local_uid);
-        authorizer
-            .authorize(principal, action, resource)
-            .await
-            .map(|_| ())
-            .context("authorization failed")
-    }
-
-    pub async fn authorize_in_tx(
-        &self,
-        conn: &mut SqliteConnection,
-        principal: &Principal,
-        action: Action,
-        resource: &ResourceSpec,
-    ) -> Result<()> {
-        let decision = if *principal == Principal::Local(self.local_uid) {
-            AuditDecision::Allow
-        } else {
-            let reason = match principal {
-                Principal::Local(_) => "non-local uid",
-                Principal::Unknown { .. } => "unknown principal",
-            };
-            AuditDecision::Deny {
-                reason: reason.to_owned(),
-            }
-        };
-        let row = AuditRow::new(principal.clone(), action, resource.clone(), decision);
-        record_audit_in_tx(conn, &row)
-            .await
-            .context("authorization failed")?;
-        if *principal == Principal::Local(self.local_uid) {
-            Ok(())
-        } else {
-            Err(AuthzError::UnknownPrincipal).context("authorization failed")
-        }
     }
 }
 

@@ -1,6 +1,7 @@
 mod common;
 use common::OrPanic as _;
 
+use common::shared_test_support::assert_ordered_subsequence;
 use common::{
     LOCAL_UID, TestDaemon, local_context, mail_count, spawn_test_session,
     spawn_test_session_with_labels,
@@ -262,16 +263,20 @@ async fn successful_mutations_write_allow_audit_rows() {
 
     let rows = daemon.audit_rows().await;
     let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
-    assert_eq!(
-        actions,
-        vec![
+    assert_ordered_subsequence(
+        &actions,
+        &[
+            Action::Spawn,
+            Action::Spawn,
             Action::Spawn,
             Action::Spawn,
             Action::MailSend,
             Action::MailRead,
             Action::Nudge,
+            Action::Nudge,
             Action::Kill,
-        ]
+            Action::Kill,
+        ],
     );
     assert!(rows.iter().all(|row| row.decision == AuditDecision::Allow));
 }

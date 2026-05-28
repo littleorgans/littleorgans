@@ -135,10 +135,11 @@ pub enum Action {
     Link,
     Doctor,
     Daemon,
+    ShimCallback,
 }
 
 impl Action {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Spawn,
         Self::Kill,
         Self::List,
@@ -150,6 +151,7 @@ impl Action {
         Self::Link,
         Self::Doctor,
         Self::Daemon,
+        Self::ShimCallback,
     ];
 }
 

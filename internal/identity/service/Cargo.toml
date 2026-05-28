@@ -15,14 +15,16 @@ name = "lilo_identity_service"
 path = "src/lib.rs"
 
 [dependencies]
+anyhow.workspace = true
+lilo-db.workspace = true
 lilo-im-core.workspace = true
 lilo-im-store.workspace = true
 lilo-im-stub.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-lilo-db.workspace = true
 lilo-paths.workspace = true
 tempfile.workspace = true
 

@@ -57,9 +57,13 @@ impl TestDaemon {
             DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves");
         runtime_config.shim_path = assert_cmd::cargo::cargo_bin("lilo");
         let runtime = Arc::new(
-            RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone()))
-                .await
-                .or_panic("runtime service builds"),
+            RuntimeService::build(RuntimeServiceContext::new_with_local_uid(
+                runtime_config,
+                db.clone(),
+                local_uid,
+            ))
+            .await
+            .or_panic("runtime service builds"),
         );
         let runtime_socket_path = paths.socket_path();
         let driver = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));

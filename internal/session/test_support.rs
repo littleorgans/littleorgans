@@ -2,6 +2,19 @@
 
 use std::fmt::Debug;
 
+pub fn assert_ordered_subsequence<T>(items: &[T], expected: &[T])
+where
+    T: Debug + PartialEq,
+{
+    let mut items_iter = items.iter();
+    for expected_item in expected {
+        assert!(
+            items_iter.any(|item| item == expected_item),
+            "missing ordered item {expected_item:?} in {items:?}"
+        );
+    }
+}
+
 pub trait OrPanic<T> {
     fn or_panic(self, context: &str) -> T;
 }

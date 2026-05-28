@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
+use lilo_identity_service::IdentityClient;
 use lilo_paths::RuntimePathEnv;
 use lilo_runtime_store::LifecycleStore;
 use tokio::{net::UnixListener, sync::broadcast};
@@ -18,6 +19,7 @@ pub async fn run_daemon(config: DaemonConfig) -> Result<()> {
 pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> {
     lilo_runtime_launchers::warm_registry().context("failed to initialize launcher registry")?;
     let store = LifecycleStore::open(&db);
+    let identity = IdentityClient::from_db(&db, nix::unistd::getuid().as_raw());
     let socket_path = config.socket_path()?;
     socket::prepare_socket(socket_path)?;
     let listener = UnixListener::bind(socket_path)
@@ -29,7 +31,11 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
             .display_label(&RuntimePathEnv::from_process())
     );
 
-    let state = Arc::new(ServerState::new(config.clone(), store)?);
+    let state = Arc::new(ServerState::new_with_identity(
+        config.clone(),
+        store,
+        identity,
+    )?);
     reconcile::reconcile_startup(Arc::clone(&state), &reconcile::SystemProcessProbe).await?;
     let (shutdown_tx, mut shutdown_rx) = broadcast::channel(8);
     let reconcile_task = tokio::spawn(reconcile::run_periodic(

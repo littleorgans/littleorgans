@@ -16,6 +16,7 @@ mod error;
 pub mod event_channel;
 mod event_log;
 mod handler;
+mod identity;
 mod mcp_bridge;
 mod reconcile;
 mod runtime_kill;

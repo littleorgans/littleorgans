@@ -1,5 +1,5 @@
-use crate::call_tool;
 use crate::common::{self, DaemonFixture, OrPanic as _};
+use crate::{audited_flow_actions, call_tool};
 use lilo_im_core::{Action, AuditDecision};
 use serde_json::json;
 
@@ -147,10 +147,22 @@ pub(crate) fn assert_agent_delete(mcp: &mut common::McpFixture, id: &str) {
 
 pub(crate) async fn assert_delete_flow_audit(daemon: &DaemonFixture) {
     let rows = daemon.audit_rows().await;
-    let actions = rows.iter().map(|row| row.action).collect::<Vec<_>>();
+    let actions = audited_flow_actions(&rows);
     assert_eq!(
         actions,
-        vec![Action::Spawn, Action::Read, Action::Doctor, Action::Kill]
+        vec![
+            Action::Spawn,
+            Action::Spawn,
+            Action::ShimCallback,
+            Action::ShimCallback,
+            Action::Read,
+            Action::Logs,
+            Action::Doctor,
+            Action::Doctor,
+            Action::Kill,
+            Action::Kill,
+            Action::ShimCallback,
+        ]
     );
     assert!(rows.iter().all(|row| row.decision == AuditDecision::Allow));
 }

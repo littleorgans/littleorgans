@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use lilo_im_core::{Principal, peer_creds};
 use lilo_rm_core::{
     CapturePayload, CursorExpiredPayload, DoctorPayload, EventsPayload, EventsRequest,
     KillByPidPayload, KilledPayload, McpBridgePayload, NudgePayload, RuntimeResponse, RuntimeRpc,
@@ -17,6 +18,7 @@ use crate::{
     backend::RuntimeBackends,
     doctor,
     error::{RpcErrorContext, protocol_error_response, rpc_error_response},
+    identity::authorize_runtime_rpc,
     mcp_bridge,
     server::ServerState,
     spawn_preflight,
@@ -27,12 +29,27 @@ pub(crate) async fn handle_connection(
     state: Arc<ServerState>,
     shutdown_tx: broadcast::Sender<()>,
 ) -> Result<()> {
+    let principal = match peer_creds::extract(&stream).await {
+        Ok(principal) => principal,
+        Err(error) => {
+            let response = RuntimeResponse::error(
+                lilo_rm_core::ErrorCode::ProtocolMismatch,
+                error.to_string(),
+            );
+            let (_read_half, mut write_half) = stream.into_split();
+            write_json_line(&mut write_half, &response).await?;
+            return Ok(());
+        }
+    };
+
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
 
     let response = match read_json_line::<_, LilodRpc>(&mut reader).await {
         Ok(LilodRpc::Runtime(rpc)) => {
-            let Some(response) = handle_rpc_or_disconnect(rpc, state, &mut reader).await? else {
+            let Some(response) =
+                handle_rpc_or_disconnect(principal, rpc, state, &mut reader).await?
+            else {
                 return Ok(());
             };
             response
@@ -53,6 +70,7 @@ pub(crate) async fn handle_connection(
 }
 
 async fn handle_rpc_or_disconnect<R>(
+    principal: Principal,
     rpc: RuntimeRpc,
     state: Arc<ServerState>,
     reader: &mut R,
@@ -63,14 +81,14 @@ where
     match rpc {
         RuntimeRpc::Events { request } if clamped_event_wait_ms(request.wait_ms) > 0 => {
             tokio::select! {
-                response = handle_rpc(RuntimeRpc::Events { request }, state) => Ok(Some(response)),
+                response = handle_rpc(principal, RuntimeRpc::Events { request }, state) => Ok(Some(response)),
                 disconnected = wait_for_disconnect(reader) => {
                     disconnected?;
                     Ok(None)
                 }
             }
         }
-        other => Ok(Some(handle_rpc(other, state).await)),
+        other => Ok(Some(handle_rpc(principal, other, state).await)),
     }
 }
 
@@ -88,9 +106,13 @@ where
     }
 }
 
-pub(crate) async fn handle_rpc(rpc: RuntimeRpc, state: Arc<ServerState>) -> RuntimeResponse {
+pub(crate) async fn handle_rpc(
+    principal: Principal,
+    rpc: RuntimeRpc,
+    state: Arc<ServerState>,
+) -> RuntimeResponse {
     let error_context = error_context(&rpc);
-    match handle_rpc_result(rpc, state).await {
+    match handle_rpc_result(principal, rpc, state).await {
         Ok(response) => response,
         Err(error) => rpc_error_response(error_context, &error),
     }
@@ -103,7 +125,12 @@ fn error_context(rpc: &RuntimeRpc) -> RpcErrorContext {
     }
 }
 
-async fn handle_rpc_result(rpc: RuntimeRpc, state: Arc<ServerState>) -> Result<RuntimeResponse> {
+async fn handle_rpc_result(
+    principal: Principal,
+    rpc: RuntimeRpc,
+    state: Arc<ServerState>,
+) -> Result<RuntimeResponse> {
+    authorize_runtime_rpc(&state, &principal, &rpc).await?;
     match rpc {
         RuntimeRpc::Spawn { mut request } => {
             if let Some(conflict) = spawn_preflight::check(&state, &mut request).await? {
@@ -212,3 +239,6 @@ async fn events_response(state: &ServerState, request: EventsRequest) -> Result<
         })),
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use lilo_paths::LiloPaths;
-use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::{SqliteConnection, SqlitePool};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: u32 = 5;
@@ -69,6 +69,34 @@ impl LiloDb {
 
     pub async fn close(&self) {
         self.pool.close().await;
+    }
+}
+
+pub async fn begin_immediate_tx(conn: &mut SqliteConnection, label: &str) -> Result<()> {
+    sqlx::query("BEGIN IMMEDIATE")
+        .execute(&mut *conn)
+        .await
+        .with_context(|| format!("failed to begin {label}"))?;
+    Ok(())
+}
+
+pub async fn finish_immediate_tx<T>(
+    conn: &mut SqliteConnection,
+    result: Result<T>,
+    label: &str,
+) -> Result<T> {
+    match result {
+        Ok(value) => {
+            sqlx::query("COMMIT")
+                .execute(conn)
+                .await
+                .with_context(|| format!("failed to commit {label}"))?;
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = sqlx::query("ROLLBACK").execute(conn).await;
+            Err(error)
+        }
     }
 }
 
