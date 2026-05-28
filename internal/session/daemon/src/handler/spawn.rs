@@ -160,9 +160,7 @@ impl DaemonState {
             .await
             .context("failed to revalidate namespace before session commit")?
         {
-            self.abort_spawn_intent(intent.session_id, "namespace deleted before session commit")
-                .await?;
-            let _ = self
+            let kill_response = self
                 .runtime
                 .handle_rpc(
                     Principal::Local(nix::unistd::getuid().as_raw()),
@@ -175,6 +173,26 @@ impl DaemonState {
                     },
                 )
                 .await;
+            match kill_response {
+                RuntimeResponse::Killed(_) => {}
+                RuntimeResponse::Error(error) => {
+                    tracing::warn!(
+                        error = %error.message,
+                        code = ?error.code,
+                        session_id = %intent.session_id,
+                        "recovery kill of orphaned runtime process failed"
+                    );
+                }
+                other => {
+                    tracing::warn!(
+                        ?other,
+                        session_id = %intent.session_id,
+                        "recovery kill returned unexpected runtime response"
+                    );
+                }
+            }
+            self.abort_spawn_intent(intent.session_id, "namespace deleted before session commit")
+                .await?;
             anyhow::bail!(
                 "namespace deleted before session commit: {}",
                 session.namespace
@@ -396,3 +414,6 @@ fn upsert_env(env: &mut Vec<LaunchEnv>, next: LaunchEnv) {
         env.push(next);
     }
 }
+
+#[cfg(test)]
+mod tests;

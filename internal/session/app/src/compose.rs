@@ -76,6 +76,10 @@ pub async fn run(paths: LiloPaths) -> Result<()> {
             tracing::warn!(%error, "lilod connection task failed");
         }
     }
+    runtime
+        .shutdown()
+        .await
+        .context("failed to shut down runtime service")?;
     lilo_runtime_daemon::socket::remove_socket_file(&socket_path)?;
     let _ = fs::remove_file(paths.pid_path());
     db.close().await;
