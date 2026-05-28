@@ -21,7 +21,7 @@ Use `nudge` for the ephemeral notification surface.
 
 [tools.session_run]
 cli_name        = "run"
-mcp_description = "Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record."
+mcp_description = "Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record."
 cli_about       = "Imperatively run a session through the session-matters daemon."
 output_schema   = '''
 {
@@ -110,8 +110,8 @@ cli_flag        = "--label"
 name            = "agent_config"
 type            = "string"
 required        = false
-mcp_description = "Agent config name resolved as ~/.agm/<name>/agent.toml, or an explicit agent.toml path."
-cli_help        = "Agent config name resolved as `~/.agm/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings)."
+mcp_description = "Agent config name resolved under ~/.lilo/config/session/agents/<name>/agent.toml, or an explicit agent.toml path."
+cli_help        = "Agent config name resolved under `~/.lilo/config/session/agents/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings)."
 cli_flag        = "--agent-config"
 
 [[tools.session_run.params]]
@@ -157,4 +157,4 @@ cli_flag        = "--force"
 
 [[tools.session_run.mcp_aliases]]
 name            = "agent_run"
-mcp_description = "Deprecated compatibility alias for session_run. Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record."
+mcp_description = "Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record."

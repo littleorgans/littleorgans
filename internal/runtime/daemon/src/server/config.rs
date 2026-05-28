@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use lilo_paths::{LiloPaths, RuntimeEndpoint};
+use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint};
 use lilo_runtime_store::StoreConfig;
 use uuid::Uuid;
 
-use crate::{docker_preflight::DockerPreflightConfig, reconcile, socket};
+use crate::{docker_preflight::DockerPreflightConfig, reconcile};
 
 #[derive(Clone, Debug)]
 pub struct DaemonConfig {
@@ -19,14 +19,9 @@ pub struct DaemonConfig {
 
 impl DaemonConfig {
     pub fn from_env() -> Result<Self> {
-        Ok(Self {
-            endpoint: socket::runtime_endpoint_from_env()?,
-            shim_path: lilo_paths::shim_path_from_env()?,
-            log_root: lilo_paths::log_root_from_env()?,
-            store: StoreConfig::from_env()?,
-            reconcile: reconcile::ReconcileConfig::from_env()?,
-            docker_preflight: DockerPreflightConfig::from_env(),
-        })
+        let home = LiloHome::from_env()?;
+        let paths = LiloPaths::new(home);
+        Self::from_lilo_paths(&paths)
     }
 
     pub fn from_lilo_paths(paths: &LiloPaths) -> Result<Self> {

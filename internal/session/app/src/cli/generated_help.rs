@@ -13,7 +13,7 @@ pub const SESSION_RUN_NAMESPACE_HELP: &str = "Namespace slug for the session. Ov
 #[rustfmt::skip]
 pub const SESSION_RUN_LABELS_HELP: &str = "Session label as key=value.";
 #[rustfmt::skip]
-pub const SESSION_RUN_AGENT_CONFIG_HELP: &str = "Agent config name resolved as `~/.agm/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings).";
+pub const SESSION_RUN_AGENT_CONFIG_HELP: &str = "Agent config name resolved under `~/.lilo/config/session/agents/<name>/agent.toml`, or an explicit `agent.toml` path. TOML keys: `claude_config_dir` (string), `[env]` (table of strings).";
 #[rustfmt::skip]
 pub const SESSION_RUN_ISOLATION_HELP: &str = "Runtime isolation policy. Accepted shapes are host, docker, or docker:PROFILE.";
 #[rustfmt::skip]

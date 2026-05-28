@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use lilo_session_core::{
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceGetRequest, NamespaceListRequest,
-    NamespaceRecord, RpcResponse, SessionRpc, SmEndpoint,
+    NamespaceRecord, RpcResponse, SessionRpc,
 };
 
 use crate::cli::cli_def::{CreateArgs, CreateResource, NamespaceCreateArgs};
@@ -110,8 +110,7 @@ async fn request_create(slug: String) -> Result<NamespaceCreateResponse> {
 }
 
 async fn send(request: &SessionRpc) -> Result<RpcResponse> {
-    let endpoint = SmEndpoint::from_env()?;
-    lilo_session_daemon::send_request(&endpoint, request).await
+    crate::cli::client::send_request(request).await
 }
 
 fn print_create_response(response: &NamespaceCreateResponse) {

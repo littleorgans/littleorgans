@@ -21,6 +21,7 @@ members = [
     "internal/session/driver",
     "internal/session/daemon",
     "internal/session/app",
+    "tests/integration",
     "tools/xtask",
 ]
 resolver = "3"
@@ -64,7 +65,6 @@ lilo-session-daemon = { path = "internal/session/daemon" }
 lilo-session-driver = { path = "internal/session/driver" }
 lilo-session-store = { path = "internal/session/store" }
 nix = { version = "0.30", features = ["process", "signal", "socket", "term", "user"] }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sqlx = { version = "0.8.3", features = ["chrono", "migrate", "runtime-tokio", "sqlite", "uuid"] }

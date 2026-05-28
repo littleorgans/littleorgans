@@ -1019,6 +1019,7 @@ dependencies = [
  "anyhow",
  "clap",
  "lilo-common",
+ "lilo-db",
  "lilo-paths",
  "lilo-runtime-app",
  "lilo-session-app",
@@ -1027,6 +1028,8 @@ dependencies = [
  "nix",
  "serde",
  "serde_json",
+ "sqlx",
+ "tempfile",
  "tokio",
 ]
 
@@ -1110,6 +1113,26 @@ dependencies = [
  "lilo-im-core",
  "nix",
  "tokio",
+]
+
+[[package]]
+name = "lilo-integration-tests"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "lilo-db",
+ "lilo-paths",
+ "lilo-rm-core",
+ "lilo-runtime-daemon",
+ "lilo-runtime-store",
+ "lilo-session-core",
+ "lilo-session-daemon",
+ "lilo-session-store",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

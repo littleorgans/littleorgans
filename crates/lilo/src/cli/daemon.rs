@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use lilo_common::diagnostic::Diagnostic;
-use lilo_paths::{LiloHome, LiloPaths, SmEndpoint};
+use lilo_paths::{DaemonEndpoint, LiloHome, LiloPaths};
 use lilo_session_core::SessionRpc;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
@@ -48,7 +48,7 @@ async fn stop(paths: &LiloPaths, output: Output) -> Result<()> {
     }
 
     if paths.socket_path().exists() {
-        let endpoint = SmEndpoint::unix_socket(paths.socket_path());
+        let endpoint = DaemonEndpoint::from_paths(paths);
         let _ = lilo_session_daemon::send_request(&endpoint, &SessionRpc::Shutdown).await;
     }
 

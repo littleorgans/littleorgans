@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use lilo_rm_core::{IsolationPolicy, MountSpec, SpawnTarget};
 use lilo_session_core::{
-    Label, Namespace, RpcResponse, SessionRpc, SmEndpoint, SpawnRequest,
-    agent_config_uses_home_prefix, is_agent_config_path_like, normalize_agent_config_request,
+    Label, Namespace, RpcResponse, SessionRpc, SpawnRequest, agent_config_uses_home_prefix,
+    is_agent_config_path_like, normalize_agent_config_request,
 };
 
 use crate::cli::cli_def::{RunArgs, SessionCreateArgs};
@@ -48,7 +48,6 @@ async fn spawn_session(
 ) -> Result<()> {
     let spawn_location = resolve_spawn_location(args.dir.as_ref(), args.namespace.clone())?;
     let agent_config = normalize_cli_agent_config(args.agent_config.as_deref())?;
-    let endpoint = SmEndpoint::from_env()?;
     let env = lilo_rm_core::capture_caller_env();
     let spawn_target = SpawnTarget::from_str(&target).ok();
     let shell_resume = if spawn_target
@@ -62,31 +61,28 @@ async fn spawn_session(
     } else {
         None
     };
-    let response = lilo_session_daemon::send_request(
-        &endpoint,
-        &SessionRpc::Spawn {
-            request: Box::new(SpawnRequest {
-                runtime: args.runtime,
-                role: args.role,
-                workspace: spawn_location.dir.clone(),
-                dir: Some(spawn_location.dir),
-                namespace: Some(spawn_location.namespace),
-                target,
-                agent_config,
-                isolation,
-                image,
-                env,
-                mounts,
-                shell_resume,
-                labels: args
-                    .labels
-                    .iter()
-                    .map(|label| Label::from_str(label))
-                    .collect::<Result<Vec<_>, _>>()?,
-                force,
-            }),
-        },
-    )
+    let response = crate::cli::client::send_request(&SessionRpc::Spawn {
+        request: Box::new(SpawnRequest {
+            runtime: args.runtime,
+            role: args.role,
+            workspace: spawn_location.dir.clone(),
+            dir: Some(spawn_location.dir),
+            namespace: Some(spawn_location.namespace),
+            target,
+            agent_config,
+            isolation,
+            image,
+            env,
+            mounts,
+            shell_resume,
+            labels: args
+                .labels
+                .iter()
+                .map(|label| Label::from_str(label))
+                .collect::<Result<Vec<_>, _>>()?,
+            force,
+        }),
+    })
     .await?;
 
     match response {

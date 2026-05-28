@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use lilo_session_core::{
     MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcResponse,
-    Selector, SessionRpc, SmEndpoint,
+    Selector, SessionRpc,
 };
 
 use crate::cli::cli_def::{
@@ -128,8 +128,7 @@ async fn unread_count(selector: String) -> Result<usize> {
 }
 
 async fn send_daemon_request(request: SessionRpc) -> Result<RpcResponse> {
-    let endpoint = SmEndpoint::from_env()?;
-    lilo_session_daemon::send_request(&endpoint, &request).await
+    crate::cli::client::send_request(&request).await
 }
 
 fn env_session_id() -> Option<String> {

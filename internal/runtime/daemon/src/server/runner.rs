@@ -3,7 +3,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_identity_service::IdentityClient;
-use lilo_paths::RuntimePathEnv;
 use lilo_runtime_store::LifecycleStore;
 use tokio::{net::UnixListener, sync::broadcast};
 
@@ -24,12 +23,7 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
     socket::prepare_socket(socket_path)?;
     let listener = UnixListener::bind(socket_path)
         .with_context(|| format!("failed to bind {}", socket_path.display()))?;
-    println!(
-        "rtmd listening on {}",
-        config
-            .endpoint
-            .display_label(&RuntimePathEnv::from_process())
-    );
+    println!("lilod listening on {}", config.endpoint.display_label());
 
     let state = Arc::new(ServerState::new_with_identity(
         config.clone(),

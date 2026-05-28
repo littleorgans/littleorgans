@@ -1,0 +1,21 @@
+[package]
+name = "lilo-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+lilo-db.workspace = true
+lilo-paths.workspace = true
+lilo-rm-core.workspace = true
+lilo-runtime-daemon.workspace = true
+lilo-runtime-store.workspace = true
+lilo-session-core.workspace = true
+lilo-session-daemon.workspace = true
+lilo-session-store.workspace = true
+sqlx.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+uuid.workspace = true

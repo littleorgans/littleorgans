@@ -105,8 +105,8 @@ sm mcp
 
 | Tool | CLI | Purpose |
 |------|-----|---------|
-| `session_run` | `sm run` | Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
-| `agent_run` | `sm run` | Deprecated compatibility alias for session_run. Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
+| `session_run` | `sm run` | Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
+| `agent_run` | `sm run` | Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
 | `session_list` | `sm get session` | List session records known to the session-matters daemon. Supports the shared selector grammar. |
 | `agent_list` | `sm get session` | Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar. |
 | `session_get` | `sm get session` | Get one session record by id. The tool returns an error envelope when the id is unknown. |
@@ -123,7 +123,7 @@ sm mcp
 | `mail_read` | `sm mail read` | Read unread mail for sessions selected by selector. Reads mark messages read unless peek is true. |
 | `mail_check` | `sm mail check` | Return the unread mail count for sessions selected by selector without draining mail. |
 | `mail_stop_check` | `sm mail stop-check` | Return the unread mail count for stop-hook decisions without draining mail. |
-| `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through rtmd; headless or ended runtimes return typed failure messages. |
+| `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages. |
 | `logs` | `sm logs` | Read the transcript linked to one selected session. |
 | `wait` | `sm wait` | Wait until a selector satisfies running, terminated, or count=N. |
 | `doctor` | `sm doctor` | Report session-matters daemon health, LOST sessions, and runtime-matters status. |

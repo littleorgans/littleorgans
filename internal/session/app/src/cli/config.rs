@@ -3,7 +3,8 @@ use std::io::Write;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use lilo_session_core::{Namespace, SmPaths};
+use lilo_paths::LiloPaths;
+use lilo_session_core::Namespace;
 
 use crate::cli::cli_def::{ConfigAction, ConfigArgs};
 
@@ -15,7 +16,7 @@ pub async fn run(args: ConfigArgs) -> Result<()> {
 
 async fn set_context(namespace: Namespace) -> Result<()> {
     ensure_namespace_exists(&namespace).await?;
-    let paths = SmPaths::from_env()?;
+    let paths = crate::cli::client::paths_from_env()?;
     write_namespace_binding(&paths, &namespace)?;
     match namespace_exists(&namespace).await {
         Ok(true) => {
@@ -48,10 +49,13 @@ async fn namespace_exists(namespace: &Namespace) -> Result<bool> {
     )
 }
 
-fn write_namespace_binding(paths: &SmPaths, namespace: &Namespace) -> Result<()> {
-    fs::create_dir_all(&paths.dir)
-        .with_context(|| format!("failed to create {}", paths.dir.display()))?;
-    atomic_write_line(&paths.namespace_binding(), namespace.as_str())
+fn write_namespace_binding(paths: &LiloPaths, namespace: &Namespace) -> Result<()> {
+    let binding = paths.namespace_binding();
+    let parent = binding
+        .parent()
+        .context("namespace binding path has no parent")?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    atomic_write_line(&binding, namespace.as_str())
 }
 
 fn atomic_write_line(path: &Path, value: &str) -> Result<()> {

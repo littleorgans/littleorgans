@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use lilo_paths::{LiloHome, LiloPaths};
 
 #[derive(Clone, Debug)]
 pub struct StoreConfig {
@@ -9,7 +10,8 @@ pub struct StoreConfig {
 
 impl StoreConfig {
     pub fn from_env() -> Result<Self> {
-        let db_path = lilo_paths::db_path_from_env()?;
+        let home = LiloHome::from_env()?;
+        let db_path = LiloPaths::new(home).db_path();
         Ok(Self { db_path })
     }
 }

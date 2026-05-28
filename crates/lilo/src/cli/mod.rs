@@ -69,7 +69,7 @@ impl Cli {
 
     pub async fn run(self) -> Result<(), Diagnostic> {
         match self.command {
-            Command::Doctor(command) => command.run(self.output),
+            Command::Doctor(command) => command.run(self.output).await,
             Command::Daemon(command) => command.run(self.output).await,
             Command::RuntimeShim(args) => lilo_runtime_app::cli::shim::run(args)
                 .await

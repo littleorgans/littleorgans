@@ -79,7 +79,7 @@ fn run_rpc_round_trip(
             selector: Selector::Id { id: session_id },
         },
     };
-    let endpoint = lilo_session_core::SmEndpoint::unix_socket(daemon.socket_path());
+    let endpoint = lilo_paths::DaemonEndpoint::unix_socket(daemon.socket_path());
     let response = runtime
         .block_on(lilo_session_daemon::send_request(&endpoint, &request))
         .or_panic("daemon RPC succeeds");

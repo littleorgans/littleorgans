@@ -1,15 +1,14 @@
 ---
 source: internal/session/app/tests/mcp_schema_snapshot_test.rs
-assertion_line: 30
 expression: "lilo_session_app::mcp::instructions::SERVER_INSTRUCTIONS"
 ---
-session-matters controls local Helioy sessions through smd.
+session-matters controls local Helioy sessions through lilod.
 
 Use session_run to run a session, session_list to inspect sessions, session_get before acting on one id, and session_delete to terminate a session.
 
 Tools:
-- session_run: Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.
-- agent_run: Deprecated compatibility alias for session_run. Start a session through the session-matters daemon and rtmd. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.
+- session_run: Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.
+- agent_run: Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record.
 - session_list: List session records known to the session-matters daemon. Supports the shared selector grammar.
 - agent_list: Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar.
 - session_get: Get one session record by id. The tool returns an error envelope when the id is unknown.
@@ -26,7 +25,7 @@ Tools:
 - mail_read: Read unread mail for sessions selected by selector. Reads mark messages read unless peek is true.
 - mail_check: Return the unread mail count for sessions selected by selector without draining mail.
 - mail_stop_check: Return the unread mail count for stop-hook decisions without draining mail.
-- nudge: Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through rtmd; headless or ended runtimes return typed failure messages.
+- nudge: Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages.
 - logs: Read the transcript linked to one selected session.
 - wait: Wait until a selector satisfies running, terminated, or count=N.
 - doctor: Report session-matters daemon health, LOST sessions, and runtime-matters status.

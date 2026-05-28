@@ -401,11 +401,8 @@ fn wait_for_event_waiters_at_most(harness: &RtmHarness, expected: usize) {
 }
 
 fn write_event_log(harness: &RtmHarness, records: &[serde_json::Value], tail: &str) {
-    let path = harness
-        .db_path()
-        .parent()
-        .expect("db parent")
-        .join("events.jsonl");
+    let data_dir = harness.db_path().parent().expect("db parent");
+    let path = lilo_paths::event_log_path(data_dir);
     create_dir_all(path.parent().expect("event log parent")).expect("event log dir");
     let mut file = OpenOptions::new()
         .create(true)

@@ -2,7 +2,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use lilo_session_core::{Namespace, NamespaceError, SmPaths, SmPathsError};
+use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
+use lilo_session_core::{Namespace, NamespaceError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NamespaceResolution {
@@ -57,7 +58,7 @@ pub fn resolve_namespace_dir(
         start_dir.as_ref(),
         explicit_namespace,
         None,
-        SmPaths::from_env(),
+        LiloHome::from_env().map(LiloPaths::new),
     )
 }
 
@@ -65,11 +66,11 @@ fn resolve_namespace_dir_with_paths(
     start_dir: &Path,
     explicit_namespace: Option<Namespace>,
     env_namespace: Option<OsString>,
-    paths: Result<SmPaths, SmPathsError>,
+    paths: Result<LiloPaths, LiloPathError>,
 ) -> Result<NamespaceResolution, NamespaceResolutionError> {
     let (paths, warnings) = match paths {
         Ok(paths) => (Some(paths), Vec::new()),
-        Err(SmPathsError::MissingHome | SmPathsError::EmptyPath) => {
+        Err(LiloPathError::MissingHome | LiloPathError::EmptyPath) => {
             (None, vec![NamespaceResolutionWarning::MissingOrInvalidHome])
         }
     };
@@ -87,7 +88,7 @@ fn resolve_namespace_dir_with_paths(
 fn resolve_namespace(
     explicit_namespace: Option<Namespace>,
     env_namespace: Option<OsString>,
-    paths: Option<&SmPaths>,
+    paths: Option<&LiloPaths>,
 ) -> Result<Namespace, NamespaceResolutionError> {
     if let Some(namespace) = explicit_namespace {
         return Ok(namespace);
@@ -145,8 +146,7 @@ mod tests {
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
 
-        let resolved =
-            resolve_with_paths(&start, None, Some(SmPaths::new(root.path().join(".sm"))));
+        let resolved = resolve_with_paths(&start, None, Some(test_paths(root.path())));
 
         assert_eq!(resolved.namespace, Namespace::default());
         assert_eq!(resolved.canonical_dir, canonical(&start));
@@ -157,7 +157,7 @@ mod tests {
         let root = tempfile::tempdir().or_panic("tempdir");
         let project = root.path().join("project");
         std::fs::create_dir_all(&project).or_panic("project dir");
-        let paths = SmPaths::new(root.path().join("sm-home"));
+        let paths = test_paths(root.path());
         write_binding(&paths, "alpha");
 
         let resolved = resolve_with_paths(&project, None, Some(paths));
@@ -171,7 +171,7 @@ mod tests {
         let root = tempfile::tempdir().or_panic("tempdir");
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
-        let paths = SmPaths::new(root.path().join("sm-home"));
+        let paths = test_paths(root.path());
         write_binding(&paths, "bound");
 
         let resolved = resolve_with_paths(&start, Some("env-ns"), Some(paths));
@@ -185,7 +185,7 @@ mod tests {
         let root = tempfile::tempdir().or_panic("tempdir");
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
-        let paths = SmPaths::new(root.path().join("sm-home"));
+        let paths = test_paths(root.path());
         write_binding(&paths, "bound");
 
         let resolved = resolve_namespace_dir_with_paths(
@@ -207,8 +207,7 @@ mod tests {
         std::fs::create_dir_all(&start).or_panic("start dir");
         write_workspace_marker(&start, "marker");
 
-        let resolved =
-            resolve_with_paths(&start, None, Some(SmPaths::new(root.path().join(".sm"))));
+        let resolved = resolve_with_paths(&start, None, Some(test_paths(root.path())));
 
         assert_eq!(resolved.namespace, Namespace::default());
         assert_eq!(resolved.canonical_dir, canonical(&start));
@@ -222,8 +221,7 @@ mod tests {
         std::fs::create_dir_all(&nested).or_panic("nested dirs");
         write_workspace_marker(&project, "ancestor");
 
-        let resolved =
-            resolve_with_paths(&nested, None, Some(SmPaths::new(root.path().join(".sm"))));
+        let resolved = resolve_with_paths(&nested, None, Some(test_paths(root.path())));
 
         assert_eq!(resolved.namespace, Namespace::default());
         assert_eq!(resolved.canonical_dir, canonical(&nested));
@@ -238,8 +236,7 @@ mod tests {
         std::fs::create_dir_all(real.join("child")).or_panic("real child");
         symlink_dir(&real, &link);
 
-        let resolved =
-            resolve_with_paths(&start, None, Some(SmPaths::new(root.path().join(".sm"))));
+        let resolved = resolve_with_paths(&start, None, Some(test_paths(root.path())));
 
         assert_eq!(resolved.namespace, Namespace::default());
         assert_eq!(
@@ -254,11 +251,7 @@ mod tests {
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
 
-        let error = resolve_error(
-            &start,
-            Some("Alpha"),
-            Some(SmPaths::new(root.path().join(".sm"))),
-        );
+        let error = resolve_error(&start, Some("Alpha"), Some(test_paths(root.path())));
 
         assert!(matches!(error, NamespaceResolutionError::InvalidEnv { .. }));
         assert!(error.to_string().contains("invalid namespace value"));
@@ -269,7 +262,7 @@ mod tests {
         let root = tempfile::tempdir().or_panic("tempdir");
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
-        let paths = SmPaths::new(root.path().join("sm-home"));
+        let paths = test_paths(root.path());
         write_binding(&paths, "Alpha");
 
         let error = resolve_error(&start, None, Some(paths));
@@ -287,7 +280,7 @@ mod tests {
         let root = tempfile::tempdir().or_panic("tempdir");
         let start = root.path().join("project");
         std::fs::create_dir_all(&start).or_panic("start dir");
-        let paths = SmPaths::new(root.path().join("sm-home"));
+        let paths = test_paths(root.path());
         let binding = write_binding(&paths, "alpha");
         remove_read_permissions(&binding);
 
@@ -307,7 +300,7 @@ mod tests {
         std::fs::create_dir_all(&start).or_panic("start dir");
 
         let resolved =
-            resolve_namespace_dir_with_paths(&start, None, None, Err(SmPathsError::MissingHome))
+            resolve_namespace_dir_with_paths(&start, None, None, Err(LiloPathError::MissingHome))
                 .or_panic("resolves without home");
 
         assert_eq!(resolved.namespace, Namespace::default());
@@ -325,7 +318,7 @@ mod tests {
         std::fs::create_dir_all(&start).or_panic("start dir");
 
         let resolved =
-            resolve_namespace_dir_with_paths(&start, None, None, Err(SmPathsError::EmptyPath))
+            resolve_namespace_dir_with_paths(&start, None, None, Err(LiloPathError::EmptyPath))
                 .or_panic("resolves without valid home");
 
         assert_eq!(resolved.namespace, Namespace::default());
@@ -339,13 +332,13 @@ mod tests {
     fn resolve_with_paths(
         start: &Path,
         env_namespace: Option<&str>,
-        paths: Option<SmPaths>,
+        paths: Option<LiloPaths>,
     ) -> NamespaceResolution {
         resolve_namespace_dir_with_paths(
             start,
             None,
             env_namespace.map(OsString::from),
-            paths.ok_or(SmPathsError::MissingHome),
+            paths.ok_or(LiloPathError::MissingHome),
         )
         .or_panic("namespace resolves")
     }
@@ -353,18 +346,22 @@ mod tests {
     fn resolve_error(
         start: &Path,
         env_namespace: Option<&str>,
-        paths: Option<SmPaths>,
+        paths: Option<LiloPaths>,
     ) -> NamespaceResolutionError {
         resolve_namespace_dir_with_paths(
             start,
             None,
             env_namespace.map(OsString::from),
-            paths.ok_or(SmPathsError::MissingHome),
+            paths.ok_or(LiloPathError::MissingHome),
         )
         .err_or_panic("namespace fails")
     }
 
-    fn write_binding(paths: &SmPaths, value: &str) -> PathBuf {
+    fn test_paths(root: &Path) -> LiloPaths {
+        LiloPaths::new(LiloHome::from_path(root.join(".lilo")).or_panic("lilo home"))
+    }
+
+    fn write_binding(paths: &LiloPaths, value: &str) -> PathBuf {
         let binding = paths.namespace_binding();
         std::fs::create_dir_all(binding.parent().or_panic("binding parent"))
             .or_panic("binding dir");

@@ -125,7 +125,7 @@ pub fn render_server_instructions(
     tools: &[ToolContract],
 ) -> String {
     let mut out = String::new();
-    out.push_str("session-matters controls local Helioy sessions through smd.\n\n");
+    out.push_str("session-matters controls local Helioy sessions through lilod.\n\n");
     out.push_str("Use session_run to run a session, session_list to inspect sessions, ");
     out.push_str(
         "session_get before acting on one id, and session_delete to terminate a session.\n\n",

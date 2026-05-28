@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
+use lilo_paths::DaemonEndpoint;
 use lilo_rm_core::{read_json_line, write_json_line};
-use lilo_session_core::{RpcResponse, SessionRpc, SmEndpoint};
+use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::{UnixStream, unix::OwnedReadHalf};
 
-pub async fn send_request(endpoint: &SmEndpoint, request: &SessionRpc) -> Result<RpcResponse> {
+pub async fn send_request(endpoint: &DaemonEndpoint, request: &SessionRpc) -> Result<RpcResponse> {
     let stream = UnixStream::connect(endpoint.as_path())
         .await
         .with_context(|| format!("failed to connect to {endpoint}"))?;

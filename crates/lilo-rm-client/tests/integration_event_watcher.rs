@@ -284,7 +284,7 @@ fn assert_event_count(batch: &EventBatch, expected: usize) {
 }
 
 fn write_event_log(root: &Path, records: &[serde_json::Value]) {
-    let path = root.join("events.jsonl");
+    let path = lilo_paths::event_log_path(root);
     create_dir_all(path.parent().expect("event log parent")).expect("event log dir");
     let mut file = OpenOptions::new()
         .create(true)

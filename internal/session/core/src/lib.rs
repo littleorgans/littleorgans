@@ -26,7 +26,7 @@ pub use lilo_rm_core::{IsolationPolicy, MountSpec};
 pub use mcp::{
     JsonRpcError, JsonRpcRequest, JsonRpcResponse, MCP_PROTOCOL_VERSION, tool_error, tool_success,
 };
-pub use paths::{SmEndpoint, SmPaths, SmPathsError, rtmd_socket_path};
+pub use paths::{DaemonEndpoint, LiloPathError, LiloPaths};
 pub use proto::{
     CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest, DeleteResponse, DoctorFinding,
     DoctorRequest, DoctorResponse, LabelRequest, LabelResponse, ListRequest, ListResponse,

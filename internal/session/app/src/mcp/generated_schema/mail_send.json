@@ -8,7 +8,7 @@
         "type": "string"
       },
       "from": {
-        "description": "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise smd records the controller sender.",
+        "description": "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise lilod records the controller sender.",
         "type": "string"
       },
       "to": {

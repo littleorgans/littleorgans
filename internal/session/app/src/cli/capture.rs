@@ -1,23 +1,17 @@
 use anyhow::{Result, bail};
 use lilo_rm_core::{CaptureError, CaptureResponse};
 
-use lilo_session_core::{
-    CaptureRequest, RpcResponse, SessionRpc, SmEndpoint, humanize_capture_error,
-};
+use lilo_session_core::{CaptureRequest, RpcResponse, SessionRpc, humanize_capture_error};
 
 use crate::cli::cli_def::CaptureArgs;
 
 pub async fn run(args: CaptureArgs) -> Result<()> {
-    let endpoint = SmEndpoint::from_env()?;
-    let response = lilo_session_daemon::send_request(
-        &endpoint,
-        &SessionRpc::Capture {
-            request: CaptureRequest {
-                session_id: args.session_id,
-                scrollback_lines: args.scrollback_lines,
-            },
+    let response = crate::cli::client::send_request(&SessionRpc::Capture {
+        request: CaptureRequest {
+            session_id: args.session_id,
+            scrollback_lines: args.scrollback_lines,
         },
-    )
+    })
     .await?;
 
     match response {

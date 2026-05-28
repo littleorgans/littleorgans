@@ -1,5 +1,5 @@
 {
-  "description": "Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through rtmd; headless or ended runtimes return typed failure messages.",
+  "description": "Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages.",
   "inputSchema": {
     "additionalProperties": false,
     "properties": {

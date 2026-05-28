@@ -124,6 +124,12 @@ impl DaemonEndpoint {
         }
     }
 
+    pub fn unix_socket(path: impl Into<PathBuf>) -> Self {
+        Self {
+            socket_path: path.into(),
+        }
+    }
+
     pub fn as_path(&self) -> &Path {
         &self.socket_path
     }
