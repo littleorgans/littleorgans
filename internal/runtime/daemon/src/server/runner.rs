@@ -53,6 +53,8 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
     // broadcast) so their sockets are released before we return, rather
     // than leaving detached tasks alive past daemon shutdown.
     while connections.join_next().await.is_some() {}
+    // Tear down shims this daemon spawned so they do not outlive it as orphans.
+    state.drain_shims();
     if let Err(error) = reconcile.reconcile_task.await {
         tracing::warn!(%error, "periodic reconciliation task failed");
     }

@@ -88,6 +88,7 @@ impl RuntimeService {
 
     pub async fn shutdown(&self) -> Result<()> {
         let _ = self.shutdown_tx.send(());
+        self.state.drain_shims();
         let reconcile_task = {
             let mut task = self.reconcile_task.lock().await;
             task.take()
@@ -97,11 +98,20 @@ impl RuntimeService {
         }
         Ok(())
     }
+
+    /// Reap shims spawned by this service. Public so in-process owners (the
+    /// session daemon, test harnesses) can drain without a full async shutdown.
+    pub fn drain_shims(&self) {
+        self.state.drain_shims();
+    }
 }
 
 impl Drop for RuntimeService {
     fn drop(&mut self) {
         let _ = self.shutdown_tx.send(());
+        // Catch-all so shims never outlive an owner that dropped the service
+        // without an explicit shutdown (e.g. a test harness with no teardown).
+        self.state.drain_shims();
     }
 }
 

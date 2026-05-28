@@ -35,6 +35,7 @@ pub struct TestDaemon {
     pub state: DaemonState,
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
+    pub runtime: Arc<RuntimeService>,
     runtime_socket_task: JoinHandle<()>,
 }
 
@@ -68,12 +69,13 @@ impl TestDaemon {
         let runtime_socket_path = paths.socket_path();
         let driver = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
-        let state = DaemonState::new(store, driver, Arc::new(identity), runtime)
+        let state = DaemonState::new(store, driver, Arc::new(identity), Arc::clone(&runtime))
             .with_rtmd_socket_path(runtime_socket_path);
         Self {
             state,
             audit_path,
             dir,
+            runtime,
             runtime_socket_task,
         }
     }
