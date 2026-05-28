@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use tokio::net::UnixListener;
+use tokio::task::JoinSet;
 
 use crate::{handler, socket};
 
@@ -26,6 +27,7 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
     let shutdown_tx = reconcile.shutdown_tx;
     let mut shutdown_rx = shutdown_tx.subscribe();
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let mut connections: JoinSet<()> = JoinSet::new();
 
     loop {
         tokio::select! {
@@ -33,7 +35,7 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
                 let (stream, _) = accepted.context("failed to accept daemon connection")?;
                 let task_state = Arc::clone(&state);
                 let task_shutdown = shutdown_tx.clone();
-                tokio::spawn(async move {
+                connections.spawn(async move {
                     if let Err(error) = handler::handle_connection(stream, task_state, task_shutdown).await {
                         tracing::warn!(%error, "daemon connection failed");
                     }
@@ -47,6 +49,10 @@ pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> 
 
     socket::remove_socket_file(config.socket_path()?)?;
     let _ = shutdown_tx.send(());
+    // Drain in-flight connection handlers (they observe the shutdown
+    // broadcast) so their sockets are released before we return, rather
+    // than leaving detached tasks alive past daemon shutdown.
+    while connections.join_next().await.is_some() {}
     if let Err(error) = reconcile.reconcile_task.await {
         tracing::warn!(%error, "periodic reconciliation task failed");
     }
