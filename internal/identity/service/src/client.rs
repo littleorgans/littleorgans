@@ -67,12 +67,17 @@ impl IdentityClient {
         action: Action,
         resource: &ResourceSpec,
     ) -> Result<()> {
-        let decision = self.audit_decision(principal);
-        let row = AuditRow::new(principal.clone(), action, resource.clone(), decision);
+        let decision = AuditDecision::evaluate_local(principal, self.local_uid);
+        let row = AuditRow::new(
+            principal.clone(),
+            action,
+            resource.clone(),
+            decision.clone(),
+        );
         record_audit_in_tx(conn, &row)
             .await
             .context("authorization failed")?;
-        if *principal == Principal::Local(self.local_uid) {
+        if decision == AuditDecision::Allow {
             Ok(())
         } else {
             Err(AuthzError::UnknownPrincipal).context("authorization failed")
@@ -92,21 +97,5 @@ impl IdentityClient {
         self.authorizer()
             .authorize(principal, action, resource)
             .await
-    }
-
-    fn audit_decision(&self, principal: &Principal) -> AuditDecision {
-        if *principal == Principal::Local(self.local_uid) {
-            return AuditDecision::Allow;
-        }
-        AuditDecision::Deny {
-            reason: denial_reason(principal).to_owned(),
-        }
-    }
-}
-
-fn denial_reason(principal: &Principal) -> &'static str {
-    match principal {
-        Principal::Local(_) => "non-local uid",
-        Principal::Unknown { .. } => "unknown principal",
     }
 }
