@@ -1127,6 +1127,7 @@ name = "lilo-integration-tests"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "chrono",
  "lilo-db",
  "lilo-paths",
@@ -1138,6 +1139,7 @@ dependencies = [
  "lilo-session-daemon",
  "lilo-session-store",
  "lilo-wire",
+ "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
