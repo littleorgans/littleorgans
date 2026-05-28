@@ -2,7 +2,7 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -16,6 +16,7 @@ pub const SHIM_RECONNECT_MAX_ATTEMPTS: usize = 10;
 const SHIM_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
 const SHIM_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const RUNTIME_WAIT_POLL: Duration = Duration::from_millis(100);
+const SIGTERM_GRACE: Duration = Duration::from_secs(5);
 
 static SIGTERM_RECEIVED: AtomicBool = AtomicBool::new(false);
 
@@ -141,13 +142,33 @@ fn wait_for_runtime(child: &mut std::process::Child) -> Result<ExitStatus> {
             return Ok(status);
         }
         if SIGTERM_RECEIVED.swap(false, Ordering::SeqCst) {
-            lilo_runtime_platform::signal::send_signal(child.id(), RuntimeSignal::Term)?;
-            return child
-                .wait()
-                .context("failed to wait for runtime child after SIGTERM");
+            return terminate_runtime(child, SIGTERM_GRACE);
         }
         thread::sleep(RUNTIME_WAIT_POLL);
     }
+}
+
+/// Forward SIGTERM to the runtime child and wait up to `grace` for it to exit.
+/// If the child is still alive after the grace window, escalate to SIGKILL so
+/// the shim always terminates promptly instead of blocking forever on a child
+/// that traps or ignores SIGTERM.
+fn terminate_runtime(child: &mut std::process::Child, grace: Duration) -> Result<ExitStatus> {
+    lilo_runtime_platform::signal::send_signal(child.id(), RuntimeSignal::Term)?;
+    let deadline = Instant::now() + grace;
+    while Instant::now() < deadline {
+        if let Some(status) = child
+            .try_wait()
+            .context("failed to poll runtime child after SIGTERM")?
+        {
+            return Ok(status);
+        }
+        thread::sleep(RUNTIME_WAIT_POLL);
+    }
+    // Best-effort: a race where the child exits here is resolved by wait() below.
+    let _ = lilo_runtime_platform::signal::send_signal(child.id(), RuntimeSignal::Kill);
+    child
+        .wait()
+        .context("failed to wait for runtime child after SIGKILL")
 }
 
 fn install_sigterm_handler() -> Result<()> {
@@ -206,6 +227,66 @@ mod tests {
     use super::*;
     use lilo_rm_core::LaunchEnv;
     use std::path::PathBuf;
+
+    // Spawn a child that prints "ready" then blocks on `read` (held-open stdin
+    // pipe, so no orphaned `sleep` grandchild). Waiting for the marker
+    // guarantees the optional SIGTERM-ignore trap is installed before the test
+    // signals the child, removing the startup race. Returns the child plus its
+    // stdin handle, which the caller must keep alive to keep `read` blocked.
+    fn spawn_signal_test_child(ignore_sigterm: bool) -> (std::process::Child, std::process::ChildStdin) {
+        use std::io::{BufRead, BufReader};
+        use std::process::Stdio;
+        let script = if ignore_sigterm {
+            "trap '' TERM; echo ready; read _ignored"
+        } else {
+            "echo ready; read _ignored"
+        };
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", script])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("spawn child");
+        let stdin = child.stdin.take().expect("child stdin");
+        let mut reader = BufReader::new(child.stdout.take().expect("child stdout"));
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("read readiness marker");
+        assert_eq!(line.trim(), "ready");
+        (child, stdin)
+    }
+
+    #[test]
+    fn terminate_runtime_escalates_to_sigkill_when_child_ignores_sigterm() {
+        // The orphan-shim leak: a runtime child that ignores SIGTERM previously
+        // hung the shim forever on child.wait(). terminate_runtime must escalate
+        // to SIGKILL after the grace window instead of blocking.
+        let (mut child, _stdin) = spawn_signal_test_child(true);
+        let start = Instant::now();
+        let status =
+            terminate_runtime(&mut child, Duration::from_millis(200)).expect("terminate");
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "terminate_runtime blocked on a child ignoring SIGTERM"
+        );
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGKILL),
+            "child should have been killed by SIGKILL, got {status:?}"
+        );
+    }
+
+    #[test]
+    fn terminate_runtime_uses_sigterm_when_child_exits_promptly() {
+        // Default SIGTERM disposition terminates the child; terminate_runtime
+        // returns the SIGTERM exit without escalating to SIGKILL.
+        let (mut child, _stdin) = spawn_signal_test_child(false);
+        let status = terminate_runtime(&mut child, Duration::from_secs(5)).expect("terminate");
+        assert_eq!(
+            status.signal(),
+            Some(libc::SIGTERM),
+            "child should have exited on SIGTERM, got {status:?}"
+        );
+    }
 
     #[test]
     fn apply_launch_env_cwd_clears_pre_existing_env_on_command() {
