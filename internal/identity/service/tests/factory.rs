@@ -1,11 +1,11 @@
 use lilo_db::LiloDb;
-use lilo_identity_service::{IdentityConfig, IdentityService};
+use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, AuditDecision, Principal, ResourceSpec};
-use lilo_im_store::{AuditFilters, SqliteAuditSink};
+use lilo_im_store::AuditFilters;
 use lilo_paths::{LiloHome, LiloPaths};
 
 #[tokio::test]
-async fn factory_authorizes_and_records_an_audit_row() {
+async fn client_from_db_authorizes_and_records_an_audit_row() {
     let tempdir = tempfile::tempdir().expect("create tempdir");
     let home = LiloHome::from_path(tempdir.path().join("lilo")).expect("home path");
     let db = LiloDb::open(&LiloPaths::new(home))
@@ -15,16 +15,15 @@ async fn factory_authorizes_and_records_an_audit_row() {
     let principal = Principal::local(local_uid);
     let resource = ResourceSpec::default();
 
-    let audit_sink = SqliteAuditSink::with_pool(db.identity_pool().clone());
-    let service = IdentityService::build(IdentityConfig::new(audit_sink, local_uid));
+    let client = IdentityClient::from_db(&db, local_uid);
 
-    let authorized = service
+    client
         .authorize(&principal, Action::Spawn, &resource)
         .await
         .expect("authorize local principal");
-    assert_eq!(authorized.principal, principal);
 
-    let rows = service
+    let rows = client
+        .audit_sink()
         .query_audit(AuditFilters::default())
         .await
         .expect("query audit rows");
