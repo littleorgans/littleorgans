@@ -12,8 +12,51 @@ use lilo_session_daemon::{SessionService, SessionServiceContext};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::{Notify, mpsc};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShutdownStage {
+    ListenerClosed,
+    ConnectionsDrained,
+    RuntimeShutdown,
+    SocketRemoved,
+    BeforeDbClose,
+    DbClosed,
+}
+
+#[doc(hidden)]
+#[derive(Clone, Default)]
+pub struct ShutdownObserver {
+    stages: Option<mpsc::UnboundedSender<ShutdownStage>>,
+    resume_before_db_close: Option<Arc<Notify>>,
+}
+
+impl ShutdownObserver {
+    #[must_use]
+    pub fn pause_before_db_close(
+        stages: mpsc::UnboundedSender<ShutdownStage>,
+        resume_before_db_close: Arc<Notify>,
+    ) -> Self {
+        Self {
+            stages: Some(stages),
+            resume_before_db_close: Some(resume_before_db_close),
+        }
+    }
+
+    async fn mark(&self, stage: ShutdownStage) {
+        if let Some(stages) = &self.stages {
+            let _ = stages.send(stage);
+        }
+        if stage == ShutdownStage::BeforeDbClose
+            && let Some(resume) = &self.resume_before_db_close
+        {
+            resume.notified().await;
+        }
+    }
+}
 
 pub async fn run_from_env() -> Result<()> {
     let home = LiloHome::from_env().context("failed to resolve lilo home")?;
@@ -21,6 +64,14 @@ pub async fn run_from_env() -> Result<()> {
 }
 
 pub async fn run(paths: LiloPaths) -> Result<()> {
+    run_with_shutdown_observer(paths, ShutdownObserver::default()).await
+}
+
+#[doc(hidden)]
+pub async fn run_with_shutdown_observer(
+    paths: LiloPaths,
+    shutdown: ShutdownObserver,
+) -> Result<()> {
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
     let db = LiloDb::open(&paths).await?;
     let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
@@ -70,19 +121,25 @@ pub async fn run(paths: LiloPaths) -> Result<()> {
     }
 
     drop(listener);
+    shutdown.mark(ShutdownStage::ListenerClosed).await;
     connections.abort_all();
     while let Some(result) = connections.join_next().await {
         if let Err(error) = result {
             tracing::warn!(%error, "lilod connection task failed");
         }
     }
+    shutdown.mark(ShutdownStage::ConnectionsDrained).await;
     runtime
         .shutdown()
         .await
         .context("failed to shut down runtime service")?;
+    shutdown.mark(ShutdownStage::RuntimeShutdown).await;
     lilo_runtime_daemon::socket::remove_socket_file(&socket_path)?;
+    shutdown.mark(ShutdownStage::SocketRemoved).await;
     let _ = fs::remove_file(paths.pid_path());
+    shutdown.mark(ShutdownStage::BeforeDbClose).await;
     db.close().await;
+    shutdown.mark(ShutdownStage::DbClosed).await;
     Ok(())
 }
 
