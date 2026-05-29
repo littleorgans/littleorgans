@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use lilo_im_core::{Principal, peer_creds};
 use lilo_rm_core::{
-    CapturePayload, CursorExpiredPayload, DoctorPayload, EventsPayload, EventsRequest,
+    CapturePayload, CursorExpiredPayload, DoctorPayload, EventBatch, EventsPayload, EventsRequest,
     KillByPidPayload, KilledPayload, McpBridgePayload, NudgePayload, RuntimeResponse, RuntimeRpc,
     ShimLaunchPayload, SpawnedPayload, StatusPayload, ValidateTargetPayload, VersionPayload,
     WatchersPayload, clamped_event_wait_ms, read_json_line, write_json_line,
@@ -21,6 +21,7 @@ use crate::{
     identity::authorize_runtime_rpc,
     mcp_bridge,
     server::ServerState,
+    service::poll_events_batch,
     spawn_preflight,
 };
 
@@ -229,14 +230,23 @@ async fn handle_rpc_result(
 }
 
 async fn events_response(state: &ServerState, request: EventsRequest) -> Result<RuntimeResponse> {
-    match state.events(request).await {
-        Ok(batch) => Ok(RuntimeResponse::Events(EventsPayload {
-            events: batch.events,
-            cursor: batch.cursor,
-        })),
-        Err(expired) => Ok(RuntimeResponse::CursorExpired(CursorExpiredPayload {
-            oldest: expired.oldest,
-        })),
+    Ok(event_batch_response(
+        poll_events_batch(state, request).await,
+    ))
+}
+
+fn event_batch_response(batch: EventBatch) -> RuntimeResponse {
+    match batch {
+        EventBatch::Events { events, cursor } => {
+            RuntimeResponse::Events(EventsPayload { events, cursor })
+        }
+        EventBatch::CursorExpired { oldest } => {
+            RuntimeResponse::CursorExpired(CursorExpiredPayload { oldest })
+        }
+        _ => RuntimeResponse::error(
+            lilo_rm_core::ErrorCode::ProtocolMismatch,
+            "unsupported event batch variant",
+        ),
     }
 }
 

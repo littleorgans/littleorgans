@@ -7,7 +7,7 @@ use crate::server::{
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::Principal;
-use lilo_rm_core::{RuntimeEvent, RuntimeResponse, RuntimeRpc};
+use lilo_rm_core::{EventBatch, EventsRequest, RuntimeEvent, RuntimeResponse, RuntimeRpc};
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::JoinHandle;
 
@@ -78,6 +78,10 @@ impl RuntimeService {
         response
     }
 
+    pub async fn poll_events(&self, request: EventsRequest) -> EventBatch {
+        poll_events_batch(&self.state, request).await
+    }
+
     pub async fn append_event(&self, event: RuntimeEvent) -> Result<RuntimeEvent> {
         self.state.append_event(event).await
     }
@@ -106,6 +110,18 @@ impl RuntimeService {
     }
 }
 
+pub(crate) async fn poll_events_batch(state: &ServerState, request: EventsRequest) -> EventBatch {
+    match state.events(request).await {
+        Ok(batch) => EventBatch::Events {
+            events: batch.events,
+            cursor: batch.cursor,
+        },
+        Err(expired) => EventBatch::CursorExpired {
+            oldest: expired.oldest,
+        },
+    }
+}
+
 impl Drop for RuntimeService {
     fn drop(&mut self) {
         let _ = self.shutdown_tx.send(());
@@ -119,10 +135,14 @@ impl Drop for RuntimeService {
 mod tests {
     use super::{RuntimeService, RuntimeServiceContext};
     use crate::{DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig};
+    use chrono::Utc;
     use lilo_db::LiloDb;
+    use lilo_im_core::Principal;
     use lilo_paths::{LiloHome, LiloPaths};
+    use lilo_rm_core::{EventBatch, EventsRequest, RuntimeEvent, RuntimeResponse, RuntimeRpc};
     use lilo_runtime_store::StoreConfig;
     use std::time::Duration;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn build_preserves_daemon_config_for_later_composition() {
@@ -155,6 +175,44 @@ mod tests {
             .expect("shutdown returns before timeout")
             .expect("shutdown succeeds");
         service.shutdown().await.expect("second shutdown succeeds");
+        fixture.db.close().await;
+    }
+
+    #[tokio::test]
+    async fn poll_events_matches_wire_events_response() {
+        let fixture = ServiceFixture::new(ReconcileConfig::default()).await;
+        let service = RuntimeService::build(fixture.context())
+            .await
+            .expect("service builds");
+        let event = RuntimeEvent::Running {
+            session_id: Uuid::now_v7(),
+            runtime_pid: 4242,
+            start_time: Utc::now(),
+        };
+        service
+            .append_event(event.clone())
+            .await
+            .expect("event appended");
+
+        let request = EventsRequest::default();
+        let direct = service.poll_events(request).await;
+        let wire = service
+            .handle_rpc(
+                Principal::local(nix::unistd::getuid().as_raw()),
+                RuntimeRpc::Events { request },
+            )
+            .await;
+
+        match (direct, wire) {
+            (EventBatch::Events { events, cursor }, RuntimeResponse::Events(payload)) => {
+                assert_eq!(events, vec![event]);
+                assert_eq!(events, payload.events);
+                assert_eq!(cursor, payload.cursor);
+            }
+            other => panic!("expected matching event batches, got {other:?}"),
+        }
+
+        service.shutdown().await.expect("shutdown succeeds");
         fixture.db.close().await;
     }
 
