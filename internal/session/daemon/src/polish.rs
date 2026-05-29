@@ -3,7 +3,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use lilo_im_core::{Action, ResourceSpec};
-use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::RUNTIME_PROTOCOL_VERSION;
 use lilo_session_core::{
     DoctorFinding, DoctorRequest, DoctorResponse, LogsRequest, LogsResponse, RpcResponse,
@@ -125,32 +124,13 @@ impl DaemonState {
     }
 
     async fn runtime_doctor(&self) -> RuntimeDoctorReport {
-        let Some(socket_path) = &self.rtmd_socket_path else {
-            return RuntimeDoctorReport {
-                status: "not_configured".to_string(),
-                doctor: None,
-                socket_path: None,
-                code: None,
-                message: Some("rtmd socket path is not configured".to_string()),
-            };
-        };
-        let socket_path = socket_path.clone();
-        match RuntimeClient::new(socket_path.clone()).doctor().await {
-            Ok(payload) => {
-                let status = runtime_doctor_status(&payload.doctor);
-                RuntimeDoctorReport {
-                    status,
-                    doctor: Some(Box::new(payload.doctor)),
-                    socket_path: Some(socket_path.display().to_string()),
-                    code: None,
-                    message: None,
-                }
-            }
+        match self.runtime.doctor().await {
+            Ok(report) => report,
             Err(error) => RuntimeDoctorReport {
                 status: "error".to_string(),
                 doctor: None,
-                socket_path: Some(socket_path.display().to_string()),
-                code: Some(runtime_error_code(&error)),
+                socket_path: None,
+                code: None,
                 message: Some(error.to_string()),
             },
         }
@@ -205,16 +185,6 @@ fn lost_session_evidence(
         )
 }
 
-fn runtime_doctor_status(doctor: &lilo_rm_core::DoctorResponse) -> String {
-    if doctor.version.protocol_version != RUNTIME_PROTOCOL_VERSION
-        || !doctor.sqlite.pending_descriptions.is_empty()
-    {
-        "degraded".to_string()
-    } else {
-        "ok".to_string()
-    }
-}
-
 fn runtime_doctor_findings(report: &RuntimeDoctorReport) -> Vec<DoctorFinding> {
     match report.status.as_str() {
         "ok" | "not_configured" => Vec::new(),
@@ -246,8 +216,4 @@ fn runtime_doctor_message(report: &RuntimeDoctorReport) -> String {
         );
     }
     format!("runtime-matters doctor status {}", report.status)
-}
-
-fn runtime_error_code(error: &ClientError) -> String {
-    error.code().as_str().to_string()
 }

@@ -14,7 +14,7 @@ use lilo_session_core::{
 };
 use lilo_session_daemon::handler::{DaemonState, HandlerResult};
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
-use lilo_session_driver::{LaunchEnv, RtmdDriver};
+use lilo_session_driver::{InProcessRuntime, LaunchEnv, RtmdDriver, RuntimePort};
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
 use std::os::unix::fs::PermissionsExt;
@@ -36,6 +36,7 @@ pub struct TestDaemon {
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
     pub runtime: Arc<RuntimeService>,
+    pub local_uid: u32,
     runtime_socket_task: JoinHandle<()>,
 }
 
@@ -81,8 +82,30 @@ impl TestDaemon {
             audit_path,
             dir,
             runtime,
+            local_uid,
             runtime_socket_task,
         }
+    }
+
+    pub async fn state_with_runtime_port(&self, runtime_port: Arc<dyn RuntimePort>) -> DaemonState {
+        let db = LiloDb::open_path(self.audit_path.clone())
+            .await
+            .or_panic("store db reopens");
+        let identity = IdentityClient::new(
+            lilo_im_store::SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            self.local_uid,
+        );
+        DaemonState::new(
+            SqliteStore::open(&db),
+            runtime_port,
+            Arc::new(identity),
+            Arc::clone(&self.runtime),
+        )
+    }
+
+    pub async fn in_process_state_without_rtmd_socket_path(&self) -> DaemonState {
+        self.state_with_runtime_port(Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))))
+            .await
     }
 
     pub async fn audit_rows(&self) -> Vec<AuditRow> {

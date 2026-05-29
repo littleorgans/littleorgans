@@ -67,6 +67,7 @@ impl DaemonState {
         );
 
         self.begin_spawn_intent(context, &request, &intent).await?;
+        // TODO(WS4): move mutating spawn to RuntimePort with domain state-change audit.
         let payload = match self
             .runtime_service
             .handle_rpc(
@@ -160,6 +161,7 @@ impl DaemonState {
             .await
             .context("failed to revalidate namespace before session commit")?
         {
+            // TODO(WS4): move recovery kill to RuntimePort with domain state-change audit.
             let kill_response = self
                 .runtime_service
                 .handle_rpc(
@@ -267,6 +269,7 @@ impl DaemonState {
     }
 
     async fn reconcile_pending_spawn_intent(&self, intent: SessionSpawnIntent) -> Result<()> {
+        // TODO(WS4): move spawn-lifecycle status reconcile to RuntimePort with read audit de-dup.
         let response = self
             .runtime_service
             .handle_rpc(
