@@ -43,15 +43,28 @@ async fn launch_tmux_shim(
     env: &[LaunchEnv],
 ) -> Result<()> {
     let argv = shim_argv(config, request);
-    match lilo_runtime_platform::tmux::TmuxGateway::respawn_pane(&target.address, &argv, env).await
+    let tmux_server_label = config.tmux_server_label.as_deref();
+    match lilo_runtime_platform::tmux::TmuxGateway::respawn_pane(
+        tmux_server_label,
+        &target.address,
+        &argv,
+        env,
+    )
+    .await
     {
         Ok(()) => Ok(()),
-        Err(error) => Err(classify_tmux_respawn_error(&target.address, error).await),
+        Err(error) => {
+            Err(classify_tmux_respawn_error(tmux_server_label, &target.address, error).await)
+        }
     }
 }
 
-async fn classify_tmux_respawn_error(address: &TmuxAddress, error: anyhow::Error) -> anyhow::Error {
-    match lilo_runtime_platform::tmux::TmuxGateway::is_alive(address).await {
+async fn classify_tmux_respawn_error(
+    server_label: Option<&str>,
+    address: &TmuxAddress,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    match lilo_runtime_platform::tmux::TmuxGateway::is_alive(server_label, address).await {
         Ok(false) => RuntimeFailure::tmux_pane_dead(address.clone()),
         Ok(true) | Err(_) => error.context(format!("failed to respawn tmux pane {address}")),
     }
@@ -286,9 +299,11 @@ mod tests {
         };
         let address = tmux_session.pane();
         tmux_session.kill();
+        let mut config = test_config();
+        config.tmux_server_label = Some(tmux_session.server_label().to_owned());
 
         let Err(error) = launch_shim(
-            &test_config(),
+            &config,
             &SpawnRequest {
                 session_id: uuid::Uuid::now_v7(),
                 runtime: RuntimeKind::Claude,

@@ -47,7 +47,7 @@ impl SpawnCoordinator {
             Some(_) => return Err(RuntimeFailure::session_already_exists(request.session_id)),
             None => false,
         };
-        self.validate_spawn_target(request).await?;
+        self.validate_spawn_target(state, request).await?;
 
         if !session_backed {
             let mut lifecycle = Lifecycle::forking(request.session_id, request.runtime.clone());
@@ -70,8 +70,12 @@ impl SpawnCoordinator {
         }
     }
 
-    async fn validate_spawn_target(&self, request: &SpawnRequest) -> Result<()> {
-        match self.validate_target(&request.target).await?.outcome {
+    async fn validate_spawn_target(
+        &self,
+        state: &ServerState,
+        request: &SpawnRequest,
+    ) -> Result<()> {
+        match self.validate_target(state, &request.target).await?.outcome {
             ValidateTargetOutcome::Valid => Ok(()),
             ValidateTargetOutcome::TmuxPaneDead { address } => {
                 Err(RuntimeFailure::tmux_pane_dead(address))
@@ -87,21 +91,27 @@ impl SpawnCoordinator {
 
     pub(super) async fn validate_target_request(
         &self,
+        state: &ServerState,
         request: ValidateTargetRequest,
     ) -> Result<ValidateTargetResponse> {
         let target = match request.target.parse() {
             Ok(target) => target,
             Err(error) => return Ok(ValidateTargetResponse::from_target_parse_error(error)),
         };
-        self.validate_target(&target).await
+        self.validate_target(state, &target).await
     }
 
     async fn validate_target(
         &self,
+        state: &ServerState,
         target: &lilo_rm_core::SpawnTarget,
     ) -> Result<ValidateTargetResponse> {
         if let Some(address) = target.tmux_address()
-            && !lilo_runtime_platform::tmux::TmuxGateway::is_alive(address).await?
+            && !lilo_runtime_platform::tmux::TmuxGateway::is_alive(
+                state.config().tmux_server_label.as_deref(),
+                address,
+            )
+            .await?
         {
             return Ok(ValidateTargetResponse::tmux_pane_dead(address.clone()));
         }

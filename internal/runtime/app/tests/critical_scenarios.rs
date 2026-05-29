@@ -95,7 +95,7 @@ fn tmux_pane_closed_while_session_alive_rejects_nudge() {
         eprintln!("skipping tmux critical scenario because tmux is unavailable");
         return;
     };
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let expected_pane = tmux_session.pane();
 
@@ -131,7 +131,7 @@ fn dead_tmux_address_rejects_spawn_without_lifecycle_row() {
     let address = tmux_session.pane();
     tmux_session.kill();
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let spawn = harness.spawn_runtime_in_tmux(&session_id, "claude", &address);
     assert!(
