@@ -295,7 +295,6 @@ fn response_name(response: &RuntimeResponse) -> &'static str {
         RuntimeResponse::Ack => "Ack",
         RuntimeResponse::Stopping => "Stopping",
         RuntimeResponse::Error(_) => "Error",
-        _ => "Unknown",
     }
 }
 

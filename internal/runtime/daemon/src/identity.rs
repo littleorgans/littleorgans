@@ -97,9 +97,6 @@ fn runtime_authorization(rpc: &RuntimeRpc) -> (Action, ResourceSpec) {
         | RuntimeRpc::ShimExit { .. } => {
             unreachable!("delegated upstream by authorize_runtime_rpc")
         }
-        _ => {
-            unreachable!("unhandled RuntimeRpc variant: add explicit runtime_authorization mapping")
-        }
     }
 }
 

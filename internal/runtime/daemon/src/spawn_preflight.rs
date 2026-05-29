@@ -7,8 +7,8 @@ use std::{
 use anyhow::Result;
 use lilo_rm_core::{
     IsolationPolicy, IsolationProfile, KillRequest, LaunchEnv, Lifecycle, LifecycleState,
-    MountSpec, RuntimeResponse, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload,
-    SpawnRequest, claude_path_shaped_env,
+    MountSpec, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload, SpawnRequest,
+    claude_path_shaped_env,
 };
 
 use crate::server::ServerState;
@@ -21,7 +21,7 @@ use crate::{
 pub(crate) async fn check(
     state: &Arc<ServerState>,
     request: &mut SpawnRequest,
-) -> Result<Option<RuntimeResponse>> {
+) -> Result<Option<SpawnConflictPayload>> {
     check_with_docker_inspector(state, request, &DockerCliInspector).await
 }
 
@@ -29,7 +29,7 @@ async fn check_with_docker_inspector(
     state: &Arc<ServerState>,
     request: &mut SpawnRequest,
     docker: &impl DockerImageInspector,
-) -> Result<Option<RuntimeResponse>> {
+) -> Result<Option<SpawnConflictPayload>> {
     check_isolation_policy(state, request, docker).await?;
 
     if let Some(lifecycle) = state.store().get(request.session_id).await?
@@ -297,8 +297,8 @@ fn unsupported_docker_behavior(reason: &str) -> anyhow::Error {
     RuntimeFailure::unsupported_isolation_policy(format!("docker profile that {reason}"))
 }
 
-fn conflict(kind: SpawnConflictKind, lifecycle: lilo_rm_core::Lifecycle) -> RuntimeResponse {
-    RuntimeResponse::SpawnConflict(SpawnConflictPayload { kind, lifecycle })
+fn conflict(kind: SpawnConflictKind, lifecycle: lilo_rm_core::Lifecycle) -> SpawnConflictPayload {
+    SpawnConflictPayload { kind, lifecycle }
 }
 
 fn is_session_backed_forking(lifecycle: &Lifecycle, request: &SpawnRequest) -> bool {

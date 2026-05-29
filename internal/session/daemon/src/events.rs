@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use lilo_rm_client::{EventWatcher, RuntimeClient};
 use lilo_rm_core::{EventBatch, EventCursor, StatusFilter};
 use tokio::task::JoinHandle;
@@ -124,7 +124,6 @@ pub(crate) async fn handle_batch(
             *cursor = Some(oldest);
             Ok(BatchOutcome::Reconciled)
         }
-        batch => bail!("unsupported runtime event batch: {batch:?}"),
     }
 }
 
