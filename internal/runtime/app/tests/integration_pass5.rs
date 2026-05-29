@@ -17,7 +17,7 @@ fn pass5_spawn_inside_tmux_captures_pane_and_nudges_it() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let expected_pane = tmux_session.pane();
 
@@ -50,7 +50,7 @@ fn nudge_rejects_terminal_tmux_session() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let expected_pane = tmux_session.pane();
 
@@ -86,7 +86,7 @@ fn tmux_spawn_cwd_flag_overrides_caller_cwd() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let caller_cwd = harness.rtm_home();
     std::fs::create_dir_all(caller_cwd).expect("caller cwd");
@@ -115,7 +115,7 @@ fn capture_tmux_pane_returns_snapshot_json() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let expected_pane = tmux_session.pane();
     spawn_output_ok(
@@ -180,7 +180,7 @@ fn capture_dead_tmux_pane_returns_pane_unavailable() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7();
     let expected_pane = tmux_session.pane();
     spawn_output_ok(
@@ -209,7 +209,7 @@ fn docker_tmux_pattern_a_container_survives_pane_close() {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7();
     let expected_pane = tmux_session.pane();
     let spawn = harness
@@ -264,7 +264,7 @@ fn ctrl_c_interrupts_runtime_without_losing_tmux_pane(runtime: &str) {
         return;
     };
 
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let session_id = Uuid::now_v7().to_string();
     let expected_pane = tmux_session.pane();
     let spawn = harness

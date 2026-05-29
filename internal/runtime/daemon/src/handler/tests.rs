@@ -167,6 +167,7 @@ fn config(paths: &LiloPaths, temp: &Path) -> DaemonConfig {
         },
         reconcile: ReconcileConfig::default(),
         docker_preflight: DockerPreflightConfig::default(),
+        tmux_server_label: None,
     }
 }
 

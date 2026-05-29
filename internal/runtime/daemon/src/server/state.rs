@@ -105,7 +105,7 @@ impl ServerState {
         &self,
         request: ValidateTargetRequest,
     ) -> Result<ValidateTargetResponse> {
-        self.spawn.validate_target_request(request).await
+        self.spawn.validate_target_request(self, request).await
     }
 
     pub(crate) async fn cancel_spawn(&self, session_id: Uuid) {
@@ -164,7 +164,13 @@ impl ServerState {
             });
         }
 
-        if !lilo_runtime_platform::tmux::TmuxGateway::nudge(tmux_pane, &request.content).await? {
+        if !lilo_runtime_platform::tmux::TmuxGateway::nudge(
+            self.config.tmux_server_label.as_deref(),
+            tmux_pane,
+            &request.content,
+        )
+        .await?
+        {
             return Ok(NudgeResponse {
                 delivered: false,
                 outcome: NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead),
@@ -184,12 +190,15 @@ impl ServerState {
         let Some(tmux_pane) = lifecycle.tmux_pane.as_ref() else {
             return Ok(CaptureResponse::Failed(CaptureError::NotATmuxTarget));
         };
-        if !lilo_runtime_platform::tmux::TmuxGateway::is_alive(tmux_pane).await? {
+        let tmux_server_label = self.config.tmux_server_label.as_deref();
+        if !lilo_runtime_platform::tmux::TmuxGateway::is_alive(tmux_server_label, tmux_pane).await?
+        {
             return Ok(CaptureResponse::Failed(CaptureError::PaneUnavailable));
         }
         let scrollback_lines = request.scrollback_lines.unwrap_or(1000);
         Ok(
             match lilo_runtime_platform::tmux::TmuxGateway::capture_pane(
+                tmux_server_label,
                 tmux_pane,
                 scrollback_lines,
             )

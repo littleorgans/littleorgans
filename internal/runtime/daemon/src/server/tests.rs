@@ -173,6 +173,7 @@ impl TestState {
                 store: store_config,
                 reconcile: reconcile::ReconcileConfig::default(),
                 docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
+                tmux_server_label: None,
             },
             store,
         )

@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use crate::{docker_preflight::DockerPreflightConfig, reconcile};
 
+const LILO_TMUX_SERVER_LABEL: &str = "LILO_TMUX_SERVER_LABEL";
+
 #[derive(Clone, Debug)]
 pub struct DaemonConfig {
     pub endpoint: RuntimeEndpoint,
@@ -15,6 +17,7 @@ pub struct DaemonConfig {
     pub store: StoreConfig,
     pub reconcile: reconcile::ReconcileConfig,
     pub docker_preflight: DockerPreflightConfig,
+    pub tmux_server_label: Option<String>,
 }
 
 impl DaemonConfig {
@@ -34,6 +37,7 @@ impl DaemonConfig {
             },
             reconcile: reconcile::ReconcileConfig::from_env()?,
             docker_preflight: DockerPreflightConfig::from_env(),
+            tmux_server_label: tmux_server_label_from_env(),
         })
     }
 
@@ -55,6 +59,7 @@ impl DaemonConfig {
             },
             reconcile: reconcile::ReconcileConfig::default(),
             docker_preflight,
+            tmux_server_label: None,
         }
     }
 
@@ -81,4 +86,10 @@ impl DaemonConfig {
             .parent()
             .map_or_else(|| self.log_root.clone(), PathBuf::from)
     }
+}
+
+fn tmux_server_label_from_env() -> Option<String> {
+    std::env::var(LILO_TMUX_SERVER_LABEL)
+        .ok()
+        .filter(|value| !value.is_empty())
 }
