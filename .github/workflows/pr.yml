@@ -11,6 +11,12 @@ permissions:
   contents: read
   pull-requests: read
 
+# Cancel a superseded run when the same PR or branch gets a new push,
+# so updating a PR branch never leaves two gates running at once.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   guard:
     name: Decide whether to run
