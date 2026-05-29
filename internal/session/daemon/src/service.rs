@@ -68,7 +68,7 @@ impl SessionService {
                 .with_rtmd_socket_path(paths.socket_path()),
         );
         let lifecycle = LifecycleTask::spawn(Arc::clone(&state));
-        let events = RuntimeEventTask::spawn(Arc::clone(&state), paths.socket_path());
+        let events = RuntimeEventTask::spawn(Arc::clone(&state));
         Ok(Self {
             paths,
             state,

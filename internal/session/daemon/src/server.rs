@@ -54,7 +54,7 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
         .await
         .context("failed to reconcile sessions on startup")?;
     let lifecycle = LifecycleTask::spawn(Arc::clone(&state));
-    let events = crate::events::RuntimeEventTask::spawn(Arc::clone(&state), socket_path);
+    let events = crate::events::RuntimeEventTask::spawn(Arc::clone(&state));
 
     let result = serve(listener, &state).await;
     drop(events);

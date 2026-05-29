@@ -11,15 +11,12 @@ pub struct ReconcileFinding {
 }
 
 pub async fn reconcile_once(state: &DaemonState) -> Result<Vec<ReconcileFinding>> {
-    let socket_path = state
-        .rtmd_socket_path
-        .as_ref()
-        .context("rtmd socket path is not configured")?;
-    let payload = lilo_rm_client::RuntimeClient::new(socket_path.clone())
+    let lifecycles = state
+        .runtime
         .status(StatusFilter::empty())
         .await
-        .context("failed to load rtmd lifecycle status")?;
-    reconcile_lifecycles(state, &payload.lifecycles).await
+        .context("failed to load runtime lifecycle status")?;
+    reconcile_lifecycles(state, &lifecycles).await
 }
 
 pub async fn reconcile_lifecycles(

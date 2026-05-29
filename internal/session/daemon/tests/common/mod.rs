@@ -285,7 +285,6 @@ pub fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> (PathBuf, JoinH
     let listener = UnixListener::bind(&socket_path).or_panic("rtmd test socket binds");
     let server = tokio::spawn(async move {
         let _tempdir = tempdir;
-        respond_to_rtmd_status(&listener).await;
         let mut rpc = read_rtmd_rpc(&listener).await;
         assert_eq!(rpc.0, RuntimeRpc::Doctor);
         write_json_line(
@@ -296,21 +295,6 @@ pub fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> (PathBuf, JoinH
         .or_panic("write rtmd doctor response");
     });
     (socket_path, server)
-}
-
-async fn respond_to_rtmd_status(listener: &UnixListener) {
-    let mut rpc = read_rtmd_rpc(listener).await;
-    let RuntimeRpc::Status { .. } = rpc.0 else {
-        panic!("expected status rpc before doctor");
-    };
-    write_json_line(
-        &mut rpc.1,
-        &RuntimeResponse::Status(lilo_rm_core::StatusPayload {
-            lifecycles: Vec::new(),
-        }),
-    )
-    .await
-    .or_panic("write rtmd status response");
 }
 
 async fn read_rtmd_rpc(listener: &UnixListener) -> (RuntimeRpc, tokio::net::unix::OwnedWriteHalf) {

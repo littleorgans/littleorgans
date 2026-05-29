@@ -19,7 +19,7 @@ impl LifecycleTask {
         let handle = tokio::spawn(async move {
             loop {
                 if let Err(error) = refresh_exits(&state).await {
-                    eprintln!("failed to refresh session lifecycle: {error:#}");
+                    tracing::warn!(error = ?error, "failed to refresh session lifecycle");
                 }
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
