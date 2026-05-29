@@ -1,0 +1,122 @@
+[surface]
+binary = "lilo"
+display_name = "littleorgans"
+about = "Local-first Little Organs control plane"
+
+[[groups]]
+id = "session"
+heading = "Session commands"
+
+[[groups]]
+id = "operator"
+heading = "Substrate operator commands"
+
+[[groups]]
+id = "diagnostics"
+heading = "Diagnostics"
+
+[[groups]]
+id = "daemon"
+heading = "Daemon lifecycle"
+
+[[commands]]
+name = "run"
+const_name = "RUN"
+group = "session"
+about = "Run an agent session"
+
+[[commands]]
+name = "create"
+const_name = "CREATE"
+group = "session"
+about = "Create a session, label, or other resource"
+
+[[commands]]
+name = "get"
+const_name = "GET"
+group = "session"
+about = "Show sessions and other resources"
+
+[[commands]]
+name = "delete"
+const_name = "DELETE"
+group = "session"
+about = "Delete sessions and other resources"
+
+[[commands]]
+name = "label"
+const_name = "LABEL"
+group = "session"
+about = "Update labels on a resource"
+
+[[commands]]
+name = "mail"
+const_name = "MAIL"
+group = "session"
+about = "Send mail to an agent"
+
+[[commands]]
+name = "nudge"
+const_name = "NUDGE"
+group = "session"
+about = "Nudge an agent"
+
+[[commands]]
+name = "capture"
+const_name = "CAPTURE"
+group = "session"
+about = "Capture session output"
+
+[[commands]]
+name = "logs"
+const_name = "LOGS"
+group = "session"
+about = "Tail session logs"
+
+[[commands]]
+name = "wait"
+const_name = "WAIT"
+group = "session"
+about = "Wait for a session condition"
+
+[[commands]]
+name = "mcp"
+const_name = "MCP"
+group = "session"
+about = "Run lilo as an MCP server"
+
+[[commands]]
+name = "runtime"
+const_name = "RUNTIME"
+group = "operator"
+about = "Raw runtime operator namespace. runtime spawn never creates session records."
+
+[[commands]]
+name = "session"
+const_name = "SESSION"
+group = "operator"
+about = "Session substrate operator namespace"
+
+[[commands]]
+name = "identity"
+const_name = "IDENTITY"
+group = "operator"
+about = "Identity substrate operator namespace"
+
+[[commands]]
+name = "doctor"
+const_name = "DOCTOR"
+group = "diagnostics"
+about = "Inspect local lilo health"
+
+[[commands]]
+name = "daemon"
+const_name = "DAEMON"
+group = "daemon"
+about = "Manage the local lilo daemon process"
+
+[[commands]]
+name = "__shim"
+const_name = "RUNTIME_SHIM"
+about = "Run the hidden runtime shim"
+hidden = true

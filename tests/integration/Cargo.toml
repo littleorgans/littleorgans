@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
+assert_cmd.workspace = true
 chrono.workspace = true
 lilo-db.workspace = true
 lilo-paths.workspace = true
@@ -17,6 +18,7 @@ lilo-session-core.workspace = true
 lilo-session-daemon.workspace = true
 lilo-session-store.workspace = true
 lilo-wire.workspace = true
+serde_json.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
 tokio.workspace = true

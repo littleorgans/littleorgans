@@ -1,5 +1,7 @@
 pub mod daemon;
 pub mod doctor;
+pub mod generated_help;
+pub mod generated_schema;
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -7,40 +9,10 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
+use lilo_runtime_app::cli as runtime_cli;
+use lilo_session_app::cli::{self as session_cli, cli_def as session_cli_def};
 
 use self::{daemon::DaemonCli, doctor::DoctorCommand};
-
-const HELP_TEMPLATE: &str = "\
-{about-with-newline}
-{usage-heading} {usage}
-
-Session commands:
-  run         Run an agent session
-  create      Create a session, label, or other resource
-  get         Show sessions and other resources
-  delete      Delete sessions and other resources
-  label       Update labels on a resource
-  mail        Send mail to an agent
-  nudge       Nudge an agent
-  capture     Capture session output
-  logs        Tail session logs
-  wait        Wait for a session condition
-  mcp         Run lilo as an MCP server
-
-Substrate operator commands:
-  runtime     Raw runtime operator namespace (diagnostic; never creates sessions)
-  session     Session substrate operator namespace
-  identity    Identity substrate operator namespace
-
-Diagnostics:
-  doctor      Inspect local lilo health
-
-Daemon lifecycle:
-  daemon      Manage the local lilo daemon process
-
-Options:
-{options}{after-help}
-";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -50,7 +22,7 @@ Options:
     about = "Local-first Little Organs control plane",
     arg_required_else_help = true,
     disable_help_subcommand = true,
-    help_template = HELP_TEMPLATE
+    help_template = generated_help::ROOT_HELP_TEMPLATE
 )]
 pub struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
@@ -70,14 +42,37 @@ impl Cli {
 
     pub async fn run(self) -> Result<(), Diagnostic> {
         match self.command {
+            Command::Run(args) => run_session(session_cli_def::Command::Run(args)).await,
+            Command::Create(args) => run_session(session_cli_def::Command::Create(args)).await,
+            Command::Get(args) => run_session(session_cli_def::Command::Get(args)).await,
+            Command::Delete(args) => run_session(session_cli_def::Command::Delete(args)).await,
+            Command::Label(args) => run_session(session_cli_def::Command::Label(args)).await,
+            Command::Mail(args) => run_session(session_cli_def::Command::Mail(args)).await,
+            Command::Nudge(args) => run_session(session_cli_def::Command::Nudge(args)).await,
+            Command::Capture(args) => run_session(session_cli_def::Command::Capture(args)).await,
+            Command::Logs(args) => run_session(session_cli_def::Command::Logs(args)).await,
+            Command::Wait(args) => run_session(session_cli_def::Command::Wait(args)).await,
+            Command::Mcp(args) => run_session(session_cli_def::Command::Mcp(args)).await,
+            Command::Runtime(args) => runtime_cli::run_operator(args)
+                .await
+                .map_err(Diagnostic::from),
+            Command::Session(args) => session_cli::run_operator(args)
+                .await
+                .map_err(Diagnostic::from),
             Command::Doctor(command) => command.run(self.output).await,
             Command::Daemon(command) => command.run(self.output).await,
             Command::RuntimeShim(args) => lilo_runtime_app::cli::shim::run(args)
                 .await
                 .map_err(Diagnostic::from),
-            command => Err(command.not_implemented()),
+            Command::Identity(_) => Err(Diagnostic::domain("identity is not yet implemented")),
         }
     }
+}
+
+async fn run_session(command: session_cli_def::Command) -> Result<(), Diagnostic> {
+    session_cli::dispatch(command)
+        .await
+        .map_err(Diagnostic::from)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -116,68 +111,56 @@ macro_rules! define_commands {
                 $variant($payload),
             )+
         }
-
-        impl Command {
-            fn not_implemented(&self) -> Diagnostic {
-                Diagnostic::domain(format!("{} is not yet implemented", self.name()))
-            }
-
-            fn name(&self) -> &'static str {
-                match self {
-                    $(Self::$variant(_) => $name,)+
-                }
-            }
-        }
     };
 }
 
 define_commands!(
-    #[command(next_help_heading = "Session commands", about = "Run an agent session")]
-    Run(PlaceholderArgs) => "run",
+    #[command(next_help_heading = "Session commands", about = generated_help::RUN_ABOUT)]
+    Run(session_cli_def::RunArgs) => "run",
     #[command(
         next_help_heading = "Session commands",
-        about = "Create a session, label, or other resource"
+        about = generated_help::CREATE_ABOUT
     )]
-    Create(PlaceholderArgs) => "create",
-    #[command(next_help_heading = "Session commands", about = "Show sessions and other resources")]
-    Get(PlaceholderArgs) => "get",
+    Create(session_cli_def::CreateArgs) => "create",
+    #[command(next_help_heading = "Session commands", about = generated_help::GET_ABOUT)]
+    Get(session_cli_def::GetArgs) => "get",
     #[command(
         next_help_heading = "Session commands",
-        about = "Delete sessions and other resources"
+        about = generated_help::DELETE_ABOUT
     )]
-    Delete(PlaceholderArgs) => "delete",
-    #[command(next_help_heading = "Session commands", about = "Update labels on a resource")]
-    Label(PlaceholderArgs) => "label",
-    #[command(next_help_heading = "Session commands", about = "Send mail to an agent")]
-    Mail(PlaceholderArgs) => "mail",
-    #[command(next_help_heading = "Session commands", about = "Nudge an agent")]
-    Nudge(PlaceholderArgs) => "nudge",
-    #[command(next_help_heading = "Session commands", about = "Capture session output")]
-    Capture(PlaceholderArgs) => "capture",
-    #[command(next_help_heading = "Session commands", about = "Tail session logs")]
-    Logs(PlaceholderArgs) => "logs",
-    #[command(next_help_heading = "Session commands", about = "Wait for a session condition")]
-    Wait(PlaceholderArgs) => "wait",
-    #[command(next_help_heading = "Session commands", about = "Run lilo as an MCP server")]
-    Mcp(PlaceholderArgs) => "mcp",
+    Delete(session_cli_def::DeleteArgs) => "delete",
+    #[command(next_help_heading = "Session commands", about = generated_help::LABEL_ABOUT)]
+    Label(session_cli_def::LabelArgs) => "label",
+    #[command(next_help_heading = "Session commands", about = generated_help::MAIL_ABOUT)]
+    Mail(session_cli_def::MailArgs) => "mail",
+    #[command(next_help_heading = "Session commands", about = generated_help::NUDGE_ABOUT)]
+    Nudge(session_cli_def::NudgeArgs) => "nudge",
+    #[command(next_help_heading = "Session commands", about = generated_help::CAPTURE_ABOUT)]
+    Capture(session_cli_def::CaptureArgs) => "capture",
+    #[command(next_help_heading = "Session commands", about = generated_help::LOGS_ABOUT)]
+    Logs(session_cli_def::LogsArgs) => "logs",
+    #[command(next_help_heading = "Session commands", about = generated_help::WAIT_ABOUT)]
+    Wait(session_cli_def::WaitArgs) => "wait",
+    #[command(next_help_heading = "Session commands", about = generated_help::MCP_ABOUT)]
+    Mcp(session_cli_def::McpArgs) => "mcp",
     #[command(
         next_help_heading = "Substrate operator commands",
-        about = "Raw runtime operator namespace. runtime spawn never creates session records."
+        about = generated_help::RUNTIME_ABOUT
     )]
-    Runtime(PlaceholderArgs) => "runtime",
+    Runtime(runtime_cli::OperatorArgs) => "runtime",
     #[command(
         next_help_heading = "Substrate operator commands",
-        about = "Session substrate operator namespace"
+        about = generated_help::SESSION_ABOUT
     )]
-    Session(PlaceholderArgs) => "session",
+    Session(session_cli::OperatorArgs) => "session",
     #[command(
         next_help_heading = "Substrate operator commands",
-        about = "Identity substrate operator namespace"
+        about = generated_help::IDENTITY_ABOUT
     )]
     Identity(PlaceholderArgs) => "identity",
-    #[command(next_help_heading = "Diagnostics", about = "Inspect local lilo health")]
+    #[command(next_help_heading = "Diagnostics", about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
-    #[command(next_help_heading = "Daemon lifecycle", about = "Manage the local lilo daemon process")]
+    #[command(next_help_heading = "Daemon lifecycle", about = generated_help::DAEMON_ABOUT)]
     Daemon(DaemonCli) => "daemon",
     #[command(hide = true)]
     RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
@@ -236,12 +219,20 @@ mod tests {
 
     #[tokio::test]
     async fn placeholder_commands_accept_future_arguments() {
-        let cli = Cli::try_parse_from(["lilo", "runtime", "spawn", "--raw"])
-            .expect("parse future runtime args");
+        let cli = Cli::try_parse_from(["lilo", "identity", "whoami"])
+            .expect("parse future identity args");
 
-        let error = cli.run().await.expect_err("runtime is not implemented");
+        let error = cli.run().await.expect_err("identity is not implemented");
 
         assert_eq!(error.exit_code, lilo_common::exit_codes::DOMAIN);
-        assert!(error.message.contains("runtime is not yet implemented"));
+        assert!(error.message.contains("identity is not yet implemented"));
+    }
+
+    #[test]
+    fn generated_schema_json_is_valid() {
+        serde_json::from_str::<serde_json::Value>(generated_schema::CLI_SURFACE_JSON)
+            .expect("CLI surface JSON is valid");
+        serde_json::from_str::<serde_json::Value>(generated_schema::MCP_SCHEMA_JSON)
+            .expect("MCP schema JSON is valid");
     }
 }
