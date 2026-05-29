@@ -179,6 +179,9 @@ mod tests {
     use std::path::Path;
     use std::process::Command;
     use std::sync::Arc;
+
+    // Outside pid_t range, so shutdown drain cannot signal an unrelated CI process.
+    const TEST_SHIM_PID: u32 = u32::MAX;
     use std::time::Duration;
     use uuid::Uuid;
 
@@ -371,6 +374,7 @@ mod tests {
             &expect_spawned(direct),
             &expect_wire_spawned(wire),
             runtime_pid,
+            TEST_SHIM_PID,
         );
         service.shutdown().await.expect("shutdown succeeds");
         fixture.db.close().await;
@@ -484,7 +488,7 @@ mod tests {
         state
             .complete_shim_ready(ShimReady {
                 session_id,
-                shim_pid: runtime_pid.saturating_add(1),
+                shim_pid: TEST_SHIM_PID,
                 runtime_pid,
                 start_time: Utc::now(),
                 tmux_pane: None,
@@ -502,7 +506,7 @@ mod tests {
             .expect("insert forking lifecycle");
         lifecycle.mark_running(ShimReady {
             session_id,
-            shim_pid: runtime_pid.saturating_add(1),
+            shim_pid: TEST_SHIM_PID,
             runtime_pid,
             start_time: Utc::now(),
             tmux_pane: None,
@@ -530,14 +534,12 @@ mod tests {
         direct: &SpawnedPayload,
         wire: &SpawnedPayload,
         runtime_pid: u32,
+        shim_pid: u32,
     ) {
         for payload in [direct, wire] {
             assert_eq!(payload.lifecycle.state, LifecycleState::Running);
             assert_eq!(payload.lifecycle.runtime_pid, Some(runtime_pid));
-            assert_eq!(
-                payload.lifecycle.shim_pid,
-                Some(runtime_pid.saturating_add(1))
-            );
+            assert_eq!(payload.lifecycle.shim_pid, Some(shim_pid));
             assert_running_event(&payload.event, payload.lifecycle.session_id, runtime_pid);
         }
         assert_eq!(direct.log_dir.is_some(), wire.log_dir.is_some());
