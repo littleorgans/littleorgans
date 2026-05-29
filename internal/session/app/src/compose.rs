@@ -21,6 +21,7 @@ use tokio_util::sync::CancellationToken;
 pub enum ShutdownStage {
     ListenerClosed,
     ConnectionsDrained,
+    SessionTasksStopped,
     RuntimeShutdown,
     SocketRemoved,
     BeforeDbClose,
@@ -129,6 +130,8 @@ pub async fn run_with_shutdown_observer(
         }
     }
     shutdown.mark(ShutdownStage::ConnectionsDrained).await;
+    session.shutdown().await;
+    shutdown.mark(ShutdownStage::SessionTasksStopped).await;
     runtime
         .shutdown()
         .await

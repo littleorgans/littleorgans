@@ -99,6 +99,10 @@ impl SessionService {
             shutdown: false,
         }
     }
+
+    pub async fn shutdown(&self) {
+        let ((), ()) = tokio::join!(self.lifecycle.shutdown(), self.events.shutdown());
+    }
 }
 
 impl Drop for SessionService {

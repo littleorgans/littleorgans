@@ -3,32 +3,30 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use lilo_rm_core::{EventBatch, EventCursor, EventsRequest, StatusFilter};
-use tokio::task::JoinHandle;
 
+use crate::background_task::BackgroundTask;
 use crate::handler::DaemonState;
 
 const EVENT_WAIT_MS: u32 = 30_000;
 const EVENT_ERROR_RETRY: Duration = Duration::from_millis(500);
 
 pub struct RuntimeEventTask {
-    handle: JoinHandle<()>,
+    task: BackgroundTask,
 }
 
 impl RuntimeEventTask {
     pub fn spawn(state: Arc<DaemonState>) -> Self {
-        let handle = tokio::spawn(async move {
+        let task = BackgroundTask::spawn(async move {
             if let Err(error) = run_event_loop(state).await {
                 tracing::warn!(error = ?error, "runtime event loop stopped");
             }
         });
 
-        Self { handle }
+        Self { task }
     }
-}
 
-impl Drop for RuntimeEventTask {
-    fn drop(&mut self) {
-        self.handle.abort();
+    pub async fn shutdown(&self) {
+        self.task.shutdown().await;
     }
 }
 

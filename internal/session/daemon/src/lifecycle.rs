@@ -5,18 +5,18 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_session_core::Session;
 use lilo_session_driver::ChildExit;
-use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+use crate::background_task::BackgroundTask;
 use crate::handler::DaemonState;
 
 pub struct LifecycleTask {
-    handle: JoinHandle<()>,
+    task: BackgroundTask,
 }
 
 impl LifecycleTask {
     pub fn spawn(state: Arc<DaemonState>) -> Self {
-        let handle = tokio::spawn(async move {
+        let task = BackgroundTask::spawn(async move {
             loop {
                 if let Err(error) = refresh_exits(&state).await {
                     tracing::warn!(error = ?error, "failed to refresh session lifecycle");
@@ -25,13 +25,11 @@ impl LifecycleTask {
             }
         });
 
-        Self { handle }
+        Self { task }
     }
-}
 
-impl Drop for LifecycleTask {
-    fn drop(&mut self) {
-        self.handle.abort();
+    pub async fn shutdown(&self) {
+        self.task.shutdown().await;
     }
 }
 
