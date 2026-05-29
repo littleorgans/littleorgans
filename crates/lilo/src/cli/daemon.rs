@@ -28,7 +28,7 @@ enum DaemonAction {
 impl DaemonCli {
     pub async fn run(&self, output: Output) -> Result<(), Diagnostic> {
         match self.action {
-            DaemonAction::Start => lilo_session_app::compose::run_from_env()
+            DaemonAction::Start => lilo_session_app::compose::run_from_env(crate::VERSION)
                 .await
                 .map_err(Diagnostic::from),
             DaemonAction::Stop => stop(&paths()?, output).await.map_err(Diagnostic::from),

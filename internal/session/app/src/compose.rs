@@ -59,20 +59,24 @@ impl ShutdownObserver {
     }
 }
 
-pub async fn run_from_env() -> Result<()> {
+pub async fn run_from_env(daemon_version: impl Into<String>) -> Result<()> {
+    let daemon_version = daemon_version.into();
     let home = LiloHome::from_env().context("failed to resolve lilo home")?;
-    run(LiloPaths::new(home)).await
+    run(LiloPaths::new(home), daemon_version).await
 }
 
-pub async fn run(paths: LiloPaths) -> Result<()> {
-    run_with_shutdown_observer(paths, ShutdownObserver::default()).await
+pub async fn run(paths: LiloPaths, daemon_version: impl Into<String>) -> Result<()> {
+    let daemon_version = daemon_version.into();
+    run_with_shutdown_observer(paths, ShutdownObserver::default(), daemon_version).await
 }
 
 #[doc(hidden)]
 pub async fn run_with_shutdown_observer(
     paths: LiloPaths,
     shutdown: ShutdownObserver,
+    daemon_version: impl Into<String>,
 ) -> Result<()> {
+    let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
     let db = LiloDb::open(&paths).await?;
     let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
@@ -81,6 +85,7 @@ pub async fn run_with_shutdown_observer(
     );
     let session = Arc::new(SessionService::build(SessionServiceContext::new(
         paths.clone(),
+        daemon_version,
         db.clone(),
         Arc::clone(&runtime),
     ))?);

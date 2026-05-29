@@ -92,6 +92,10 @@ async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()>
         doctor_stdout.contains("daemon: reachable"),
         "doctor must keep daemon reachability output\nstdout:\n{doctor_stdout}"
     );
+    assert!(
+        doctor_stdout.contains("warnings: none"),
+        "matching daemon and client builds must not warn\nstdout:\n{doctor_stdout}"
+    );
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let stderr_after = daemon.stderr();
@@ -255,6 +259,7 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     let service = lilo_session_daemon::SessionService::build(
         lilo_session_daemon::SessionServiceContext::new(
             fixture.paths.clone(),
+            "test-daemon",
             fixture.db.clone(),
             Arc::clone(&runtime),
         ),

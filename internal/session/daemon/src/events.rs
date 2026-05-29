@@ -359,7 +359,13 @@ mod tests {
         let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
         std::mem::forget(dir);
         TestState {
-            daemon: DaemonState::new(store, runtime_port, Arc::new(identity), runtime),
+            daemon: DaemonState::new(
+                store,
+                "test-daemon",
+                runtime_port,
+                Arc::new(identity),
+                runtime,
+            ),
             runtime_lifecycles,
         }
     }

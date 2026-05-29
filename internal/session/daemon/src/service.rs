@@ -17,16 +17,28 @@ use crate::{events::RuntimeEventTask, lifecycle::LifecycleTask};
 
 pub struct SessionServiceContext {
     paths: LiloPaths,
+    daemon_version: String,
     db: LiloDb,
     runtime: Arc<RuntimeService>,
 }
 
 impl SessionServiceContext {
-    pub fn new(paths: LiloPaths, db: LiloDb, runtime: Arc<RuntimeService>) -> Self {
-        Self { paths, db, runtime }
+    pub fn new(
+        paths: LiloPaths,
+        daemon_version: impl Into<String>,
+        db: LiloDb,
+        runtime: Arc<RuntimeService>,
+    ) -> Self {
+        Self {
+            paths,
+            daemon_version: daemon_version.into(),
+            db,
+            runtime,
+        }
     }
 
-    pub async fn from_env() -> Result<Self> {
+    pub async fn from_env(daemon_version: impl Into<String>) -> Result<Self> {
+        let daemon_version = daemon_version.into();
         let home = LiloHome::from_env().context("failed to resolve lilo home")?;
         let paths = LiloPaths::new(home);
         let db = LiloDb::open(&paths).await?;
@@ -34,15 +46,15 @@ impl SessionServiceContext {
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone())).await?,
         );
-        Ok(Self::new(paths, db, runtime))
+        Ok(Self::new(paths, daemon_version, db, runtime))
     }
 
     pub fn paths(&self) -> &LiloPaths {
         &self.paths
     }
 
-    pub fn into_parts(self) -> (LiloPaths, LiloDb, Arc<RuntimeService>) {
-        (self.paths, self.db, self.runtime)
+    pub fn into_parts(self) -> (LiloPaths, String, LiloDb, Arc<RuntimeService>) {
+        (self.paths, self.daemon_version, self.db, self.runtime)
     }
 }
 
@@ -55,7 +67,7 @@ pub struct SessionService {
 
 impl SessionService {
     pub fn build(ctx: SessionServiceContext) -> Result<Self> {
-        let (paths, db, runtime) = ctx.into_parts();
+        let (paths, daemon_version, db, runtime) = ctx.into_parts();
         fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
         let store = SqliteStore::open(&db);
         let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
@@ -65,6 +77,7 @@ impl SessionService {
         );
         let state = Arc::new(DaemonState::new(
             store,
+            daemon_version,
             Arc::new(runtime_port),
             Arc::new(identity),
             runtime,
@@ -118,6 +131,8 @@ impl Drop for SessionService {
 #[cfg(test)]
 mod tests {
     use super::{SessionService, SessionServiceContext};
+
+    const TEST_DAEMON_VERSION: &str = "test-daemon";
     use chrono::Utc;
     use lilo_db::LiloDb;
     use lilo_paths::{LiloHome, LiloPaths};
@@ -146,8 +161,13 @@ mod tests {
             .expect("runtime service"),
         );
 
-        let service = SessionService::build(SessionServiceContext::new(paths.clone(), db, runtime))
-            .expect("service builds");
+        let service = SessionService::build(SessionServiceContext::new(
+            paths.clone(),
+            TEST_DAEMON_VERSION,
+            db,
+            runtime,
+        ))
+        .expect("service builds");
 
         assert_eq!(service.paths().socket_path(), paths.socket_path());
     }
@@ -191,6 +211,7 @@ mod tests {
 
         let service = SessionService::build(SessionServiceContext::new(
             paths,
+            TEST_DAEMON_VERSION,
             db.clone(),
             Arc::clone(&runtime),
         ))

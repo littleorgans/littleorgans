@@ -1,11 +1,21 @@
 use clap::Args;
 use lilo_common::diagnostic::Diagnostic;
 use lilo_db::LiloDb;
-use lilo_paths::LiloPaths;
+use lilo_paths::{DaemonEndpoint, LiloPaths};
+use lilo_session_core::{DoctorRequest, RpcResponse, SessionRpc};
 use serde::Serialize;
-use tokio::net::UnixStream;
 
 use super::{Output, resolve_lilo_paths};
+
+const UNKNOWN_DAEMON_VERSION: &str = "unknown/pre-field";
+
+fn daemon_version_skew_warning(daemon_version: &str) -> String {
+    format!(
+        "client lilo {} but daemon lilod {} — restart the daemon (lilo daemon stop && lilo daemon start)",
+        crate::VERSION,
+        daemon_version
+    )
+}
 
 #[derive(Debug, Args)]
 pub struct DoctorCommand {}
@@ -40,12 +50,13 @@ impl DoctorStatus {
             Some(db) => SubstrateHealth::collect(db).await,
             None => SubstrateHealth::default(),
         };
+        let warnings = Self::warnings_for_daemon(&daemon);
 
         Ok(Self {
             daemon,
             database: database.health,
             substrates,
-            warnings: Vec::new(),
+            warnings,
         })
     }
 
@@ -55,13 +66,14 @@ impl DoctorStatus {
         } else {
             "unreachable"
         };
+        let warnings = self.render_warnings();
         format!(
             "lilo doctor\n\
              daemon: {daemon_status} ({})\n\
              db: {} ({})\n\
              pragmas: journal_mode={} busy_timeout={} synchronous={}\n\
              substrates: sessions_active={} runtimes_active={} audit_rows={}\n\
-             warnings: {}",
+             warnings: {}{}",
             self.daemon.socket_path,
             self.database.status,
             self.database.path,
@@ -75,7 +87,8 @@ impl DoctorStatus {
                 "none"
             } else {
                 "present"
-            }
+            },
+            warnings
         )
     }
 
@@ -84,6 +97,22 @@ impl DoctorStatus {
             Diagnostic::internal("failed to serialize doctor status").with_detail(error.to_string())
         })
     }
+
+    fn warnings_for_daemon(daemon: &DaemonHealth) -> Vec<String> {
+        daemon
+            .version_warning()
+            .into_iter()
+            .collect::<Vec<String>>()
+    }
+
+    fn render_warnings(&self) -> String {
+        let mut rendered = String::new();
+        for warning in &self.warnings {
+            rendered.push_str("\nwarn: ");
+            rendered.push_str(warning);
+        }
+        rendered
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -91,16 +120,39 @@ struct DaemonHealth {
     socket_path: String,
     socket_exists: bool,
     reachable: bool,
+    version: Option<String>,
 }
 
 impl DaemonHealth {
     async fn collect(paths: &LiloPaths) -> Self {
         let socket_path = paths.socket_path();
+        let endpoint = DaemonEndpoint::from_paths(paths);
+        let response = lilo_session_daemon::send_request(
+            &endpoint,
+            &SessionRpc::Doctor {
+                request: DoctorRequest::default(),
+            },
+        )
+        .await;
+        let (reachable, version) = match response {
+            Ok(RpcResponse::Doctor { response }) => (true, response.daemon_version),
+            _ => (false, None),
+        };
         Self {
             socket_exists: socket_path.exists(),
-            reachable: UnixStream::connect(&socket_path).await.is_ok(),
+            reachable,
+            version,
             socket_path: socket_path.display().to_string(),
         }
+    }
+
+    fn version_warning(&self) -> Option<String> {
+        if !self.reachable || self.version.as_deref() == Some(crate::VERSION) {
+            return None;
+        }
+        Some(daemon_version_skew_warning(
+            self.version.as_deref().unwrap_or(UNKNOWN_DAEMON_VERSION),
+        ))
     }
 }
 
@@ -265,6 +317,7 @@ mod tests {
         };
 
         assert!(!status.daemon.reachable);
+        assert_eq!(status.daemon.version, None);
         assert_eq!(status.database.status, "ok");
         assert_eq!(status.database.pragmas.journal_mode, "wal");
         assert_eq!(status.database.pragmas.busy_timeout, 5_000);
@@ -273,5 +326,68 @@ mod tests {
         assert_eq!(status.substrates.runtimes.active, 0);
         assert_eq!(status.substrates.identity.audit_rows, 0);
         assert!(status.warnings.is_empty());
+    }
+
+    #[test]
+    fn daemon_version_warning_rules_cover_equal_mismatch_and_missing() {
+        let equal = daemon_health(true, Some(crate::VERSION));
+        assert_eq!(
+            DoctorStatus::warnings_for_daemon(&equal),
+            Vec::<String>::new()
+        );
+
+        let mismatch = daemon_health(true, Some("0.0.0+old"));
+        let mismatch_warnings = DoctorStatus::warnings_for_daemon(&mismatch);
+        assert_eq!(
+            mismatch_warnings,
+            vec![daemon_version_skew_warning("0.0.0+old")]
+        );
+
+        let missing = daemon_health(true, None);
+        let missing_warnings = DoctorStatus::warnings_for_daemon(&missing);
+        assert_eq!(
+            missing_warnings,
+            vec![daemon_version_skew_warning(UNKNOWN_DAEMON_VERSION)]
+        );
+
+        let down = daemon_health(false, None);
+        assert_eq!(
+            DoctorStatus::warnings_for_daemon(&down),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn render_human_prints_skew_warning_while_reachable() {
+        let daemon = daemon_health(true, Some("0.0.0+old"));
+        let status = DoctorStatus {
+            warnings: DoctorStatus::warnings_for_daemon(&daemon),
+            daemon,
+            database: DatabaseHealth {
+                path: "/tmp/lilo.db".to_string(),
+                status: "ok",
+                pragmas: DbPragmas::default(),
+                error: None,
+            },
+            substrates: SubstrateHealth::default(),
+        };
+
+        let rendered = status.render_human();
+
+        assert!(rendered.contains("daemon: reachable"));
+        assert!(rendered.contains("warnings: present"));
+        assert!(rendered.contains(&format!(
+            "warn: {}",
+            daemon_version_skew_warning("0.0.0+old")
+        )));
+    }
+
+    fn daemon_health(reachable: bool, version: Option<&str>) -> DaemonHealth {
+        DaemonHealth {
+            socket_path: "/tmp/lilod.sock".to_string(),
+            socket_exists: reachable,
+            reachable,
+            version: version.map(ToOwned::to_owned),
+        }
     }
 }
