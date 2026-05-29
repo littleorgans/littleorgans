@@ -5,7 +5,7 @@ use lilo_session_core::{CaptureRequest, RpcResponse, SessionRpc, humanize_captur
 
 use crate::cli::cli_def::CaptureArgs;
 
-pub async fn run(args: CaptureArgs) -> Result<()> {
+pub async fn run(args: CaptureArgs, json: bool) -> Result<()> {
     let response = crate::cli::client::send_request(&SessionRpc::Capture {
         request: CaptureRequest {
             session_id: args.session_id,
@@ -15,7 +15,7 @@ pub async fn run(args: CaptureArgs) -> Result<()> {
     .await?;
 
     match response {
-        RpcResponse::Capture { response } if args.json => {
+        RpcResponse::Capture { response } if json => {
             println!("{}", serde_json::to_string_pretty(&response)?);
             Ok(())
         }

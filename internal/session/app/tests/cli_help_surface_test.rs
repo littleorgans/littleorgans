@@ -189,14 +189,13 @@ fn capture_help_targets_one_session_id() {
         "Exact session id to capture.",
         "--scrollback-lines",
         "runtime-matters uses its default capture depth",
-        "--json",
-        "Render the captured session and capture result as JSON.",
     ] {
         assert!(
             stdout.contains(expected),
             "capture help missing {expected:?}\n{stdout}"
         );
     }
+    assert!(!stdout.contains("--json"), "{stdout}");
     assert!(!stdout.contains("--selector"), "{stdout}");
     assert!(!stdout.contains("role:<name>"), "{stdout}");
 }

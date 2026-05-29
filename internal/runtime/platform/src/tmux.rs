@@ -80,11 +80,13 @@ impl TmuxGateway {
     pub async fn capture_pane(
         server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
-        scrollback_lines: u32,
+        scrollback_lines: Option<u32>,
     ) -> std::result::Result<PaneSnapshot, CaptureError> {
-        let content_output = tmux_capture_output(server_label, tmux_pane, scrollback_lines)
-            .await?
-            .ok_or(CaptureError::TmuxNotAvailable)?;
+        let scrollback_lines_requested = scrollback_lines.unwrap_or(1000);
+        let content_output =
+            tmux_capture_output(server_label, tmux_pane, scrollback_lines_requested)
+                .await?
+                .ok_or(CaptureError::TmuxNotAvailable)?;
         if !content_output.status.success() {
             return Err(CaptureError::CapturePaneFailed {
                 stderr: stderr(&content_output),
@@ -98,13 +100,13 @@ impl TmuxGateway {
                 stderr: stderr(&history_output),
             });
         }
-        let content = stdout(&content_output);
+        let content = trim_explicit_scrollback(stdout(&content_output), scrollback_lines);
         let pane_history_lines = parse_history_lines(&stdout(&history_output))?;
         let scrollback_lines_included = content.lines().count().try_into().unwrap_or(u32::MAX);
         Ok(PaneSnapshot {
             content,
             captured_at_ms: unix_epoch_ms(),
-            scrollback_lines_requested: scrollback_lines,
+            scrollback_lines_requested,
             scrollback_lines_included,
             pane_history_lines,
         })
@@ -140,6 +142,24 @@ fn build_capture_pane_args(tmux_pane: &TmuxAddress, scrollback_lines: u32) -> Ve
         "-t".to_owned(),
         tmux_pane.to_string(),
     ]
+}
+
+fn trim_explicit_scrollback(content: String, scrollback_lines: Option<u32>) -> String {
+    let Some(scrollback_lines) = scrollback_lines else {
+        return content;
+    };
+    let line_limit = scrollback_lines as usize;
+    if line_limit == 0 {
+        return String::new();
+    }
+    let line_count = content.split_inclusive('\n').count();
+    if line_count <= line_limit {
+        return content;
+    }
+    content
+        .split_inclusive('\n')
+        .skip(line_count - line_limit)
+        .collect()
 }
 
 async fn tmux_history_output(
@@ -360,6 +380,20 @@ mod tests {
                 "rtm:0.1".to_owned()
             ]
         );
+    }
+
+    #[test]
+    fn explicit_scrollback_trims_to_last_requested_lines() {
+        let content = "one\ntwo\nthree\n".to_owned();
+
+        assert_eq!(trim_explicit_scrollback(content, Some(1)), "three\n");
+    }
+
+    #[test]
+    fn omitted_scrollback_preserves_content() {
+        let content = "one\ntwo\nthree\n".to_owned();
+
+        assert_eq!(trim_explicit_scrollback(content.clone(), None), content);
     }
 
     #[test]

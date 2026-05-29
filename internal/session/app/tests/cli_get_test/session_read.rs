@@ -130,16 +130,24 @@ pub(crate) fn capture_takes_exact_session_id() {
     let id = first_field(&run.stdout);
 
     let capture = daemon
-        .command()
-        .args(["capture", &id, "--json", "--scrollback-lines", "20"])
+        .lilo_command()
+        .args([
+            "capture",
+            &id,
+            "--output",
+            "json",
+            "--scrollback-lines",
+            "20",
+        ])
         .output()
-        .or_panic("sm capture <id> --json executes");
-    assert_success("sm capture <id> --json", &capture);
+        .or_panic("lilo capture <id> --output json executes");
+    assert_success("lilo capture <id> --output json", &capture);
     let body: Value = serde_json::from_slice(&capture.stdout).or_panic("capture JSON parses");
     assert_eq!(body["session"]["id"], id);
     assert_eq!(body["capture"]["status"], "failed");
 
     for args in [
+        ["capture", &id, "--json"].as_slice(),
         ["capture", "--selector", "all"].as_slice(),
         ["capture", "all"].as_slice(),
         ["capture", "role:engineer"].as_slice(),

@@ -253,8 +253,6 @@ pub struct CaptureArgs {
     pub session_id: uuid::Uuid,
     #[arg(long = "scrollback-lines", help = generated_help::SESSION_CAPTURE_SCROLLBACK_LINES_HELP)]
     pub scrollback_lines: Option<u32>,
-    #[arg(long, help = generated_help::SESSION_CAPTURE_JSON_HELP)]
-    pub json: bool,
 }
 
 #[derive(Debug, Args)]

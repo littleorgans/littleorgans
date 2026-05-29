@@ -41,18 +41,29 @@ impl Cli {
     }
 
     pub async fn run(self) -> Result<(), Diagnostic> {
+        let output = self.output;
         match self.command {
-            Command::Run(args) => run_session(session_cli_def::Command::Run(args)).await,
-            Command::Create(args) => run_session(session_cli_def::Command::Create(args)).await,
-            Command::Get(args) => run_session(session_cli_def::Command::Get(args)).await,
-            Command::Delete(args) => run_session(session_cli_def::Command::Delete(args)).await,
-            Command::Label(args) => run_session(session_cli_def::Command::Label(args)).await,
-            Command::Mail(args) => run_session(session_cli_def::Command::Mail(args)).await,
-            Command::Nudge(args) => run_session(session_cli_def::Command::Nudge(args)).await,
-            Command::Capture(args) => run_session(session_cli_def::Command::Capture(args)).await,
-            Command::Logs(args) => run_session(session_cli_def::Command::Logs(args)).await,
-            Command::Wait(args) => run_session(session_cli_def::Command::Wait(args)).await,
-            Command::Mcp(args) => run_session(session_cli_def::Command::Mcp(args)).await,
+            Command::Run(args) => run_session(session_cli_def::Command::Run(args), false).await,
+            Command::Create(args) => {
+                run_session(session_cli_def::Command::Create(args), false).await
+            }
+            Command::Get(args) => run_session(session_cli_def::Command::Get(args), false).await,
+            Command::Delete(args) => {
+                run_session(session_cli_def::Command::Delete(args), false).await
+            }
+            Command::Label(args) => run_session(session_cli_def::Command::Label(args), false).await,
+            Command::Mail(args) => run_session(session_cli_def::Command::Mail(args), false).await,
+            Command::Nudge(args) => run_session(session_cli_def::Command::Nudge(args), false).await,
+            Command::Capture(args) => {
+                run_session(
+                    session_cli_def::Command::Capture(args),
+                    output == Output::Json,
+                )
+                .await
+            }
+            Command::Logs(args) => run_session(session_cli_def::Command::Logs(args), false).await,
+            Command::Wait(args) => run_session(session_cli_def::Command::Wait(args), false).await,
+            Command::Mcp(args) => run_session(session_cli_def::Command::Mcp(args), false).await,
             Command::Runtime(args) => runtime_cli::run_operator(args)
                 .await
                 .map_err(Diagnostic::from),
@@ -69,8 +80,11 @@ impl Cli {
     }
 }
 
-async fn run_session(command: session_cli_def::Command) -> Result<(), Diagnostic> {
-    session_cli::dispatch(command)
+async fn run_session(
+    command: session_cli_def::Command,
+    capture_json: bool,
+) -> Result<(), Diagnostic> {
+    session_cli::dispatch(command, capture_json)
         .await
         .map_err(Diagnostic::from)
 }
@@ -215,6 +229,17 @@ mod tests {
             .expect("parse doctor json output");
 
         assert_eq!(cli.output(), Output::Json);
+    }
+
+    #[test]
+    fn capture_accepts_global_output_and_rejects_json_flag() {
+        let id = "018f6e28-0000-7000-8000-000000000001";
+        let cli = Cli::try_parse_from(["lilo", "capture", id, "--output", "json"])
+            .expect("parse capture json output");
+
+        assert_eq!(cli.output(), Output::Json);
+        Cli::try_parse_from(["lilo", "capture", id, "--json"])
+            .expect_err("capture --json is not a retained CLI surface");
     }
 
     #[tokio::test]

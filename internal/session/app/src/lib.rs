@@ -22,7 +22,7 @@ pub async fn run() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    cli::dispatch(Cli::parse().command).await
+    cli::dispatch(Cli::parse().command, false).await
 }
 
 fn render_bare_leaf_help() -> anyhow::Result<bool> {
