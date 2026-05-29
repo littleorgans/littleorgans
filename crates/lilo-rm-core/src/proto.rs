@@ -275,6 +275,19 @@ where
     parse_read_json_line(read, &line)
 }
 
+pub async fn read_optional_json_line<R, T>(reader: &mut R) -> Result<Option<T>, ProtocolError>
+where
+    R: AsyncBufRead + Unpin,
+    T: DeserializeOwned,
+{
+    let mut bytes = Vec::new();
+    match reader.read_until(b'\n', &mut bytes).await {
+        Ok(read) => parse_optional_read_json_line(read, &bytes),
+        Err(_) if bytes.is_empty() => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub async fn write_json_line<W, T>(writer: &mut W, message: &T) -> Result<(), ProtocolError>
 where
     W: AsyncWrite + Unpin,
@@ -324,6 +337,19 @@ where
     parse_json_line(line)
 }
 
+fn parse_optional_read_json_line<T>(
+    bytes_read: usize,
+    line: &[u8],
+) -> Result<Option<T>, ProtocolError>
+where
+    T: DeserializeOwned,
+{
+    if bytes_read == 0 {
+        return Ok(None);
+    }
+    serde_json::from_slice(line).map(Some).map_err(Into::into)
+}
+
 fn json_line_bytes<T>(message: &T) -> Result<Vec<u8>, ProtocolError>
 where
     T: Serialize,
@@ -349,5 +375,19 @@ mod tests {
             clamped_event_wait_ms(Some(EVENT_WAIT_MAX_MS + 1)),
             EVENT_WAIT_MAX_MS
         );
+    }
+
+    #[test]
+    fn optional_json_line_returns_none_on_empty_read() {
+        let parsed: Option<serde_json::Value> =
+            parse_optional_read_json_line(0, b"").expect("empty read is optional");
+        assert_eq!(parsed, None);
+    }
+
+    #[test]
+    fn optional_json_line_preserves_malformed_partial_read() {
+        let error = parse_optional_read_json_line::<serde_json::Value>(1, b"{")
+            .expect_err("partial malformed json remains a fault");
+        assert!(matches!(error, ProtocolError::Json(_)));
     }
 }
