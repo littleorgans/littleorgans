@@ -1,13 +1,12 @@
 use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use lilo_im_core::{Principal, peer_creds};
 use lilo_rm_core::{
     CapturePayload, CursorExpiredPayload, DoctorPayload, EventBatch, EventsPayload, EventsRequest,
     KillByPidPayload, KilledPayload, McpBridgePayload, NudgePayload, RuntimeResponse, RuntimeRpc,
-    ShimLaunchPayload, SpawnedPayload, StatusPayload, ValidateTargetPayload, VersionPayload,
-    WatchersPayload, clamped_event_wait_ms, read_json_line, write_json_line,
+    ShimLaunchPayload, StatusPayload, ValidateTargetPayload, VersionPayload, WatchersPayload,
+    clamped_event_wait_ms, read_json_line, write_json_line,
 };
 use lilo_wire::LilodRpc;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
@@ -15,14 +14,12 @@ use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 
 use crate::{
-    backend::RuntimeBackends,
     doctor,
     error::{RpcErrorContext, protocol_error_response, rpc_error_response},
     identity::authorize_runtime_rpc,
     mcp_bridge,
     server::ServerState,
-    service::poll_events_batch,
-    spawn_preflight,
+    service::{SpawnOutcome, poll_events_batch, spawn_domain},
 };
 
 pub(crate) async fn handle_connection(
@@ -133,46 +130,7 @@ async fn handle_rpc_result(
 ) -> Result<RuntimeResponse> {
     authorize_runtime_rpc(&state, &principal, &rpc).await?;
     match rpc {
-        RuntimeRpc::Spawn { mut request } => {
-            if let Some(conflict) = spawn_preflight::check(&state, &mut request).await? {
-                return Ok(conflict);
-            }
-            let launch =
-                lilo_runtime_launchers::dispatch(&request.runtime)?.launch_spec(&request)?;
-            let backends = RuntimeBackends::new(state.config());
-            let launch = backends.prepare_launch(&request, launch)?;
-            let begin = state.begin_spawn(&request, launch.clone()).await?;
-            let evidence = match backends.spawn(&request, &launch).await {
-                Ok(evidence) => evidence,
-                Err(error) => {
-                    state.cancel_spawn(request.session_id).await;
-                    return Err(error);
-                }
-            };
-
-            let ready = tokio::time::timeout(Duration::from_secs(10), begin.ready)
-                .await
-                .context("timed out waiting for ShimReady")?
-                .context("shim ready channel closed")?;
-            let (lifecycle, event) = state
-                .record_running(&request, ready, !begin.session_backed)
-                .await?;
-            let (log_dir, stdout_path, stderr_path) = match evidence.log_paths {
-                Some(paths) => (
-                    Some(paths.log_dir),
-                    Some(paths.stdout_path),
-                    Some(paths.stderr_path),
-                ),
-                None => (None, None, None),
-            };
-            Ok(RuntimeResponse::Spawned(SpawnedPayload {
-                lifecycle,
-                event,
-                log_dir,
-                stdout_path,
-                stderr_path,
-            }))
-        }
+        RuntimeRpc::Spawn { request } => Ok(spawn_response(spawn_domain(&state, request).await?)),
         RuntimeRpc::ValidateTarget { request } => {
             Ok(RuntimeResponse::ValidateTarget(ValidateTargetPayload {
                 response: state.validate_target_request(request).await?,
@@ -226,6 +184,13 @@ async fn handle_rpc_result(
             lilo_rm_core::ErrorCode::ProtocolMismatch,
             "unsupported runtime rpc",
         )),
+    }
+}
+
+fn spawn_response(outcome: SpawnOutcome) -> RuntimeResponse {
+    match outcome {
+        SpawnOutcome::Spawned(payload) => RuntimeResponse::Spawned(payload),
+        SpawnOutcome::Conflict(payload) => RuntimeResponse::SpawnConflict(payload),
     }
 }
 

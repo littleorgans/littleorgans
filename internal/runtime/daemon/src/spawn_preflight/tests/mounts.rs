@@ -430,6 +430,6 @@ async fn assert_preflight_passes(
     assert_no_preflight_conflict(response.as_ref());
 }
 
-fn assert_no_preflight_conflict(response: Option<&RuntimeResponse>) {
+fn assert_no_preflight_conflict(response: Option<&SpawnConflictPayload>) {
     assert!(response.is_none(), "preflight returned conflict");
 }

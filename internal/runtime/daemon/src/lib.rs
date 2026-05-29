@@ -30,4 +30,4 @@ pub(crate) mod version;
 
 pub use reconcile::ReconcileConfig;
 pub use server::{DaemonConfig, run_daemon};
-pub use service::{RuntimeService, RuntimeServiceContext};
+pub use service::{RuntimeService, RuntimeServiceContext, SpawnOutcome};
