@@ -2,19 +2,19 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Output, Stdio};
-use std::time::{Duration, Instant};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use serde_json::Value;
 
 #[path = "../../../test_support.rs"]
 mod shared_test_support;
+#[allow(unused_imports)]
+pub use lilo_test_support::{assert_success, stderr, stdout, write_fake_command};
 pub use shared_test_support::OrPanic;
 
 pub struct DaemonFixture {
     pub dir: tempfile::TempDir,
-    child: Child,
-    lilo_socket: PathBuf,
+    daemon: lilo_test_support::LiloDaemon,
 }
 
 impl DaemonFixture {
@@ -29,27 +29,9 @@ impl DaemonFixture {
     fn start_with_path_prefix(path_prefix: Option<&Path>) -> Self {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
         let lilo_socket = dir.path().join("lilod.sock");
-        let mut command = Command::new(lilo_bin());
-        command
-            .arg("daemon")
-            .arg("start")
-            .env_remove("CLAUDE_CONFIG_DIR")
-            .env("LILO_HOME", dir.path())
-            .env("LILO_SOCKET_PATH", &lilo_socket)
-            .env("HOME", dir.path())
-            .env("PATH", test_path(path_prefix));
-        let mut child = command
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
+        let daemon = lilo_test_support::LiloDaemon::start(dir.path(), &lilo_socket, path_prefix)
             .or_panic("daemon starts");
-        wait_for_path_socket(&lilo_socket, &mut child);
-        Self {
-            dir,
-            child,
-            lilo_socket,
-        }
+        Self { dir, daemon }
     }
 
     pub fn spawn_mcp(&self) -> McpFixture {
@@ -91,7 +73,7 @@ impl DaemonFixture {
     }
 
     pub fn socket_path(&self) -> PathBuf {
-        self.lilo_socket.clone()
+        self.daemon.socket_path().to_path_buf()
     }
 
     pub fn command(&self) -> Command {
@@ -99,7 +81,7 @@ impl DaemonFixture {
         command
             .env_remove("CLAUDE_CONFIG_DIR")
             .env("LILO_HOME", self.dir.path())
-            .env("LILO_SOCKET_PATH", &self.lilo_socket)
+            .env("LILO_SOCKET_PATH", self.daemon.socket_path())
             .env("HOME", self.dir.path());
         command
     }
@@ -115,23 +97,7 @@ impl DaemonFixture {
     }
 
     fn stop(&mut self) {
-        let _ = self
-            .lilo_command()
-            .args(["daemon", "stop"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        let _ = self.child.wait();
-    }
-
-    fn lilo_command(&self) -> Command {
-        let mut command = Command::new(lilo_bin());
-        command
-            .env_remove("CLAUDE_CONFIG_DIR")
-            .env("LILO_HOME", self.dir.path())
-            .env("LILO_SOCKET_PATH", &self.lilo_socket)
-            .env("HOME", self.dir.path());
-        command
+        self.daemon.stop();
     }
 }
 
@@ -217,74 +183,6 @@ pub fn first_table_field(stdout: &[u8]) -> String {
         .to_string()
 }
 
-pub fn assert_success(command: &str, output: &Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
-}
-
-pub fn stdout(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-pub fn stderr(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
-}
-
-fn wait_for_path_socket(socket: &Path, child: &mut Child) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        if socket.exists() {
-            return;
-        }
-        if let Some(exit) = child.try_wait().or_panic("daemon can be observed") {
-            panic!("daemon exited before socket became ready: {exit}");
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    panic!("daemon socket did not become ready");
-}
-
-const FAKE_RUNTIME_SCRIPT: &str = "#!/bin/sh\ntrap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n";
-
 pub fn fake_runtime_path(command: &str) -> tempfile::TempDir {
-    let dir = tempfile::tempdir().or_panic("runtime path tempdir creates");
-    write_fake_command(dir.path(), command, FAKE_RUNTIME_SCRIPT);
-    dir
-}
-
-pub fn write_fake_command(dir: &Path, command: &str, script: &str) {
-    let runtime = dir.join(command);
-    std::fs::write(&runtime, script).or_panic("fake command writes");
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        let mut permissions = std::fs::metadata(&runtime)
-            .or_panic("fake command metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&runtime, permissions).or_panic("fake command is executable");
-    }
-}
-
-fn lilo_bin() -> PathBuf {
-    if let Some(path) = std::env::var_os("LILO_TEST_BIN") {
-        return PathBuf::from(path);
-    }
-    assert_cmd::cargo::cargo_bin("lilo")
-}
-
-fn test_path(prefix: Option<&Path>) -> std::ffi::OsString {
-    let prefixes = prefix.into_iter().map(Path::to_path_buf);
-    let paths = prefixes.chain(
-        std::env::var_os("PATH")
-            .into_iter()
-            .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>()),
-    );
-    std::env::join_paths(paths).or_panic("PATH can be joined")
+    lilo_test_support::fake_runtime_path(command).or_panic("runtime path creates")
 }

@@ -1,5 +1,5 @@
 mod common;
-use common::OrPanic as _;
+use common::{OrPanic as _, assert_success, stderr, stdout};
 
 #[test]
 fn delete_session_help_exposes_session_flags() {
@@ -47,21 +47,4 @@ fn delete_rejects_agent_nouns() {
         assert!(!output.status.success());
         assert!(stderr(&output).contains("unrecognized subcommand"));
     }
-}
-
-fn assert_success(command: &str, output: &std::process::Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        stdout(output),
-        stderr(output)
-    );
-}
-
-fn stdout(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
 }

@@ -2,6 +2,7 @@
 members = [
     "crates/lilo",
     "crates/lilo-build-support",
+    "crates/lilo-test-support",
     "crates/lilo-im-core",
     "crates/lilo-im-store",
     "crates/lilo-im-stub",
@@ -47,6 +48,7 @@ indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1.43.2", features = ["json", "redactions"] }
 libc = "0.2.186"
 lilo-build-support = { path = "crates/lilo-build-support" }
+lilo-test-support = { path = "crates/lilo-test-support" }
 lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }

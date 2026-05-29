@@ -1138,6 +1138,7 @@ dependencies = [
  "lilo-session-core",
  "lilo-session-daemon",
  "lilo-session-store",
+ "lilo-test-support",
  "lilo-wire",
  "serde_json",
  "sqlx",
@@ -1296,6 +1297,7 @@ dependencies = [
  "lilo-runtime-daemon",
  "lilo-session-core",
  "lilo-session-daemon",
+ "lilo-test-support",
  "lilo-wire",
  "nix",
  "serde_json",
@@ -1384,6 +1386,15 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "lilo-test-support"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "tempfile",
 ]
 
 [[package]]

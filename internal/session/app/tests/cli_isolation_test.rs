@@ -1,5 +1,5 @@
 mod common;
-use common::OrPanic as _;
+use common::{OrPanic as _, assert_success};
 
 use std::process::Command;
 
@@ -46,7 +46,8 @@ exit 1
 #[test]
 fn run_accepts_docker_isolation_and_preserves_host_default() {
     let runtime_path = common::fake_runtime_path("claude");
-    common::write_fake_command(runtime_path.path(), "docker", FAKE_DOCKER_SCRIPT);
+    common::write_fake_command(runtime_path.path(), "docker", FAKE_DOCKER_SCRIPT)
+        .or_panic("fake docker command writes");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
     let project = daemon.dir.path().join("project");
     std::fs::create_dir_all(&project).or_panic("project dir");
@@ -67,12 +68,7 @@ fn run_accepts_docker_isolation_and_preserves_host_default() {
             .output()
             .or_panic("sm run executes");
 
-        assert!(
-            output.status.success(),
-            "{command} failed\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        assert_success(command, &output);
     }
 }
 

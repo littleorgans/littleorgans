@@ -1,7 +1,7 @@
 mod common;
 
-use common::OrPanic as _;
-use std::process::{Command, Output};
+use common::{OrPanic as _, assert_success, stderr as output_stderr, stdout as output_stdout};
+use std::process::Command;
 
 #[test]
 fn top_level_help_describes_visible_commands() {
@@ -43,13 +43,13 @@ fn daemon_command_is_not_a_visible_surface() {
     assert!(
         !output.status.success(),
         "removed daemon help unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        output_stdout(&output),
+        output_stderr(&output)
     );
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("unrecognized subcommand 'daemon'"),
+        output_stderr(&output).contains("unrecognized subcommand 'daemon'"),
         "removed daemon help should be rejected as an unknown subcommand\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stderr)
+        output_stderr(&output)
     );
 }
 
@@ -103,11 +103,7 @@ fn retained_leaf_commands_print_help_on_bare_invocation() {
             .args(args)
             .output()
             .unwrap_or_else(|error| panic!("sm {} executes: {error}", args.join(" ")));
-        let rendered_help = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let rendered_help = format!("{}{}", output_stdout(&output), output_stderr(&output));
         assert!(
             rendered_help.contains("Usage:"),
             "sm {} did not print help\n{stdout}",
@@ -268,8 +264,8 @@ fn labels_are_not_crud_resources() {
             !output.status.success(),
             "sm {} unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
             args.join(" "),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            output_stdout(&output),
+            output_stderr(&output)
         );
     }
 }
@@ -287,13 +283,13 @@ fn link_command_is_not_a_visible_surface() {
     assert!(
         !output.status.success(),
         "sm link --help unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        output_stdout(&output),
+        output_stderr(&output)
     );
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("unrecognized subcommand 'link'"),
+        output_stderr(&output).contains("unrecognized subcommand 'link'"),
         "sm link --help should be rejected as an unknown subcommand\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stderr)
+        output_stderr(&output)
     );
 }
 
@@ -303,7 +299,7 @@ fn help(args: &[&str]) -> String {
         .output()
         .unwrap_or_else(|error| panic!("sm {} executes: {error}", args.join(" ")));
     assert_success(&format!("sm {}", args.join(" ")), &output);
-    String::from_utf8_lossy(&output.stdout).to_string()
+    output_stdout(&output)
 }
 
 fn retained_help_nodes() -> Vec<&'static [&'static str]> {
@@ -337,13 +333,4 @@ fn retained_help_nodes() -> Vec<&'static [&'static str]> {
         &["nudge", "--help"],
         &["mcp", "--help"],
     ]
-}
-
-fn assert_success(command: &str, output: &Output) {
-    assert!(
-        output.status.success(),
-        "{command} failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
 }

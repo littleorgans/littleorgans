@@ -17,6 +17,7 @@ lilo-runtime-store.workspace = true
 lilo-session-core.workspace = true
 lilo-session-daemon.workspace = true
 lilo-session-store.workspace = true
+lilo-test-support.workspace = true
 lilo-wire.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
