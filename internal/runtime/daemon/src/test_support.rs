@@ -25,6 +25,7 @@ impl RuntimeServiceFixture {
             },
             reconcile,
             docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
+            tmux_server_label: None,
         };
         install_fake_shim(&config.shim_path);
         let db = LiloDb::open(&paths).await.expect("db");

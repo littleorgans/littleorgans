@@ -81,6 +81,7 @@ async fn test_state_with_docker_config(
                 },
                 reconcile: ReconcileConfig::default(),
                 docker_preflight,
+                tmux_server_label: None,
             },
             store,
         )

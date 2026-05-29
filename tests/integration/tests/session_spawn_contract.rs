@@ -224,7 +224,7 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
             Arc::clone(&runtime),
         ),
     )?;
-    assert!(service.reconcile_pending_spawn_intents().await.is_err());
+    service.reconcile_pending_spawn_intents().await?;
     assert_eq!(event_log_line_count(&fixture.paths)?, 0);
     assert_eq!(pending_count(&fixture, session_id).await?, 1);
     assert_eq!(session_count(&fixture, session_id).await?, 0);

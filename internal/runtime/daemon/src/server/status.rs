@@ -65,7 +65,12 @@ impl StatusReader {
         lifecycle: &mut Lifecycle,
     ) {
         let log_availability = if let Some(address) = lifecycle.tmux_pane.as_ref() {
-            match lilo_runtime_platform::tmux::TmuxGateway::is_alive(address).await {
+            match lilo_runtime_platform::tmux::TmuxGateway::is_alive(
+                config.tmux_server_label.as_deref(),
+                address,
+            )
+            .await
+            {
                 Ok(true) => LogAvailability::TmuxPaneSnapshot,
                 Ok(false) | Err(_) => LogAvailability::Unavailable {
                     reason: LogsUnavailableReason::PaneUnavailable,

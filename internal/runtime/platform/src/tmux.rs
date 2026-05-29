@@ -16,31 +16,43 @@ impl TmuxGateway {
         Ok(Some(stdout(&output).trim().to_owned()))
     }
 
-    pub async fn nudge(tmux_pane: &TmuxAddress, content: &str) -> Result<bool> {
-        if !Self::is_alive(tmux_pane).await? {
+    pub async fn nudge(
+        server_label: Option<&str>,
+        tmux_pane: &TmuxAddress,
+        content: &str,
+    ) -> Result<bool> {
+        if !Self::is_alive(server_label, tmux_pane).await? {
             return Ok(false);
         }
-        let target = tmux_pane.to_string();
         for trailing in build_nudge_send_keys_steps(content) {
-            send_keys(&target, &trailing).await?;
+            send_keys(server_label, tmux_pane, &trailing).await?;
         }
         Ok(true)
     }
 
     pub async fn respawn_pane(
+        server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
         argv: &[String],
         env: &[LaunchEnv],
     ) -> Result<()> {
         let respawn_args = build_respawn_pane_args(tmux_pane, argv, env)?;
-        let output = tmux_output_owned(respawn_args)
+        let output = tmux_output_owned_with_label(server_label, respawn_args)
             .await?
             .context("tmux is not installed")?;
         ensure_success(&output, "tmux respawn-pane").map(|_| ())
     }
 
-    pub async fn is_alive(tmux_pane: &TmuxAddress) -> Result<bool> {
-        let has_session = tmux_output(["has-session", "-t", &tmux_pane.session]).await?;
+    pub async fn is_alive(server_label: Option<&str>, tmux_pane: &TmuxAddress) -> Result<bool> {
+        let has_session = tmux_output_owned_with_label(
+            server_label,
+            vec![
+                "has-session".to_owned(),
+                "-t".to_owned(),
+                tmux_pane.session.clone(),
+            ],
+        )
+        .await?;
         let Some(has_session) = has_session else {
             return Ok(false);
         };
@@ -49,18 +61,28 @@ impl TmuxGateway {
         }
 
         let target = tmux_pane.to_string();
-        let panes = tmux_output(["list-panes", "-t", &target, "-F", "#S:#I.#P"])
-            .await?
-            .context("tmux is not installed")?;
+        let panes = tmux_output_owned_with_label(
+            server_label,
+            vec![
+                "list-panes".to_owned(),
+                "-t".to_owned(),
+                target.clone(),
+                "-F".to_owned(),
+                "#S:#I.#P".to_owned(),
+            ],
+        )
+        .await?
+        .context("tmux is not installed")?;
         ensure_success(&panes, "tmux list-panes")
             .map(|stdout| stdout.lines().any(|line| line.trim() == target))
     }
 
     pub async fn capture_pane(
+        server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
         scrollback_lines: u32,
     ) -> std::result::Result<PaneSnapshot, CaptureError> {
-        let content_output = tmux_capture_output(tmux_pane, scrollback_lines)
+        let content_output = tmux_capture_output(server_label, tmux_pane, scrollback_lines)
             .await?
             .ok_or(CaptureError::TmuxNotAvailable)?;
         if !content_output.status.success() {
@@ -68,7 +90,7 @@ impl TmuxGateway {
                 stderr: stderr(&content_output),
             });
         }
-        let history_output = tmux_history_output(tmux_pane)
+        let history_output = tmux_history_output(server_label, tmux_pane)
             .await?
             .ok_or(CaptureError::TmuxNotAvailable)?;
         if !history_output.status.success() {
@@ -94,14 +116,18 @@ async fn tmux_output<const N: usize>(args: [&str; N]) -> Result<Option<std::proc
 }
 
 async fn tmux_capture_output(
+    server_label: Option<&str>,
     tmux_pane: &TmuxAddress,
     scrollback_lines: u32,
 ) -> std::result::Result<Option<std::process::Output>, CaptureError> {
-    tmux_output_owned(build_capture_pane_args(tmux_pane, scrollback_lines))
-        .await
-        .map_err(|error| CaptureError::CapturePaneFailed {
-            stderr: error.to_string(),
-        })
+    tmux_output_owned_with_label(
+        server_label,
+        build_capture_pane_args(tmux_pane, scrollback_lines),
+    )
+    .await
+    .map_err(|error| CaptureError::CapturePaneFailed {
+        stderr: error.to_string(),
+    })
 }
 
 fn build_capture_pane_args(tmux_pane: &TmuxAddress, scrollback_lines: u32) -> Vec<String> {
@@ -117,32 +143,52 @@ fn build_capture_pane_args(tmux_pane: &TmuxAddress, scrollback_lines: u32) -> Ve
 }
 
 async fn tmux_history_output(
+    server_label: Option<&str>,
     tmux_pane: &TmuxAddress,
 ) -> std::result::Result<Option<std::process::Output>, CaptureError> {
-    tmux_output_owned(vec![
-        "display-message".to_owned(),
-        "-p".to_owned(),
-        "-t".to_owned(),
-        tmux_pane.to_string(),
-        "#{history_size}".to_owned(),
-    ])
+    tmux_output_owned_with_label(
+        server_label,
+        vec![
+            "display-message".to_owned(),
+            "-p".to_owned(),
+            "-t".to_owned(),
+            tmux_pane.to_string(),
+            "#{history_size}".to_owned(),
+        ],
+    )
     .await
     .map_err(|error| CaptureError::CapturePaneFailed {
         stderr: error.to_string(),
     })
 }
 
-async fn send_keys(target: &str, trailing: &[String]) -> Result<()> {
-    let mut args = vec!["send-keys".to_owned(), "-t".to_owned(), target.to_owned()];
+async fn send_keys(
+    server_label: Option<&str>,
+    tmux_pane: &TmuxAddress,
+    trailing: &[String],
+) -> Result<()> {
+    let target = tmux_pane.to_string();
+    let mut args = vec!["send-keys".to_owned(), "-t".to_owned(), target.clone()];
     args.extend(trailing.iter().cloned());
-    let output = tmux_output_owned(args)
+    let output = tmux_output_owned_with_label(server_label, args)
         .await?
         .context("tmux is not installed")?;
     ensure_success(&output, "tmux send-keys").map(|_| ())
 }
 
 async fn tmux_output_owned(args: Vec<String>) -> Result<Option<std::process::Output>> {
-    match Command::new("tmux").args(args).output().await {
+    tmux_output_owned_with_label(None, args).await
+}
+
+async fn tmux_output_owned_with_label(
+    server_label: Option<&str>,
+    args: Vec<String>,
+) -> Result<Option<std::process::Output>> {
+    let mut command = Command::new("tmux");
+    if let Some(label) = server_label {
+        command.arg("-L").arg(label);
+    }
+    match command.args(args).output().await {
         Ok(output) => Ok(Some(output)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error).context("failed to run tmux"),

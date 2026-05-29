@@ -38,14 +38,24 @@ async fn run_event_loop(state: Arc<DaemonState>) -> Result<()> {
         .context("failed to load runtime event cursor")?;
 
     loop {
-        let batch = state
+        let batch = match state
             .runtime
             .poll_events(EventsRequest {
                 since: cursor,
                 wait_ms: Some(EVENT_WAIT_MS),
             })
             .await
-            .context("failed to poll runtime events")?;
+        {
+            Ok(batch) => batch,
+            Err(error) => {
+                tracing::warn!(
+                    error = ?error,
+                    "failed to poll runtime events; retrying without advancing cursor"
+                );
+                tokio::time::sleep(EVENT_ERROR_RETRY).await;
+                continue;
+            }
+        };
 
         if let Err(error) = handle_batch(&state, &mut cursor, batch).await {
             tracing::warn!(
@@ -102,7 +112,10 @@ pub(crate) async fn handle_batch(
 #[cfg(test)]
 mod tests {
     use crate::test_support::OrPanic as _;
+    use std::future::Future;
     use std::path::PathBuf;
+    use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use chrono::Utc;
     use lilo_db::LiloDb;
@@ -114,9 +127,12 @@ mod tests {
     use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
     use lilo_runtime_store::LifecycleStore;
     use lilo_session_core::{
-        Label, Namespace, RuntimeKind as SmRuntimeKind, Session, SessionState,
+        Label, Namespace, RuntimeDoctorReport, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
-    use lilo_session_driver::InProcessRuntime;
+    use lilo_session_driver::{
+        CaptureResult, ChildExit, DriverError, InProcessRuntime, NudgeResult, RuntimePort,
+        SpawnLaunch, SpawnedProcess,
+    };
     use lilo_session_store::SqliteStore;
     use uuid::Uuid;
 
@@ -127,6 +143,90 @@ mod tests {
     struct TestState {
         daemon: DaemonState,
         runtime_lifecycles: LifecycleStore,
+    }
+
+    type PortFuture<'a, T> =
+        Pin<Box<dyn Future<Output = std::result::Result<T, DriverError>> + Send + 'a>>;
+
+    struct PollErrorThenBatchRuntimePort {
+        polls: AtomicUsize,
+        batch: EventBatch,
+    }
+
+    impl PollErrorThenBatchRuntimePort {
+        fn new(batch: EventBatch) -> Self {
+            Self {
+                polls: AtomicUsize::new(0),
+                batch,
+            }
+        }
+
+        fn poll_count(&self) -> usize {
+            self.polls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl RuntimePort for PollErrorThenBatchRuntimePort {
+        fn spawn<'a>(
+            &'a self,
+            _session_id: &'a str,
+            _launch: &'a SpawnLaunch,
+        ) -> PortFuture<'a, SpawnedProcess> {
+            unsupported_port_call("spawn")
+        }
+
+        fn reap_exited(&self) -> PortFuture<'_, Vec<ChildExit>> {
+            unsupported_port_call("reap_exited")
+        }
+
+        fn capture<'a>(
+            &'a self,
+            _session_id: &'a str,
+            _scrollback_lines: Option<u32>,
+        ) -> PortFuture<'a, CaptureResult> {
+            unsupported_port_call("capture")
+        }
+
+        fn terminate<'a>(
+            &'a self,
+            _session_id: &'a str,
+            _signal: &'a str,
+            _grace: Duration,
+        ) -> PortFuture<'a, Option<ChildExit>> {
+            unsupported_port_call("terminate")
+        }
+
+        fn nudge<'a>(
+            &'a self,
+            _session_id: &'a str,
+            _content: &'a str,
+        ) -> PortFuture<'a, NudgeResult> {
+            unsupported_port_call("nudge")
+        }
+
+        fn status(&self, _filter: StatusFilter) -> PortFuture<'_, Vec<Lifecycle>> {
+            unsupported_port_call("status")
+        }
+
+        fn poll_events(&self, _request: EventsRequest) -> PortFuture<'_, EventBatch> {
+            Box::pin(async move {
+                match self.polls.fetch_add(1, Ordering::SeqCst) {
+                    0 => Err(DriverError::Runtime(
+                        "forced poll_events failure".to_string(),
+                    )),
+                    1 => Ok(self.batch.clone()),
+                    _ => {
+                        std::future::pending::<std::result::Result<EventBatch, DriverError>>().await
+                    }
+                }
+            })
+        }
+
+        fn doctor(&self) -> PortFuture<'_, RuntimeDoctorReport> {
+            unsupported_port_call("doctor")
+        }
+
+        fn terminate_all(&self) {}
     }
 
     #[tokio::test]
@@ -218,6 +318,25 @@ mod tests {
         assert_eq!(stored_cursor(state).await, Some(9));
     }
 
+    #[tokio::test]
+    async fn poll_events_error_retries_and_processes_next_batch() {
+        let mut state = test_state().await;
+        let cursor = 42;
+        let runtime_port = Arc::new(PollErrorThenBatchRuntimePort::new(EventBatch::Events {
+            events: Vec::new(),
+            cursor,
+        }));
+        let daemon_runtime: Arc<dyn RuntimePort> = runtime_port.clone();
+        state.daemon.runtime = daemon_runtime;
+        let store = state.daemon.store.clone();
+
+        let task = RuntimeEventTask::spawn(Arc::new(state.daemon));
+        wait_for_stored_cursor(&store, cursor).await;
+        task.shutdown().await;
+
+        assert!(runtime_port.poll_count() >= 2);
+    }
+
     async fn test_state() -> TestState {
         let audit_dir = tempfile::tempdir().or_panic("tempdir creates");
         let identity = IdentityClient::connect(&audit_dir.path().join("audit.sqlite"), 42)
@@ -284,6 +403,29 @@ mod tests {
 
     async fn stored_cursor(state: &DaemonState) -> Option<EventCursor> {
         state.store.event_cursor().await.or_panic("cursor loads")
+    }
+
+    async fn wait_for_stored_cursor(store: &SqliteStore, expected: EventCursor) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if store.event_cursor().await.or_panic("cursor loads") == Some(expected) {
+                return;
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "runtime event loop did not retry after poll_events failure"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
+    fn unsupported_port_call<T: Send + 'static>(operation: &'static str) -> PortFuture<'static, T> {
+        Box::pin(async move {
+            Err(DriverError::Unsupported {
+                operation,
+                pass: "test",
+            })
+        })
     }
 
     fn test_session(state: SessionState) -> Session {

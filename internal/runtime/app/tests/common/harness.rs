@@ -39,6 +39,13 @@ impl RtmHarness {
         Self::start_with_options(Vec::new(), true)
     }
 
+    pub fn start_with_tmux_server_label(server_label: &str) -> Self {
+        Self::start_with_options(
+            vec![("LILO_TMUX_SERVER_LABEL", server_label.to_owned())],
+            false,
+        )
+    }
+
     pub fn start_with_docker_image(image: &str) -> Self {
         Self::start_with_options(vec![("RTM_DOCKER_IMAGE", image.to_owned())], true)
     }

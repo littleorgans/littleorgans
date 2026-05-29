@@ -51,6 +51,7 @@ pub fn runtime_config(paths: &LiloPaths) -> DaemonConfig {
             resume_gap_threshold: chrono::Duration::seconds(3),
         },
         docker_preflight: DockerPreflightConfig::default(),
+        tmux_server_label: None,
     }
 }
 

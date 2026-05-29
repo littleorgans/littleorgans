@@ -35,6 +35,7 @@ impl TestDaemon {
             },
             reconcile: ReconcileConfig::default(),
             docker_preflight: DockerPreflightConfig::default(),
+            tmux_server_label: None,
         };
         let task = tokio::spawn(async move {
             run_daemon(config).await.expect("daemon run");

@@ -448,7 +448,7 @@ fn validate_target_rpc_checks_tmux_liveness_when_available() {
         eprintln!("skipping tmux validate target test because tmux is unavailable");
         return;
     };
-    let harness = RtmHarness::start();
+    let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
     let target = format!("tmux:{}", tmux_session.pane());
 
     assert_eq!(
