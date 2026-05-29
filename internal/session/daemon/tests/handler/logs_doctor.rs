@@ -135,7 +135,7 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
 pub(crate) async fn doctor_includes_runtime_matters_payload() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let state = daemon.in_process_state_without_rtmd_socket_path().await;
+    let state = daemon.in_process_state().await;
 
     let doctor = state
         .handle(

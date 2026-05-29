@@ -50,13 +50,9 @@ impl DaemonState {
         self.identity
             .authorize(&context.principal, Action::Doctor, &ResourceSpec::default())
             .await?;
-        let fresh_findings = if self.rtmd_socket_path.is_some() {
-            crate::reconcile::reconcile_once(self)
-                .await
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+        let fresh_findings = crate::reconcile::reconcile_once(self)
+            .await
+            .unwrap_or_default();
         let runtime_matters = self.runtime_doctor().await;
         let sessions = self
             .store()

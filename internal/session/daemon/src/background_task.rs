@@ -51,13 +51,13 @@ mod tests {
     #[tokio::test]
     async fn shutdown_aborts_awaits_and_is_idempotent() {
         let (started_tx, started_rx) = oneshot::channel();
-        let (dropped_tx, dropped_rx) = oneshot::channel();
+        let (dropped_tx, mut dropped_rx) = oneshot::channel();
         let task = BackgroundTask::spawn(pending_task(started_tx, dropped_tx));
         started_rx.await.expect("task started");
 
         task.shutdown().await;
         dropped_rx
-            .await
+            .try_recv()
             .expect("shutdown awaited task cancellation");
         task.shutdown().await;
         drop(task);

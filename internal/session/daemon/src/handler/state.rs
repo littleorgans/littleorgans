@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use lilo_runtime_daemon::RuntimeService;
@@ -13,7 +12,6 @@ pub struct DaemonState {
     pub(crate) runtime: Arc<dyn RuntimePort>,
     pub(crate) runtime_service: Arc<RuntimeService>,
     pub(crate) identity: Arc<IdentityClient>,
-    pub(crate) rtmd_socket_path: Option<PathBuf>,
 }
 
 pub struct HandlerResult {
@@ -33,13 +31,6 @@ impl DaemonState {
             runtime,
             runtime_service,
             identity,
-            rtmd_socket_path: None,
         }
-    }
-
-    #[must_use]
-    pub fn with_rtmd_socket_path(mut self, socket_path: PathBuf) -> Self {
-        self.rtmd_socket_path = Some(socket_path);
-        self
     }
 }

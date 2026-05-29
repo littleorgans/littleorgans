@@ -32,7 +32,6 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
         .context("failed to write pidfile")?;
 
     let store = SqliteStore::open(&db);
-    let socket_path = paths.socket_path();
     let runtime = Arc::new(
         RuntimeService::build(RuntimeServiceContext::new(
             DaemonConfig::from_lilo_paths(&paths)?,
@@ -46,10 +45,12 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
         SqliteAuditSink::with_pool(db.identity_pool().clone()),
         nix::unistd::getuid().as_raw(),
     );
-    let state = Arc::new(
-        DaemonState::new(store, Arc::new(runtime_port), Arc::new(identity), runtime)
-            .with_rtmd_socket_path(socket_path.clone()),
-    );
+    let state = Arc::new(DaemonState::new(
+        store,
+        Arc::new(runtime_port),
+        Arc::new(identity),
+        runtime,
+    ));
     crate::reconcile::reconcile_once(&state)
         .await
         .context("failed to reconcile sessions on startup")?;

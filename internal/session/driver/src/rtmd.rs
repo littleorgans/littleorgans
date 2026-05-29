@@ -6,18 +6,18 @@ use std::time::Duration;
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
     CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeRequest,
-    StatusFilter, ValidateTargetOutcome,
+    StatusFilter,
 };
 use lilo_session_core::RuntimeDoctorReport;
 use uuid::Uuid;
 
 use crate::conv::{
-    capture_result, kill_outcome_label, lifecycle_to_probe, nudge_result, parse_runtime_signal,
-    parse_session_id, runtime_doctor_error, runtime_doctor_report, runtime_spawn_request,
-    spawned_process, status_session, terminal_child_exit,
+    capture_result, kill_outcome_label, nudge_result, parse_runtime_signal, parse_session_id,
+    runtime_doctor_error, runtime_doctor_report, runtime_spawn_request, spawned_process,
+    terminal_child_exit,
 };
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, DriverError, NudgeResult, SpawnLaunch, SpawnedProcess,
 };
 use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
@@ -55,21 +55,6 @@ impl RtmdDriver {
         spawned_process(payload)
     }
 
-    pub async fn validate_target(&self, target: &str) -> Result<(), DriverError> {
-        match self.client.validate_target(target).await?.outcome {
-            ValidateTargetOutcome::Valid => Ok(()),
-            ValidateTargetOutcome::InvalidTarget { message } => {
-                Err(DriverError::InvalidTarget(message))
-            }
-            ValidateTargetOutcome::TmuxPaneDead { address } => {
-                Err(DriverError::TmuxPaneDead(address.to_string()))
-            }
-            ValidateTargetOutcome::UnsupportedTarget { target } => {
-                Err(DriverError::UnsupportedTarget(target))
-            }
-        }
-    }
-
     pub async fn capture(
         &self,
         session_id: &str,
@@ -98,27 +83,6 @@ impl RtmdDriver {
             }
         }
         Ok(exits)
-    }
-
-    pub async fn probe_session(
-        &self,
-        session_id: &str,
-        runtime_pid: u32,
-    ) -> Result<DriverProbe, DriverError> {
-        let session_id = parse_session_id(session_id)?;
-        let payload = self.client.status(status_session(session_id)).await?;
-        let Some(lifecycle) = payload
-            .lifecycles
-            .iter()
-            .find(|lifecycle| lifecycle.session_id == session_id)
-        else {
-            return Ok(DriverProbe {
-                verified: false,
-                evidence: format!("rtmd has no lifecycle for session {session_id}"),
-                transcript_path: None,
-            });
-        };
-        lifecycle_to_probe(lifecycle, runtime_pid)
     }
 
     pub async fn terminate(
@@ -185,8 +149,6 @@ impl RtmdDriver {
             ),
         })
     }
-
-    pub fn terminate_all(&self) {}
 }
 
 impl RtmdDriver {
@@ -255,7 +217,7 @@ impl RuntimePort for RtmdDriver {
     }
 
     fn terminate_all(&self) {
-        RtmdDriver::terminate_all(self);
+        // Remote rtmd drains its own shims during its own shutdown.
     }
 }
 

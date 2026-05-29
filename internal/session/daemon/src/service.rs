@@ -63,10 +63,12 @@ impl SessionService {
             SqliteAuditSink::with_pool(db.identity_pool().clone()),
             nix::unistd::getuid().as_raw(),
         );
-        let state = Arc::new(
-            DaemonState::new(store, Arc::new(runtime_port), Arc::new(identity), runtime)
-                .with_rtmd_socket_path(paths.socket_path()),
-        );
+        let state = Arc::new(DaemonState::new(
+            store,
+            Arc::new(runtime_port),
+            Arc::new(identity),
+            runtime,
+        ));
         let lifecycle = LifecycleTask::spawn(Arc::clone(&state));
         let events = RuntimeEventTask::spawn(Arc::clone(&state));
         Ok(Self {

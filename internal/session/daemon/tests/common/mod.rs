@@ -75,8 +75,7 @@ impl TestDaemon {
             runtime_port,
             Arc::new(identity),
             Arc::clone(&runtime),
-        )
-        .with_rtmd_socket_path(runtime_socket_path);
+        );
         Self {
             state,
             audit_path,
@@ -103,7 +102,7 @@ impl TestDaemon {
         )
     }
 
-    pub async fn in_process_state_without_rtmd_socket_path(&self) -> DaemonState {
+    pub async fn in_process_state(&self) -> DaemonState {
         self.state_with_runtime_port(Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))))
             .await
     }

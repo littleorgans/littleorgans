@@ -35,13 +35,6 @@ pub struct ChildExit {
     pub transcript_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DriverProbe {
-    pub verified: bool,
-    pub evidence: String,
-    pub transcript_path: Option<PathBuf>,
-}
-
 #[derive(Debug, Error)]
 pub enum DriverError {
     #[error("unsupported signal: {0}")]
@@ -66,10 +59,6 @@ pub enum DriverError {
     },
     #[error("invalid runtime target: {0}")]
     InvalidTarget(String),
-    #[error("tmux pane is unavailable: {0}")]
-    TmuxPaneDead(String),
-    #[error("unsupported runtime target: {0}")]
-    UnsupportedTarget(String),
     #[error("runtime capture failed: {0}")]
     CaptureFailed(String),
     #[error("runtime domain failed: {0}")]
