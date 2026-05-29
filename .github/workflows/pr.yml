@@ -65,21 +65,11 @@ jobs:
       - name: Install Moon toolchain
         uses: moonrepo/setup-toolchain@v0
 
-      - name: Format check
-        run: cargo fmt --all -- --check
-
-      - name: Clippy with warnings as errors
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Build workspace
-        run: cargo build --workspace
-
-      - name: Test workspace
-        run: cargo test --workspace
-
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
+      # Single CI gate: moon ci runs fmt-check, clippy, build, nextest test,
+      # and the LOC/provenance checks (all runInCI tasks in moon.yml).
       - name: Moon CI
         run: moon ci
 
