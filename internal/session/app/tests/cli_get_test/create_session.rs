@@ -65,7 +65,6 @@ pub(crate) fn create_session_and_run_persist_compatible_records_for_shared_input
             &project.display().to_string(),
             "--label",
             "area=shared",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

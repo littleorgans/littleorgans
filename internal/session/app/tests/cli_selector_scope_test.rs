@@ -277,7 +277,6 @@ fn run_session(daemon: &common::DaemonFixture, namespace: &str, dir: &Path) -> S
             &dir.display().to_string(),
             "--namespace",
             namespace,
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

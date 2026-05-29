@@ -18,8 +18,8 @@ lilo daemon start
 sm create namespace project-alpha
 sm config set-context project-alpha
 sm create session claude --role general --dir "$PWD"
-sm run claude --role general --dir "$PWD" --detach
-sm run codex --role reviewer --namespace project-alpha --target tmux:agents:0.1 --force --detach
+sm run claude --role general --dir "$PWD"
+sm run codex --role reviewer --namespace project-alpha --target tmux:agents:0.1 --force
 sm get session --selector id:<session-id> --show-labels
 sm capture <session-id>
 sm delete namespace project-alpha
@@ -46,7 +46,7 @@ The CLI uses kubectl shaped resource buckets for CRUD: `sm create session`,
 `sm create session` is the declarative create-resource surface. It creates a
 daemon backed headless session record. `sm run` is the imperative surface for
 create and bind target workflows. It accepts the same session identity inputs
-plus runtime target controls such as `--target`, `--detach`, and `--force`.
+plus runtime target controls such as `--target` and `--force`.
 Use `sm run --force` only to preempt an occupied tmux pane. Other spawn
 conflicts remain fatal.
 

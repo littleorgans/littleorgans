@@ -73,11 +73,6 @@ pub struct RunArgs {
     pub target: String,
     #[arg(long, help = generated_help::SESSION_RUN_FORCE_HELP)]
     pub force: bool,
-    #[arg(
-        long,
-        help = "Return after creating the session instead of waiting on the runtime"
-    )]
-    pub detach: bool,
 }
 
 #[derive(Debug, Args)]

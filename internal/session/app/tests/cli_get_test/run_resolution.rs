@@ -12,9 +12,7 @@ pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
     let run = daemon
         .command()
         .current_dir(&project)
-        .args([
-            "run", "claude", "--role", "engineer", "--dir", ".", "--detach",
-        ])
+        .args(["run", "claude", "--role", "engineer", "--dir", "."])
         .output()
         .or_panic("sm run executes");
     assert_success("sm run --dir", &run);
@@ -40,7 +38,7 @@ pub(crate) fn run_resolves_spawn_intent_and_persists_session() {
 
     let run = daemon
         .command()
-        .args(["run", "claude", "--role", "engineer", "--detach"])
+        .args(["run", "claude", "--role", "engineer"])
         .output()
         .or_panic("sm run executes");
     assert_success("sm run", &run);
@@ -134,7 +132,6 @@ pub(crate) fn unknown_namespace_error_is_surfaced_from_daemon() {
             &daemon.dir.path().display().to_string(),
             "--namespace",
             "missing",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

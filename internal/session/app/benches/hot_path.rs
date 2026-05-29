@@ -92,9 +92,7 @@ fn run_rpc_round_trip(
 fn spawn_bench_agent(daemon: &common::DaemonFixture) -> Uuid {
     let output = daemon
         .command()
-        .args([
-            "run", "codex", "--role", "bench", "--dir", "bench", "--detach",
-        ])
+        .args(["run", "codex", "--role", "bench", "--dir", "bench"])
         .output()
         .or_panic("sm run starts");
     assert!(

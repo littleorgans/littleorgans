@@ -84,4 +84,17 @@ pub(crate) fn run_help_exposes_force_as_imperative_argument() {
     let stdout = stdout(&output);
     assert!(stdout.contains("--force"));
     assert!(stdout.contains("Preempt an occupied tmux pane"));
+    assert!(!stdout.contains("--detach"));
+}
+
+#[test]
+pub(crate) fn run_detach_is_rejected_by_clap() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sm"))
+        .args(["run", "claude", "--role", "engineer", "--detach"])
+        .output()
+        .or_panic("sm run --detach executes");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unexpected argument '--detach'"));
 }

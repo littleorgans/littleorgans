@@ -71,7 +71,6 @@ fn run_help_describes_every_flag() {
         "Container image for docker isolated runtimes",
         "Runtime target",
         "Preempt an occupied tmux pane",
-        "Return after creating the session instead of waiting on the runtime",
     ] {
         assert!(
             stdout.contains(description),

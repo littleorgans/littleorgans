@@ -36,7 +36,6 @@ pub(crate) fn session_resources_list_and_get_by_id() {
             &daemon.dir.path().display().to_string(),
             "--label",
             "area=get",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");
@@ -122,7 +121,6 @@ pub(crate) fn capture_takes_exact_session_id() {
             "engineer",
             "--dir",
             &daemon.dir.path().display().to_string(),
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

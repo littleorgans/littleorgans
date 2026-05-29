@@ -31,7 +31,7 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     let run = daemon
         .command(["run", "claude", "--role", "worker", "--dir"])
         .arg(&workspace)
-        .args(["--target", "headless", "--detach"])
+        .args(["--target", "headless"])
         .output()
         .context("lilo run executes")?;
     assert_success("lilo run", &run);

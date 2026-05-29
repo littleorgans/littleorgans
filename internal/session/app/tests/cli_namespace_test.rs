@@ -152,7 +152,6 @@ fn delete_namespace_cascades_sessions_and_clears_binding() {
             "engineer",
             "--dir",
             &daemon.dir.path().display().to_string(),
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

@@ -27,7 +27,6 @@ pub(crate) fn run_agent_config_paths_are_canonicalized_from_caller_context() {
             &workspace.display().to_string(),
             "--agent-config",
             "./agent.toml",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");
@@ -49,7 +48,6 @@ pub(crate) fn run_agent_config_paths_are_canonicalized_from_caller_context() {
             &workspace.display().to_string(),
             "--agent-config",
             "~/missing.toml",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

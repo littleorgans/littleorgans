@@ -28,7 +28,7 @@ pub(crate) use help::{
     create_help_lists_namespace_and_session_resources,
     create_session_help_exposes_only_declarative_arguments,
     get_namespace_help_exposes_only_namespace_read_arguments,
-    get_session_help_exposes_only_session_read_arguments,
+    get_session_help_exposes_only_session_read_arguments, run_detach_is_rejected_by_clap,
     run_help_exposes_force_as_imperative_argument,
 };
 #[allow(unused_imports)]
