@@ -1,6 +1,5 @@
 use crate::common::{self, OrPanic as _};
-use crate::{assert_success, canonical_display, first_field};
-use serde_json::Value;
+use crate::{assert_success, canonical_display, first_field, get_session_json};
 
 #[test]
 pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
@@ -18,13 +17,7 @@ pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
     assert_success("sm run --dir", &run);
     let id = first_field(&run.stdout);
 
-    let single = daemon
-        .command()
-        .args(["get", "session", &id, "--json"])
-        .output()
-        .or_panic("sm get session <id> --json executes");
-    assert_success("sm get session <id> --json", &single);
-    let session: Value = serde_json::from_slice(&single.stdout).or_panic("session JSON parses");
+    let session = get_session_json(&daemon, &id);
     let canonical_project = canonical_display(&project);
     assert_eq!(session["dir"], canonical_project);
     assert_eq!(session["workspace"], canonical_project);

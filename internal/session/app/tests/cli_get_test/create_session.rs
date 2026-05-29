@@ -27,13 +27,7 @@ pub(crate) fn create_session_persists_headless_record_without_foreground_attach(
     assert_success("sm create session", &created);
     let id = first_field(&created.stdout);
 
-    let single = daemon
-        .command()
-        .args(["get", "session", &id, "--json"])
-        .output()
-        .or_panic("sm get session <id> --json executes");
-    assert_success("sm get session <id> --json", &single);
-    let session: Value = serde_json::from_slice(&single.stdout).or_panic("session JSON parses");
+    let session = get_session_json(&daemon, &id);
     let canonical_project = canonical_display(&project);
     assert_eq!(session["id"], id);
     assert_eq!(session["runtime"], "claude");

@@ -61,10 +61,10 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
         .await?;
 
     let get = daemon
-        .command(["get", "session", "--json"])
+        .command(["get", "session", "--output", "json"])
         .output()
         .context("lilo get session executes")?;
-    assert_success("lilo get session --json", &get);
+    assert_success("lilo get session --output json", &get);
     let listed_ids = listed_session_ids(&get)?;
     assert_eq!(listed_ids.len(), 2, "stdout: {}", stdout(&get));
     assert!(listed_ids.contains(&run_id));

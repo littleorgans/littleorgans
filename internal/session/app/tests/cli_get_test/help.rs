@@ -16,7 +16,7 @@ pub(crate) fn get_session_help_exposes_only_session_read_arguments() {
         assert!(stdout.contains("--namespace"));
         assert!(stdout.contains("Namespace scope for resolving session selectors"));
         assert!(stdout.contains("--all-namespaces"));
-        assert!(stdout.contains("--json"));
+        assert!(!stdout.contains("--json"));
         assert!(stdout.contains("--show-labels"));
     }
 }
@@ -31,7 +31,7 @@ pub(crate) fn get_namespace_help_exposes_only_namespace_read_arguments() {
 
         assert_success("sm get namespace help", &output);
         let stdout = stdout(&output);
-        assert!(stdout.contains("--json"));
+        assert!(!stdout.contains("--json"));
         assert!(!stdout.contains("--selector"));
         assert!(!stdout.contains("--namespace <NAMESPACE>"));
         assert!(!stdout.contains("--all-namespaces"));

@@ -241,13 +241,13 @@ fn get_help_collapses_resources_to_singular_with_plural_aliases() {
     let session = help(&["get", "sessions", "--help"]);
     assert!(session.contains("Optional session id to load instead of listing."));
     assert!(session.contains("--selector"));
-    assert!(session.contains("Render output as JSON."));
+    assert!(!session.contains("Render output as JSON."));
     assert!(session.contains("--show-labels"));
     assert!(session.contains("JSON output already includes labels."));
 
     let namespace = help(&["get", "namespaces", "--help"]);
     assert!(namespace.contains("Optional namespace slug to load instead of listing."));
-    assert!(namespace.contains("Render output as JSON."));
+    assert!(!namespace.contains("Render output as JSON."));
     assert!(!namespace.contains("--selector"));
 }
 

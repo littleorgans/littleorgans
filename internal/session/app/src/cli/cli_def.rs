@@ -7,7 +7,6 @@ use lilo_session_core::{Namespace, RuntimeKind};
 use crate::cli::generated_help;
 use crate::cli::selector_scope::NamespaceScopeArgs;
 
-const JSON_OUTPUT_HELP: &str = "Render output as JSON.";
 const NAMESPACE_CREATE_HELP: &str = "Namespace slug to create.";
 const NAMESPACE_CONTEXT_HELP: &str = "Namespace slug to use as the user context.";
 const NAMESPACE_DELETE_HELP: &str = "Namespace slug to delete.";
@@ -126,8 +125,6 @@ pub struct SessionReadArgs {
     pub selector: Option<String>,
     #[command(flatten)]
     pub scope: NamespaceScopeArgs,
-    #[arg(long, help = JSON_OUTPUT_HELP)]
-    pub json: bool,
     #[arg(long, help = generated_help::SESSION_LIST_SHOW_LABELS_HELP)]
     pub show_labels: bool,
 }
@@ -136,8 +133,6 @@ pub struct SessionReadArgs {
 pub struct NamespaceGetArgs {
     #[arg(help = generated_help::NAMESPACE_LIST_SLUG_HELP)]
     pub slug: Option<String>,
-    #[arg(long, help = JSON_OUTPUT_HELP)]
-    pub json: bool,
 }
 
 #[derive(Debug, Args)]
