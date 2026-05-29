@@ -53,6 +53,16 @@ impl StatusFilter {
         }
     }
 
+    pub const fn for_session(session_id: Uuid) -> Self {
+        Self {
+            session_id: Some(session_id),
+            session_ids: Vec::new(),
+            updated_since: None,
+            runtime: None,
+            state: None,
+        }
+    }
+
     pub fn requested_session_ids(&self) -> Vec<Uuid> {
         let mut ids = self.session_ids.clone();
         if let Some(session_id) = self.session_id

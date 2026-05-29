@@ -39,12 +39,16 @@ pub fn runtime_spawn_request(
 }
 
 pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, DriverError> {
+    let lifecycle = payload.lifecycle;
+    let runtime_pid = runtime_pid(&lifecycle)?;
+    let tmux_pane = lifecycle.tmux_pane.as_ref().map(ToString::to_string);
     Ok(SpawnedProcess {
-        runtime_pid: runtime_pid(&payload.lifecycle)?,
+        lifecycle,
+        runtime_pid,
         log_dir: payload.log_dir,
         stdout_path: payload.stdout_path,
         stderr_path: payload.stderr_path,
-        tmux_pane: payload.lifecycle.tmux_pane.map(|pane| pane.to_string()),
+        tmux_pane,
     })
 }
 
@@ -78,13 +82,7 @@ pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf
 }
 
 pub(crate) fn status_session(session_id: Uuid) -> StatusFilter {
-    StatusFilter {
-        session_id: Some(session_id),
-        session_ids: Vec::new(),
-        updated_since: None,
-        runtime: None,
-        state: None,
-    }
+    StatusFilter::for_session(session_id)
 }
 
 pub(crate) fn terminal_child_exit(lifecycle: &Lifecycle) -> Result<Option<ChildExit>, DriverError> {
@@ -235,8 +233,8 @@ fn format_spawn_conflict(payload: &SpawnConflictPayload) -> String {
 mod tests {
     use super::*;
     use lilo_rm_core::{
-        CaptureError, DockerStatus, LifecycleCounts, LostEvidence, MigrationState, RuntimeExit,
-        TmuxStatus, WatcherCounts, version_info,
+        CaptureError, DockerStatus, IsolationPolicy, LifecycleCounts, LostEvidence, MigrationState,
+        RuntimeEvent, RuntimeExit, ShimReady, TmuxStatus, WatcherCounts, version_info,
     };
 
     #[test]
@@ -282,6 +280,40 @@ mod tests {
             result.response,
             CaptureResponse::Failed(CaptureError::NotATmuxTarget)
         );
+    }
+
+    #[test]
+    fn spawn_mappers_preserve_lifecycle_for_both_adapters() {
+        let session_id = Uuid::now_v7();
+        let start_time = chrono::Utc::now();
+        let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
+        lifecycle.isolation = IsolationPolicy::default();
+        lifecycle.mark_running(ShimReady {
+            session_id,
+            shim_pid: 41,
+            runtime_pid: 42,
+            start_time,
+            tmux_pane: None,
+        });
+        let payload = SpawnedPayload {
+            lifecycle: lifecycle.clone(),
+            event: RuntimeEvent::Running {
+                session_id,
+                runtime_pid: 42,
+                start_time,
+            },
+            log_dir: Some(PathBuf::from("/tmp/logs")),
+            stdout_path: Some(PathBuf::from("/tmp/logs/stdout.log")),
+            stderr_path: Some(PathBuf::from("/tmp/logs/stderr.log")),
+        };
+
+        let in_process = spawn_outcome(SpawnOutcome::Spawned(payload.clone()))
+            .expect("in-process spawn mapper succeeds");
+        let socket = spawned_process(payload).expect("socket spawn mapper succeeds");
+
+        assert_eq!(in_process, socket);
+        assert_eq!(in_process.lifecycle, lifecycle);
+        assert_eq!(in_process.runtime_pid, 42);
     }
 
     #[test]

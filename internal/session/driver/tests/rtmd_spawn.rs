@@ -69,7 +69,7 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
         }
     });
 
-    driver
+    let spawned = driver
         .spawn(
             &session_id.to_string(),
             &SpawnLaunch {
@@ -86,6 +86,9 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
         )
         .await
         .or_panic("spawn delegates to rtmd");
+    assert_eq!(spawned.lifecycle.session_id, session_id);
+    assert_eq!(spawned.lifecycle.runtime_pid, Some(42));
+    assert_eq!(spawned.runtime_pid, 42);
     server.await.or_panic("server task");
 }
 

@@ -152,7 +152,6 @@ pub(crate) async fn assert_delete_flow_audit(daemon: &DaemonFixture) {
         actions,
         vec![
             Action::Spawn,
-            Action::Spawn,
             Action::ShimCallback,
             Action::ShimCallback,
             Action::Read,
