@@ -18,6 +18,25 @@ pub enum SpawnOutcome {
     Conflict(SpawnConflictPayload),
 }
 
+/// Curated in-process runtime domain API reviewed under R1.
+///
+/// This is the public surface for co-located callers that need runtime behavior
+/// without going through the socket RPC adapter. The methods intentionally mirror
+/// runtime-owned verbs and return public payload types from `lilo_rm_core` or
+/// standard library containers:
+///
+/// - `poll_events` returns `EventBatch`.
+/// - `spawn` returns `SpawnOutcome`.
+/// - `status` returns `Vec<Lifecycle>`.
+/// - `kill_runtime` returns `KillOutcome`.
+/// - `kill_by_pid` returns `KillByPidResponse`.
+/// - `nudge_runtime` returns `NudgeResponse`.
+/// - `capture` returns `CaptureResponse`.
+/// - `doctor` returns `DoctorResponse`.
+///
+/// Session vocabulary (`reap_exited` / `terminate` / `watch_events` /
+/// `terminate_all`) is NOT on `RuntimeService`; it lives on the WS2
+/// `RuntimePort` and maps onto these verbs.
 impl RuntimeService {
     pub async fn poll_events(&self, request: EventsRequest) -> EventBatch {
         poll_events_batch(self.state(), request).await
@@ -170,10 +189,22 @@ mod tests {
             .await
             .expect("service builds");
 
+        assert_status_parity(&service).await;
+        assert_kill_runtime_parity(&service).await;
+        assert_kill_by_pid_parity(&service).await;
+        assert_nudge_parity(&service).await;
+        assert_capture_parity(&service).await;
+        assert_doctor_parity(&service).await;
+
+        service.shutdown().await.expect("shutdown succeeds");
+        fixture.db.close().await;
+    }
+
+    async fn assert_status_parity(service: &RuntimeService) {
         let direct_status = service.status(StatusFilter::default()).await;
         let wire_status = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::Status {
                     request: StatusRequest {
                         session_id: None,
@@ -189,10 +220,12 @@ mod tests {
             panic!("expected status response, got {wire_status:?}");
         };
         assert_eq!(direct_status, status_payload.lifecycles);
+    }
 
+    async fn assert_kill_runtime_parity(service: &RuntimeService) {
         let kill_session_id = Uuid::now_v7();
         let kill_pid = finished_child_pid();
-        insert_running_headless(&service, kill_session_id, kill_pid).await;
+        insert_running_headless(service, kill_session_id, kill_pid).await;
         let kill_request = KillRequest {
             session_id: kill_session_id,
             signal: RuntimeSignal::Term,
@@ -204,7 +237,7 @@ mod tests {
             .expect("domain kill succeeds");
         let wire_kill = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::Kill {
                     request: kill_request,
                 },
@@ -215,7 +248,9 @@ mod tests {
         };
         assert_eq!(direct_kill, KillOutcome::AlreadyExited);
         assert_eq!(direct_kill, kill_payload.outcome);
+    }
 
+    async fn assert_kill_by_pid_parity(service: &RuntimeService) {
         let kill_by_pid_request = KillByPidRequest {
             pid: finished_child_pid(),
             signal: lilo_runtime_platform::signal::signal_number(RuntimeSignal::Term),
@@ -227,7 +262,7 @@ mod tests {
             .expect("domain kill by pid succeeds");
         let wire_kill_by_pid = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::KillByPid {
                     request: kill_by_pid_request,
                 },
@@ -237,9 +272,11 @@ mod tests {
             panic!("expected kill by pid response, got {wire_kill_by_pid:?}");
         };
         assert_eq!(direct_kill_by_pid, kill_by_pid_payload.response);
+    }
 
+    async fn assert_nudge_parity(service: &RuntimeService) {
         let nudge_session_id = Uuid::now_v7();
-        insert_running_headless(&service, nudge_session_id, finished_child_pid()).await;
+        insert_running_headless(service, nudge_session_id, finished_child_pid()).await;
         let nudge_request = NudgeRequest {
             session_id: nudge_session_id,
             content: "wake".to_owned(),
@@ -250,7 +287,7 @@ mod tests {
             .expect("domain nudge succeeds");
         let wire_nudge = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::Nudge {
                     request: nudge_request,
                 },
@@ -264,7 +301,9 @@ mod tests {
             direct_nudge.outcome,
             NudgeOutcome::Unsupported(NudgeFailureReason::HeadlessLifecycle)
         );
+    }
 
+    async fn assert_capture_parity(service: &RuntimeService) {
         let capture_request = CaptureRequest {
             session_id: Uuid::now_v7(),
             scrollback_lines: None,
@@ -275,7 +314,7 @@ mod tests {
             .expect("domain capture succeeds");
         let wire_capture = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::Capture {
                     request: capture_request,
                 },
@@ -289,13 +328,12 @@ mod tests {
             direct_capture.into_result(),
             Err(CaptureError::SessionMissing)
         );
+    }
 
+    async fn assert_doctor_parity(service: &RuntimeService) {
         let direct_doctor = service.doctor().await.expect("domain doctor succeeds");
         let wire_doctor = service
-            .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
-                RuntimeRpc::Doctor,
-            )
+            .handle_rpc(local_principal(), RuntimeRpc::Doctor)
             .await;
         let RuntimeResponse::Doctor(doctor_payload) = wire_doctor else {
             panic!("expected doctor response, got {wire_doctor:?}");
@@ -303,9 +341,10 @@ mod tests {
         assert_eq!(direct_doctor.version, doctor_payload.doctor.version);
         assert_eq!(direct_doctor.socket_path, doctor_payload.doctor.socket_path);
         assert_eq!(direct_doctor.lifecycles, doctor_payload.doctor.lifecycles);
+    }
 
-        service.shutdown().await.expect("shutdown succeeds");
-        fixture.db.close().await;
+    fn local_principal() -> Principal {
+        Principal::local(nix::unistd::getuid().as_raw())
     }
 
     #[tokio::test]
@@ -317,20 +356,20 @@ mod tests {
         let runtime_pid = std::process::id();
         let direct = spawn_direct_with_ready(
             &service,
-            spawn_request(Uuid::now_v7(), fixture._dir.path()),
+            spawn_request(Uuid::now_v7(), fixture.dir.path()),
             runtime_pid,
         )
         .await;
         let wire = spawn_wire_with_ready(
             &service,
-            spawn_request(Uuid::now_v7(), fixture._dir.path()),
+            spawn_request(Uuid::now_v7(), fixture.dir.path()),
             runtime_pid,
         )
         .await;
 
         assert_spawned_payload_parity(
-            expect_spawned(direct),
-            expect_wire_spawned(wire),
+            &expect_spawned(direct),
+            &expect_wire_spawned(wire),
             runtime_pid,
         );
         service.shutdown().await.expect("shutdown succeeds");
@@ -344,8 +383,8 @@ mod tests {
             .await
             .expect("service builds");
         let runtime_pid = std::process::id();
-        let direct_request = spawn_request(Uuid::now_v7(), fixture._dir.path());
-        let wire_request = spawn_request(Uuid::now_v7(), fixture._dir.path());
+        let direct_request = spawn_request(Uuid::now_v7(), fixture.dir.path());
+        let wire_request = spawn_request(Uuid::now_v7(), fixture.dir.path());
         let _ = spawn_direct_with_ready(&service, direct_request.clone(), runtime_pid).await;
         let _ = spawn_wire_with_ready(&service, wire_request.clone(), runtime_pid).await;
 
@@ -363,8 +402,8 @@ mod tests {
             .await;
 
         assert_conflict_parity(
-            expect_conflict(direct_conflict),
-            expect_wire_conflict(wire_conflict),
+            &expect_conflict(direct_conflict),
+            &expect_wire_conflict(wire_conflict),
         );
         service.shutdown().await.expect("shutdown succeeds");
         fixture.db.close().await;
@@ -488,11 +527,11 @@ mod tests {
     }
 
     fn assert_spawned_payload_parity(
-        direct: SpawnedPayload,
-        wire: SpawnedPayload,
+        direct: &SpawnedPayload,
+        wire: &SpawnedPayload,
         runtime_pid: u32,
     ) {
-        for payload in [&direct, &wire] {
+        for payload in [direct, wire] {
             assert_eq!(payload.lifecycle.state, LifecycleState::Running);
             assert_eq!(payload.lifecycle.runtime_pid, Some(runtime_pid));
             assert_eq!(
@@ -533,7 +572,7 @@ mod tests {
         assert_eq!(*event_runtime_pid, runtime_pid);
     }
 
-    fn assert_conflict_parity(direct: SpawnConflictPayload, wire: SpawnConflictPayload) {
+    fn assert_conflict_parity(direct: &SpawnConflictPayload, wire: &SpawnConflictPayload) {
         assert_eq!(direct.kind, SpawnConflictKind::SessionId);
         assert_eq!(wire.kind, SpawnConflictKind::SessionId);
         assert_eq!(direct.lifecycle.state, LifecycleState::Running);

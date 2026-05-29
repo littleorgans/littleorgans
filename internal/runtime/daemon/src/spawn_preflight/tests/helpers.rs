@@ -328,7 +328,7 @@ async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: Uu
     );
 }
 
-fn assert_conflict(payload: SpawnConflictPayload, kind: SpawnConflictKind, session_id: Uuid) {
+fn assert_conflict(payload: &SpawnConflictPayload, kind: SpawnConflictKind, session_id: Uuid) {
     assert_eq!(payload.kind, kind);
     assert_eq!(payload.lifecycle.session_id, session_id);
 }

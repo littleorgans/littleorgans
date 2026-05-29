@@ -7,7 +7,7 @@ use lilo_paths::{LiloHome, LiloPaths};
 use lilo_runtime_store::StoreConfig;
 
 pub(crate) struct RuntimeServiceFixture {
-    pub(crate) _dir: tempfile::TempDir,
+    pub(crate) dir: tempfile::TempDir,
     pub(crate) config: DaemonConfig,
     pub(crate) db: LiloDb,
 }
@@ -29,11 +29,7 @@ impl RuntimeServiceFixture {
         install_fake_shim(&config.shim_path);
         let db = LiloDb::open(&paths).await.expect("db");
 
-        Self {
-            _dir: dir,
-            config,
-            db,
-        }
+        Self { dir, config, db }
     }
 
     pub(crate) fn context(&self) -> RuntimeServiceContext {
