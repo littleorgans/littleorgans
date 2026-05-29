@@ -328,10 +328,7 @@ async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: Uu
     );
 }
 
-fn assert_conflict(response: RuntimeResponse, kind: SpawnConflictKind, session_id: Uuid) {
-    let RuntimeResponse::SpawnConflict(payload) = response else {
-        panic!("unexpected response: {response:?}");
-    };
+fn assert_conflict(payload: &SpawnConflictPayload, kind: SpawnConflictKind, session_id: Uuid) {
     assert_eq!(payload.kind, kind);
     assert_eq!(payload.lifecycle.session_id, session_id);
 }

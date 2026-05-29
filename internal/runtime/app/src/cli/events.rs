@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Args;
 use lilo_rm_core::{EventBatch, EventsPayload};
 use serde::Serialize;
@@ -25,7 +25,6 @@ pub async fn run(args: EventsArgs) -> Result<()> {
             output::emit(&args.output, &EventsPayload { events, cursor })?;
         }
         EventBatch::CursorExpired { oldest } => emit_cursor_expired(&args.output, oldest)?,
-        _ => bail!("unexpected events batch"),
     }
     Ok(())
 }

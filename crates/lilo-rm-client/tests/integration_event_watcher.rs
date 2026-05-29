@@ -182,7 +182,7 @@ async fn next_request(builder: lilo_rm_client::EventWatcherBuilder) -> EventsReq
 fn assert_event_count(batch: &EventBatch, expected: usize) {
     match batch {
         EventBatch::Events { events, .. } => assert_eq!(events.len(), expected),
-        other => panic!("expected events batch, got {other:?}"),
+        other @ EventBatch::CursorExpired { .. } => panic!("expected events batch, got {other:?}"),
     }
 }
 

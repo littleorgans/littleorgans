@@ -21,7 +21,7 @@ async fn session_id_conflict_includes_terminal_lifecycle() {
         .expect("preflight")
         .expect("conflict");
 
-    assert_conflict(response, SpawnConflictKind::SessionId, session_id);
+    assert_conflict(&response, SpawnConflictKind::SessionId, session_id);
 }
 
 #[tokio::test]
@@ -36,7 +36,7 @@ async fn tmux_occupant_conflict_is_typed_without_force() {
         .expect("preflight")
         .expect("conflict");
 
-    assert_conflict(response, SpawnConflictKind::TmuxPaneOccupancy, occupant);
+    assert_conflict(&response, SpawnConflictKind::TmuxPaneOccupancy, occupant);
 }
 
 #[tokio::test]
