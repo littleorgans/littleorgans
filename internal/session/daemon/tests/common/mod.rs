@@ -67,10 +67,15 @@ impl TestDaemon {
             .or_panic("runtime service builds"),
         );
         let runtime_socket_path = paths.socket_path();
-        let driver = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
+        let runtime_port = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
-        let state = DaemonState::new(store, driver, Arc::new(identity), Arc::clone(&runtime))
-            .with_rtmd_socket_path(runtime_socket_path);
+        let state = DaemonState::new(
+            store,
+            runtime_port,
+            Arc::new(identity),
+            Arc::clone(&runtime),
+        )
+        .with_rtmd_socket_path(runtime_socket_path);
         Self {
             state,
             audit_path,

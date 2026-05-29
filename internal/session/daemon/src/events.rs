@@ -147,7 +147,7 @@ mod tests {
     use lilo_session_core::{
         Label, Namespace, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
-    use lilo_session_driver::RtmdDriver;
+    use lilo_session_driver::InProcessRuntime;
     use lilo_session_store::SqliteStore;
     use lilo_wire::LilodRpc;
     use tokio::io::BufReader;
@@ -267,18 +267,14 @@ mod tests {
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves"),
-                db,
+                db.clone(),
             ))
             .await
             .or_panic("runtime service builds"),
         );
+        let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
         std::mem::forget(dir);
-        DaemonState::new(
-            store,
-            Arc::new(RtmdDriver::new(paths.socket_path())),
-            Arc::new(identity),
-            runtime,
-        )
+        DaemonState::new(store, runtime_port, Arc::new(identity), runtime)
     }
 
     async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {

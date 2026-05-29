@@ -1359,8 +1359,13 @@ dependencies = [
 name = "lilo-session-driver"
 version = "0.8.0"
 dependencies = [
+ "chrono",
+ "lilo-db",
+ "lilo-paths",
  "lilo-rm-client",
  "lilo-rm-core",
+ "lilo-runtime-daemon",
+ "lilo-runtime-store",
  "lilo-session-core",
  "lilo-wire",
  "tempfile",

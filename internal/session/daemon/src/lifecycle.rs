@@ -37,7 +37,7 @@ impl Drop for LifecycleTask {
 
 pub async fn refresh_exits(state: &DaemonState) -> Result<()> {
     for child_exit in state
-        .driver
+        .runtime
         .reap_exited()
         .await
         .context("failed to reap children")?

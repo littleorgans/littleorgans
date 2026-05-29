@@ -72,6 +72,8 @@ pub enum DriverError {
     UnsupportedTarget(String),
     #[error("runtime capture failed: {0}")]
     CaptureFailed(String),
+    #[error("runtime domain failed: {0}")]
+    Runtime(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

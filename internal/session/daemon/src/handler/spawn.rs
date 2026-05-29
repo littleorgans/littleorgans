@@ -68,7 +68,7 @@ impl DaemonState {
 
         self.begin_spawn_intent(context, &request, &intent).await?;
         let payload = match self
-            .runtime
+            .runtime_service
             .handle_rpc(
                 context.principal.clone(),
                 RuntimeRpc::Spawn {
@@ -161,7 +161,7 @@ impl DaemonState {
             .context("failed to revalidate namespace before session commit")?
         {
             let kill_response = self
-                .runtime
+                .runtime_service
                 .handle_rpc(
                     Principal::Local(nix::unistd::getuid().as_raw()),
                     RuntimeRpc::Kill {
@@ -224,7 +224,7 @@ impl DaemonState {
         .await;
         finish_immediate_tx(&mut conn, result, "session spawn Tx B").await?;
 
-        self.runtime
+        self.runtime_service
             .append_event(event)
             .await
             .context("failed to append runtime event after session commit")?;
@@ -268,7 +268,7 @@ impl DaemonState {
 
     async fn reconcile_pending_spawn_intent(&self, intent: SessionSpawnIntent) -> Result<()> {
         let response = self
-            .runtime
+            .runtime_service
             .handle_rpc(
                 lilo_im_core::Principal::Local(nix::unistd::getuid().as_raw()),
                 RuntimeRpc::Status {

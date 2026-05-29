@@ -196,10 +196,10 @@ impl DaemonState {
             .await?;
         let to = recipient_id.to_string();
         let result = self
-            .driver
+            .runtime
             .nudge(&to, message)
             .await
-            .context("nudge driver failed")?;
+            .context("nudge runtime port failed")?;
         Ok(NudgeDelivery {
             to,
             delivered: result.delivered,

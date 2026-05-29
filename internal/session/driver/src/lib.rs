@@ -2,6 +2,8 @@
 
 mod conv;
 pub mod driver;
+mod in_process;
+mod port;
 pub mod rtmd;
 
 #[cfg(test)]
@@ -13,4 +15,6 @@ pub use driver::{
     CaptureResult, ChildExit, DriverError, DriverProbe, LaunchEnv, NudgeResult, SpawnLaunch,
     SpawnedProcess,
 };
+pub use in_process::InProcessRuntime;
+pub use port::{RuntimePort, wait_for_terminal};
 pub use rtmd::RtmdDriver;

@@ -1,36 +1,38 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
-    CaptureRequest, KillOutcome, KillRequest, NudgeFailureReason, NudgeOutcome, NudgeRequest,
-    RuntimeKind as RtmdRuntimeKind, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload,
+    CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeRequest,
     StatusFilter, ValidateTargetOutcome,
 };
-use tokio::time::{Instant, sleep};
+use lilo_session_core::RuntimeDoctorReport;
 use uuid::Uuid;
 
 use crate::conv::{
-    kill_outcome_label, lifecycle_to_probe, runtime_spawn_request, spawned_process,
-    terminal_child_exit,
+    capture_result, kill_outcome_label, lifecycle_to_probe, nudge_result, parse_runtime_signal,
+    parse_session_id, runtime_doctor_error, runtime_doctor_report, runtime_spawn_request,
+    spawned_process, status_session, terminal_child_exit,
 };
 use crate::driver::{
     CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnLaunch, SpawnedProcess,
 };
+use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
 #[derive(Clone, Debug)]
 pub struct RtmdDriver {
     client: RuntimeClient,
+    socket_path: PathBuf,
     terminal_sessions: Arc<Mutex<HashSet<Uuid>>>,
 }
 
 impl RtmdDriver {
     pub fn new(socket_path: PathBuf) -> Self {
         Self {
-            client: RuntimeClient::new(socket_path),
+            client: RuntimeClient::new(socket_path.clone()),
+            socket_path,
             terminal_sessions: Arc::new(Mutex::new(HashSet::new())),
         }
     }
@@ -74,15 +76,14 @@ impl RtmdDriver {
         scrollback_lines: Option<u32>,
     ) -> Result<CaptureResult, DriverError> {
         let session_id = parse_session_id(session_id)?;
-        Ok(CaptureResult {
-            response: self
-                .client
-                .capture(CaptureRequest {
-                    session_id,
-                    scrollback_lines,
-                })
-                .await?,
-        })
+        let response = self
+            .client
+            .capture(CaptureRequest {
+                session_id,
+                scrollback_lines,
+            })
+            .await?;
+        Ok(capture_result(response))
     }
 
     pub async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
@@ -127,8 +128,7 @@ impl RtmdDriver {
         grace: Duration,
     ) -> Result<Option<ChildExit>, DriverError> {
         let session_id = parse_session_id(session_id)?;
-        let signal = RuntimeSignal::from_str(signal)
-            .map_err(|_| DriverError::InvalidSignal(signal.to_string()))?;
+        let signal = parse_runtime_signal(signal)?;
         let outcome = self
             .client
             .kill(KillRequest {
@@ -140,7 +140,7 @@ impl RtmdDriver {
 
         let exit = match outcome {
             KillOutcome::Signalled | KillOutcome::AlreadyExited => {
-                self.wait_for_terminal(session_id, grace).await?
+                wait_for_terminal(self, session_id, grace).await?
             }
             _ => {
                 return Err(DriverError::UnknownRuntimeVariant {
@@ -166,6 +166,26 @@ impl RtmdDriver {
         Ok(nudge_result(&response.outcome))
     }
 
+    pub async fn status(&self, filter: StatusFilter) -> Result<Vec<Lifecycle>, DriverError> {
+        Ok(self.client.status(filter).await?.lifecycles)
+    }
+
+    pub async fn poll_events(&self, request: EventsRequest) -> Result<EventBatch, DriverError> {
+        Ok(self.client.events(request).await?)
+    }
+
+    pub async fn doctor(&self) -> Result<RuntimeDoctorReport, DriverError> {
+        let socket_path = Some(self.socket_path.display().to_string());
+        Ok(match self.client.doctor().await {
+            Ok(payload) => runtime_doctor_report(payload.doctor, socket_path),
+            Err(error) => runtime_doctor_error(
+                Some(error.code().as_str().to_string()),
+                error.to_string(),
+                socket_path,
+            ),
+        })
+    }
+
     pub fn terminate_all(&self) {}
 }
 
@@ -175,111 +195,67 @@ impl RtmdDriver {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
-
-    async fn wait_for_terminal(
-        &self,
-        session_id: Uuid,
-        grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError> {
-        let timeout = grace.max(Duration::from_secs(1));
-        let deadline = Instant::now() + timeout;
-        loop {
-            let payload = self.client.status(status_session(session_id)).await?;
-            let exit = payload
-                .lifecycles
-                .iter()
-                .find(|lifecycle| lifecycle.session_id == session_id)
-                .map(terminal_child_exit)
-                .transpose()?
-                .flatten();
-            if exit.is_some() || Instant::now() >= deadline {
-                return Ok(exit);
-            }
-            sleep(Duration::from_millis(100)).await;
-        }
-    }
-}
-
-fn parse_session_id(session_id: &str) -> Result<Uuid, DriverError> {
-    Uuid::parse_str(session_id).map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))
-}
-
-fn nudge_result(outcome: &NudgeOutcome) -> NudgeResult {
-    match outcome {
-        NudgeOutcome::Delivered => NudgeResult {
-            delivered: true,
-            message: "delivered".to_string(),
-        },
-        NudgeOutcome::Unsupported(NudgeFailureReason::HeadlessLifecycle) => NudgeResult {
-            delivered: false,
-            message: "headless runtime does not support nudges".to_string(),
-        },
-        NudgeOutcome::Failed(NudgeFailureReason::SessionEnded) => NudgeResult {
-            delivered: false,
-            message: "session ended before the nudge could land".to_string(),
-        },
-        NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead) => NudgeResult {
-            delivered: false,
-            message: "tmux pane is no longer available".to_string(),
-        },
-        NudgeOutcome::Unsupported(reason) => NudgeResult {
-            delivered: false,
-            message: format!("nudge unsupported ({})", reason.as_str()),
-        },
-        NudgeOutcome::Failed(reason) => NudgeResult {
-            delivered: false,
-            message: format!("nudge failed ({})", reason.as_str()),
-        },
-    }
-}
-
-fn status_session(session_id: Uuid) -> StatusFilter {
-    StatusFilter {
-        session_id: Some(session_id),
-        session_ids: Vec::new(),
-        updated_since: None,
-        runtime: None,
-        state: None,
-    }
 }
 
 fn spawn_error(error: ClientError) -> DriverError {
     match error {
-        ClientError::SpawnConflict(payload) => spawn_conflict(payload.as_ref()),
+        ClientError::SpawnConflict(payload) => crate::conv::spawn_conflict(payload.as_ref()),
         other => DriverError::Client(other),
     }
 }
 
-fn spawn_conflict(payload: &SpawnConflictPayload) -> DriverError {
-    DriverError::SpawnConflict {
-        kind: payload.kind,
-        message: format_spawn_conflict(payload),
+impl RuntimePort for RtmdDriver {
+    fn spawn<'a>(
+        &'a self,
+        session_id: &'a str,
+        launch: &'a SpawnLaunch,
+    ) -> RuntimePortFuture<'a, SpawnedProcess> {
+        Box::pin(async move { RtmdDriver::spawn(self, session_id, launch).await })
     }
-}
 
-fn format_spawn_conflict(payload: &SpawnConflictPayload) -> String {
-    let lifecycle = &payload.lifecycle;
-    let runtime: &str = match &lifecycle.runtime {
-        RtmdRuntimeKind::Claude => "claude",
-        RtmdRuntimeKind::Codex => "codex",
-        RtmdRuntimeKind::Other(name) => name.as_str(),
-    };
-    let session_id = lifecycle.session_id;
-    let pid = lifecycle
-        .runtime_pid
-        .map(|pid| format!(" (pid {pid})"))
-        .unwrap_or_default();
-    match payload.kind {
-        SpawnConflictKind::TmuxPaneOccupancy => {
-            let pane = lifecycle
-                .tmux_pane
-                .as_ref()
-                .map_or_else(|| "<unknown>".to_string(), ToString::to_string);
-            format!("tmux pane {pane} is already running {runtime} session {session_id}{pid}")
-        }
-        SpawnConflictKind::SessionId => {
-            format!("session {session_id} is already running {runtime}{pid}")
-        }
+    fn reap_exited(&self) -> RuntimePortFuture<'_, Vec<ChildExit>> {
+        Box::pin(async move { RtmdDriver::reap_exited(self).await })
+    }
+
+    fn capture<'a>(
+        &'a self,
+        session_id: &'a str,
+        scrollback_lines: Option<u32>,
+    ) -> RuntimePortFuture<'a, CaptureResult> {
+        Box::pin(async move { RtmdDriver::capture(self, session_id, scrollback_lines).await })
+    }
+
+    fn terminate<'a>(
+        &'a self,
+        session_id: &'a str,
+        signal: &'a str,
+        grace: Duration,
+    ) -> RuntimePortFuture<'a, Option<ChildExit>> {
+        Box::pin(async move { RtmdDriver::terminate(self, session_id, signal, grace).await })
+    }
+
+    fn nudge<'a>(
+        &'a self,
+        session_id: &'a str,
+        content: &'a str,
+    ) -> RuntimePortFuture<'a, NudgeResult> {
+        Box::pin(async move { RtmdDriver::nudge(self, session_id, content).await })
+    }
+
+    fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>> {
+        Box::pin(async move { RtmdDriver::status(self, filter).await })
+    }
+
+    fn poll_events(&self, request: EventsRequest) -> RuntimePortFuture<'_, EventBatch> {
+        Box::pin(async move { RtmdDriver::poll_events(self, request).await })
+    }
+
+    fn doctor(&self) -> RuntimePortFuture<'_, RuntimeDoctorReport> {
+        Box::pin(async move { RtmdDriver::doctor(self).await })
+    }
+
+    fn terminate_all(&self) {
+        RtmdDriver::terminate_all(self);
     }
 }
 
@@ -287,7 +263,10 @@ fn format_spawn_conflict(payload: &SpawnConflictPayload) -> String {
 mod tests {
     use super::*;
     use crate::test_support::OrPanic as _;
-    use lilo_rm_core::{IsolationPolicy, Lifecycle, LifecycleState, TmuxAddress};
+    use lilo_rm_core::{
+        IsolationPolicy, Lifecycle, LifecycleState, RuntimeKind as RtmdRuntimeKind,
+        SpawnConflictKind, SpawnConflictPayload, TmuxAddress,
+    };
 
     fn lifecycle(tmux_pane: Option<TmuxAddress>) -> Lifecycle {
         Lifecycle {
@@ -309,7 +288,7 @@ mod tests {
             kind: SpawnConflictKind::TmuxPaneOccupancy,
             lifecycle: lifecycle(Some("1:3.1".parse().or_panic("pane parses"))),
         };
-        let message = format_spawn_conflict(&payload);
+        let message = crate::conv::spawn_conflict(&payload).to_string();
         assert_eq!(
             message,
             "tmux pane 1:3.1 is already running claude session 00000000-0000-0000-0000-000000000000 (pid 29032)"
@@ -323,7 +302,7 @@ mod tests {
             kind: SpawnConflictKind::SessionId,
             lifecycle: lifecycle(None),
         };
-        let message = format_spawn_conflict(&payload);
+        let message = crate::conv::spawn_conflict(&payload).to_string();
         assert_eq!(
             message,
             "session 00000000-0000-0000-0000-000000000000 is already running claude (pid 29032)"

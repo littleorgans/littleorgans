@@ -7,7 +7,7 @@ use lilo_im_store::SqliteAuditSink;
 use lilo_paths::{DaemonEndpoint, LiloPaths};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{RpcResponse, SessionRpc};
-use lilo_session_driver::RtmdDriver;
+use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SqliteStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -33,7 +33,6 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
 
     let store = SqliteStore::open(&db);
     let socket_path = paths.socket_path();
-    let driver = RtmdDriver::new(socket_path.clone());
     let runtime = Arc::new(
         RuntimeService::build(RuntimeServiceContext::new(
             DaemonConfig::from_lilo_paths(&paths)?,
@@ -42,12 +41,13 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
         .await
         .context("failed to build runtime service")?,
     );
+    let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
     let identity = IdentityClient::new(
         SqliteAuditSink::with_pool(db.identity_pool().clone()),
         nix::unistd::getuid().as_raw(),
     );
     let state = Arc::new(
-        DaemonState::new(store, Arc::new(driver), Arc::new(identity), runtime)
+        DaemonState::new(store, Arc::new(runtime_port), Arc::new(identity), runtime)
             .with_rtmd_socket_path(socket_path.clone()),
     );
     crate::reconcile::reconcile_once(&state)
@@ -59,7 +59,7 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
     let result = serve(listener, &state).await;
     drop(events);
     drop(lifecycle);
-    state.driver.terminate_all();
+    state.runtime.terminate_all();
     cleanup_paths(&paths, &endpoint);
     result
 }
