@@ -27,6 +27,8 @@ mod service;
 pub mod shim_socket;
 pub mod socket;
 mod spawn_preflight;
+#[cfg(test)]
+mod test_support;
 pub(crate) mod version;
 
 pub use api::SpawnOutcome;

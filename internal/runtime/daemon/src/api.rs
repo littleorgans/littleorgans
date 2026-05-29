@@ -146,11 +146,10 @@ pub(crate) async fn doctor_domain(state: Arc<ServerState>) -> Result<DoctorRespo
 #[cfg(test)]
 mod tests {
     use super::SpawnOutcome;
-    use crate::{DaemonConfig, ReconcileConfig, RuntimeService, RuntimeServiceContext};
+    use crate::test_support::RuntimeServiceFixture as ApiFixture;
+    use crate::{ReconcileConfig, RuntimeService};
     use chrono::Utc;
-    use lilo_db::LiloDb;
     use lilo_im_core::Principal;
-    use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         CaptureError, CaptureRequest, EventBatch, EventsRequest, HeadlessSpawnTarget,
         IsolationPolicy, KillByPidRequest, KillOutcome, KillRequest, Lifecycle, LifecycleState,
@@ -158,8 +157,6 @@ mod tests {
         RuntimeRpc, RuntimeSignal, ShimReady, SpawnConflictKind, SpawnConflictPayload,
         SpawnRequest, SpawnTarget, SpawnedPayload, StatusFilter, StatusRequest,
     };
-    use lilo_runtime_store::StoreConfig;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
     use std::process::Command;
     use std::sync::Arc;
@@ -583,50 +580,6 @@ mod tests {
             target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
             force: false,
             shell_resume: None,
-        }
-    }
-
-    fn install_fake_shim(path: &Path) {
-        std::fs::write(path, "#!/bin/sh\nexit 0\n").expect("fake shim");
-        let mut permissions = std::fs::metadata(path)
-            .expect("fake shim metadata")
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(path, permissions).expect("fake shim permissions");
-    }
-
-    struct ApiFixture {
-        _dir: tempfile::TempDir,
-        config: DaemonConfig,
-        db: LiloDb,
-    }
-
-    impl ApiFixture {
-        async fn new(reconcile: ReconcileConfig) -> Self {
-            let dir = tempfile::tempdir().expect("tempdir");
-            let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-            let config = DaemonConfig {
-                endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
-                shim_path: dir.path().join("shim"),
-                log_root: paths.logs_root(),
-                store: StoreConfig {
-                    db_path: paths.db_path(),
-                },
-                reconcile,
-                docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
-            };
-            install_fake_shim(&config.shim_path);
-            let db = LiloDb::open(&paths).await.expect("db");
-
-            Self {
-                _dir: dir,
-                config,
-                db,
-            }
-        }
-
-        fn context(&self) -> RuntimeServiceContext {
-            RuntimeServiceContext::new(self.config.clone(), self.db.clone())
         }
     }
 }

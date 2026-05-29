@@ -121,11 +121,9 @@ impl Drop for RuntimeService {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeService, RuntimeServiceContext};
-    use crate::{DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig};
-    use lilo_db::LiloDb;
-    use lilo_paths::{LiloHome, LiloPaths};
-    use lilo_runtime_store::StoreConfig;
+    use super::RuntimeService;
+    use crate::ReconcileConfig;
+    use crate::test_support::RuntimeServiceFixture as ServiceFixture;
     use std::time::Duration;
 
     #[tokio::test]
@@ -160,39 +158,5 @@ mod tests {
             .expect("shutdown succeeds");
         service.shutdown().await.expect("second shutdown succeeds");
         fixture.db.close().await;
-    }
-
-    struct ServiceFixture {
-        _dir: tempfile::TempDir,
-        config: DaemonConfig,
-        db: LiloDb,
-    }
-
-    impl ServiceFixture {
-        async fn new(reconcile: ReconcileConfig) -> Self {
-            let dir = tempfile::tempdir().expect("tempdir");
-            let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-            let config = DaemonConfig {
-                endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
-                shim_path: dir.path().join("shim"),
-                log_root: paths.logs_root(),
-                store: StoreConfig {
-                    db_path: paths.db_path(),
-                },
-                reconcile,
-                docker_preflight: DockerPreflightConfig::default(),
-            };
-            let db = LiloDb::open(&paths).await.expect("db");
-
-            Self {
-                _dir: dir,
-                config,
-                db,
-            }
-        }
-
-        fn context(&self) -> RuntimeServiceContext {
-            RuntimeServiceContext::new(self.config.clone(), self.db.clone())
-        }
     }
 }
