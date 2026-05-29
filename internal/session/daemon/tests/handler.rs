@@ -12,6 +12,8 @@ mod logs_doctor;
 mod spawn_launch;
 #[path = "handler/spawn_namespace.rs"]
 mod spawn_namespace;
+#[path = "handler/spawn_recovery.rs"]
+mod spawn_recovery;
 
 #[allow(unused_imports)]
 pub(crate) use agent_config::*;
@@ -23,3 +25,5 @@ pub(crate) use logs_doctor::*;
 pub(crate) use spawn_launch::*;
 #[allow(unused_imports)]
 pub(crate) use spawn_namespace::*;
+#[allow(unused_imports)]
+pub(crate) use spawn_recovery::*;
