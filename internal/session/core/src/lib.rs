@@ -29,8 +29,9 @@ pub use mcp::{
 pub use paths::{DaemonEndpoint, LiloPathError, LiloPaths};
 pub use proto::{
     CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest, DeleteResponse, DoctorFinding,
-    DoctorRequest, DoctorResponse, LabelRequest, LabelResponse, ListRequest, ListResponse,
-    LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse, MailReadRequest,
+    DoctorRequest, DoctorResponse, IdentityAuditRequest, IdentityAuditResponse,
+    IdentityWhoamiRequest, IdentityWhoamiResponse, LabelRequest, LabelResponse, ListRequest,
+    ListResponse, LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse, MailReadRequest,
     MailReadResponse, MailSendRequest, MailSendResponse, MailStopCheckRequest,
     MailStopCheckResponse, MailUnreadCount, McpBridgeRequest, McpBridgeResponse,
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceDeleteRequest,

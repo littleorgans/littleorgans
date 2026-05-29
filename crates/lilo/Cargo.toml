@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 lilo-runtime-app.workspace = true
+lilo-im-core.workspace = true
 tokio.workspace = true
 nix.workspace = true
 lilo-session-daemon.workspace = true

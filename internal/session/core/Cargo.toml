@@ -17,6 +17,7 @@ path = "src/lib.rs"
 chrono.workspace = true
 indexmap.workspace = true
 lilo-paths.workspace = true
+lilo-im-core.workspace = true
 lilo-rm-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true

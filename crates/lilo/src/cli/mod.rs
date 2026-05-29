@@ -2,17 +2,17 @@ pub mod daemon;
 pub mod doctor;
 pub mod generated_help;
 pub mod generated_schema;
+pub mod identity;
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
 use lilo_runtime_app::cli as runtime_cli;
 use lilo_session_app::cli::{self as session_cli, cli_def as session_cli_def};
 
-use self::{daemon::DaemonCli, doctor::DoctorCommand};
+use self::{daemon::DaemonCli, doctor::DoctorCommand, identity::IdentityCommand};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -64,7 +64,7 @@ impl Cli {
             Command::RuntimeShim(args) => lilo_runtime_app::cli::shim::run(args)
                 .await
                 .map_err(Diagnostic::from),
-            Command::Identity(_) => Err(Diagnostic::domain("identity is not yet implemented")),
+            Command::Identity(command) => command.run(self.output).await.map_err(Diagnostic::from),
         }
     }
 }
@@ -157,7 +157,7 @@ define_commands!(
         next_help_heading = "Substrate operator commands",
         about = generated_help::IDENTITY_ABOUT
     )]
-    Identity(PlaceholderArgs) => "identity",
+    Identity(IdentityCommand) => "identity",
     #[command(next_help_heading = "Diagnostics", about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
     #[command(next_help_heading = "Daemon lifecycle", about = generated_help::DAEMON_ABOUT)]
@@ -165,12 +165,6 @@ define_commands!(
     #[command(hide = true)]
     RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__runtime-shim",
 );
-
-#[derive(Debug, Args)]
-pub struct PlaceholderArgs {
-    #[arg(num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    pub args: Vec<OsString>,
-}
 
 #[cfg(test)]
 mod tests {
@@ -243,15 +237,14 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn placeholder_commands_accept_future_arguments() {
-        let cli = Cli::try_parse_from(["lilo", "identity", "whoami"])
-            .expect("parse future identity args");
+    #[test]
+    fn identity_namespace_has_w4_subcommands() {
+        let cli =
+            Cli::try_parse_from(["lilo", "identity", "whoami"]).expect("parse identity whoami");
+        assert_eq!(cli.output(), Output::Human);
 
-        let error = cli.run().await.expect_err("identity is not implemented");
-
-        assert_eq!(error.exit_code, lilo_common::exit_codes::DOMAIN);
-        assert!(error.message.contains("identity is not yet implemented"));
+        Cli::try_parse_from(["lilo", "identity", "audit", "--limit", "10"])
+            .expect("parse identity audit");
     }
 
     #[test]

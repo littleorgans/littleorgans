@@ -89,14 +89,25 @@ User verbs are kubectl-shaped: `lilo run`, `lilo create session`,
 Operator namespaces are explicit substrate access: `lilo runtime ...`,
 `lilo session ...`, and `lilo identity ...`.
 
+Identity operator verbs are `lilo identity whoami` and `lilo identity audit`.
+They are read-only, identity-gated, and routed through `lilod`.
+
 `lilo run` and `lilo create session` are session-backed paths. Raw
 `lilo runtime spawn` is diagnostic runtime access, remains identity-gated, and
 does not create a `session_record` or a `session_spawn_intents` row. It appears
 only in runtime status and events, never in `lilo get session`.
 
+Daemon lifecycle commands are `lilo daemon start`, `lilo daemon stop`, and
+`lilo daemon status`. Plain status is a pure query. Readiness is explicit:
+`lilo daemon status --wait[=timeout]` blocks until `lilod` accepts socket
+connections or the timeout expires.
+
 `lilo doctor` stays top-level and aggregates substrate health. Do not add
 per-substrate `doctor` commands unless a later locked decision changes that
 surface.
+
+`lilo __runtime-shim` is hidden runtime plumbing. It must remain outside public
+help and docs except where the hidden contract is being tested.
 
 ## Data and environment
 

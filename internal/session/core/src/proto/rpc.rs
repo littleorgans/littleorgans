@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     CaptureRequest, CaptureResponse, DeleteRequest, DeleteResponse, DoctorRequest, DoctorResponse,
+    IdentityAuditRequest, IdentityAuditResponse, IdentityWhoamiRequest, IdentityWhoamiResponse,
     LabelRequest, LabelResponse, ListRequest, ListResponse, LogsRequest, LogsResponse,
     MailCheckRequest, MailCheckResponse, MailReadRequest, MailReadResponse, MailSendRequest,
     MailSendResponse, MailStopCheckRequest, MailStopCheckResponse, McpBridgeRequest,
@@ -32,6 +33,8 @@ pub enum SessionRpc {
     Doctor { request: DoctorRequest },
     Wait { request: WaitRequest },
     McpBridge { request: McpBridgeRequest },
+    IdentityWhoami { request: IdentityWhoamiRequest },
+    IdentityAudit { request: IdentityAuditRequest },
     Shutdown,
 }
 
@@ -56,6 +59,8 @@ pub enum RpcResponse {
     Doctor { response: DoctorResponse },
     Wait { response: WaitResponse },
     McpBridge { response: McpBridgeResponse },
+    IdentityWhoami { response: IdentityWhoamiResponse },
+    IdentityAudit { response: IdentityAuditResponse },
     Shutdown { response: ShutdownResponse },
     Error { message: String },
 }
@@ -81,6 +86,8 @@ impl RpcResponse {
             RpcResponse::Doctor { .. } => "Doctor",
             RpcResponse::Wait { .. } => "Wait",
             RpcResponse::McpBridge { .. } => "McpBridge",
+            RpcResponse::IdentityWhoami { .. } => "IdentityWhoami",
+            RpcResponse::IdentityAudit { .. } => "IdentityAudit",
             RpcResponse::Shutdown { .. } => "Shutdown",
             RpcResponse::Error { .. } => "Error",
         }

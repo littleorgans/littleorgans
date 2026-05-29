@@ -1,8 +1,12 @@
 use lilo_rm_core::{IsolationPolicy, MountSpec};
 
-use super::{DeleteRequest, MailSendRequest, NudgeRequest, SessionRpc, SpawnRequest};
+use super::{
+    DeleteRequest, IdentityAuditRequest, IdentityWhoamiResponse, MailSendRequest, NudgeRequest,
+    RpcResponse, SessionRpc, SpawnRequest,
+};
 use crate::test_support::OrPanic as _;
 use crate::{RuntimeKind, Selector};
+use lilo_im_core::{Action, Principal};
 
 #[test]
 fn spawn_request_round_trips_as_tagged_json() {
@@ -131,6 +135,44 @@ fn nudge_request_round_trips_as_tagged_json() {
     };
 
     assert_rpc_round_trip(&request);
+}
+
+#[test]
+fn identity_audit_request_round_trips_as_tagged_json() {
+    let request = SessionRpc::IdentityAudit {
+        request: IdentityAuditRequest {
+            principal: Some(Principal::Local(501)),
+            action: Some(Action::Read),
+            since: None,
+            limit: Some(25),
+        },
+    };
+
+    assert_rpc_round_trip(&request);
+}
+
+#[test]
+fn identity_whoami_response_has_stable_json_shape() {
+    let response = RpcResponse::IdentityWhoami {
+        response: IdentityWhoamiResponse {
+            principal: Principal::Local(501),
+        },
+    };
+
+    let value = serde_json::to_value(response).or_panic("serializes response");
+
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "type": "identity_whoami",
+            "response": {
+                "principal": {
+                    "kind": "Local",
+                    "uid": 501
+                }
+            }
+        })
+    );
 }
 
 fn assert_rpc_round_trip(request: &SessionRpc) {

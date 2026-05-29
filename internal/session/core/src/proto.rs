@@ -1,5 +1,6 @@
 mod bridge;
 mod doctor;
+mod identity;
 mod messaging;
 mod namespace;
 mod rpc;
@@ -12,6 +13,7 @@ mod tests;
 
 pub use bridge::*;
 pub use doctor::*;
+pub use identity::*;
 pub use messaging::*;
 pub use namespace::*;
 pub use rpc::*;

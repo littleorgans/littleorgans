@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,6 +31,42 @@ pub async fn run(args: ShimArgs) -> Result<()> {
     tokio::task::spawn_blocking(move || run_for_session_blocking(args.session_id))
         .await
         .context("shim task join failed")?
+}
+
+pub fn runtime_shim_session_id_from_env() -> Result<Option<Uuid>> {
+    let mut args = std::env::args_os();
+    let _bin = args.next();
+    runtime_shim_session_id_from_args(args)
+}
+
+pub fn runtime_shim_session_id_from_args<I>(args: I) -> Result<Option<Uuid>>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    let mut args = args.into_iter();
+    if args.next().as_deref() != Some(OsStr::new("__runtime-shim")) {
+        return Ok(None);
+    }
+
+    let flag = args
+        .next()
+        .context("__runtime-shim requires --session-id")?;
+    if flag != "--session-id" {
+        bail!(
+            "__runtime-shim expects --session-id, got {}",
+            flag.to_string_lossy()
+        );
+    }
+    let session_id = args
+        .next()
+        .context("__runtime-shim requires a session id")?
+        .into_string()
+        .map_err(|value| {
+            anyhow::anyhow!("invalid unicode session id: {}", value.to_string_lossy())
+        })?
+        .parse()
+        .context("invalid shim session id")?;
+    Ok(Some(session_id))
 }
 
 pub fn run_for_session_blocking(session_id: Uuid) -> Result<()> {
@@ -226,6 +263,7 @@ fn runtime_exit(status: ExitStatus) -> RuntimeExit {
 mod tests {
     use super::*;
     use lilo_rm_core::LaunchEnv;
+    use std::ffi::OsString;
     use std::path::PathBuf;
 
     // Spawn a child that prints "ready" then blocks on `read` (held-open stdin
@@ -351,5 +389,27 @@ mod tests {
             !stdout.contains("PATH="),
             "shell resume inherited caller env:\n{stdout}"
         );
+    }
+
+    #[test]
+    fn runtime_shim_session_id_parser_matches_namespaced_token() {
+        let session_id = Uuid::now_v7();
+
+        let parsed = runtime_shim_session_id_from_args(vec![
+            OsString::from("__runtime-shim"),
+            OsString::from("--session-id"),
+            OsString::from(session_id.to_string()),
+        ])
+        .expect("parse shim args");
+
+        assert_eq!(parsed, Some(session_id));
+    }
+
+    #[test]
+    fn runtime_shim_session_id_parser_ignores_regular_cli_args() {
+        let parsed =
+            runtime_shim_session_id_from_args(vec![OsString::from("spawn")]).expect("parse args");
+
+        assert_eq!(parsed, None);
     }
 }

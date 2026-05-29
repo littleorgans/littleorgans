@@ -2,6 +2,8 @@ mod common;
 
 #[path = "handler/agent_config.rs"]
 mod agent_config;
+#[path = "handler/identity.rs"]
+mod identity;
 #[path = "handler/lifecycle.rs"]
 mod lifecycle;
 #[path = "handler/logs_doctor.rs"]
@@ -13,6 +15,8 @@ mod spawn_namespace;
 
 #[allow(unused_imports)]
 pub(crate) use agent_config::*;
+#[allow(unused_imports)]
+pub(crate) use identity::*;
 #[allow(unused_imports)]
 pub(crate) use lifecycle::*;
 #[allow(unused_imports)]

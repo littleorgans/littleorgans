@@ -1,4 +1,5 @@
 mod dispatch;
+mod identity;
 mod messaging;
 mod sessions;
 mod spawn;

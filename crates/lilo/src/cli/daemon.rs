@@ -2,7 +2,7 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{DaemonEndpoint, LiloPaths};
 use lilo_session_core::SessionRpc;
@@ -22,22 +22,36 @@ pub struct DaemonCli {
 enum DaemonAction {
     Start,
     Stop,
-    Status,
+    Status(StatusArgs),
+}
+
+#[derive(Debug, Args)]
+struct StatusArgs {
+    #[arg(long, num_args = 0..=1, default_missing_value = "30", value_name = "SECONDS")]
+    wait: Option<u64>,
 }
 
 impl DaemonCli {
     pub async fn run(&self, output: Output) -> Result<(), Diagnostic> {
-        match self.action {
+        match &self.action {
             DaemonAction::Start => lilo_session_app::compose::run_from_env()
                 .await
                 .map_err(Diagnostic::from),
             DaemonAction::Stop => stop(&paths()?, output).await.map_err(Diagnostic::from),
-            DaemonAction::Status => {
-                print_status(output, &status(&paths()?));
-                Ok(())
-            }
+            DaemonAction::Status(args) => status_command(&paths()?, args, output)
+                .await
+                .map_err(Diagnostic::from),
         }
     }
+}
+
+async fn status_command(paths: &LiloPaths, args: &StatusArgs, output: Output) -> Result<()> {
+    let status = match args.wait {
+        Some(seconds) => wait_for_ready(paths, Duration::from_secs(seconds)).await?,
+        None => status(paths),
+    };
+    print_status(output, &status);
+    Ok(())
 }
 
 async fn stop(paths: &LiloPaths, output: Output) -> Result<()> {
@@ -85,6 +99,28 @@ fn status(paths: &LiloPaths) -> DaemonStatus {
         running,
         socket_exists: paths.socket_path().exists(),
     }
+}
+
+async fn wait_for_ready(paths: &LiloPaths, timeout: Duration) -> Result<DaemonStatus> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let current = status(paths);
+        if daemon_ready(paths, &current).await {
+            return Ok(current);
+        }
+        if Instant::now() >= deadline {
+            bail!("daemon was not ready within {} seconds", timeout.as_secs());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+async fn daemon_ready(paths: &LiloPaths, status: &DaemonStatus) -> bool {
+    status.running
+        && status.socket_exists
+        && tokio::net::UnixStream::connect(paths.socket_path())
+            .await
+            .is_ok()
 }
 
 fn read_pid(paths: &LiloPaths) -> Option<u32> {

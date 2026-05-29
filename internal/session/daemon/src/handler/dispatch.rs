@@ -78,6 +78,12 @@ impl DaemonState {
             }
             SessionRpc::Doctor { request } => response(self.doctor(&context, request).await, false),
             SessionRpc::Wait { request } => response(self.wait(request).await, false),
+            SessionRpc::IdentityWhoami { request } => {
+                response(self.identity_whoami(&context, request).await, false)
+            }
+            SessionRpc::IdentityAudit { request } => {
+                response(self.identity_audit(&context, request).await, false)
+            }
             SessionRpc::McpBridge { .. } => response(
                 Err(anyhow::anyhow!(
                     "nested MCP bridge requests are not supported"

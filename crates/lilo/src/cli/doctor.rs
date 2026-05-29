@@ -50,33 +50,36 @@ impl DoctorStatus {
     }
 
     fn render_human(&self) -> String {
-        let daemon_status = if self.daemon.reachable {
-            "reachable"
+        let daemon_status = self.daemon.status_label();
+        let warnings = if self.warnings.is_empty() {
+            "none".to_string()
         } else {
-            "unreachable"
+            self.warnings.join("; ")
         };
-        format!(
-            "lilo doctor\n\
-             daemon: {daemon_status} ({})\n\
-             db: {} ({})\n\
-             pragmas: journal_mode={} busy_timeout={} synchronous={}\n\
-             substrates: sessions_active={} runtimes_active={} audit_rows={}\n\
-             warnings: {}",
-            self.daemon.socket_path,
-            self.database.status,
-            self.database.path,
-            self.database.pragmas.journal_mode,
-            self.database.pragmas.busy_timeout,
-            self.database.pragmas.synchronous,
-            self.substrates.sessions.active,
-            self.substrates.runtimes.active,
-            self.substrates.identity.audit_rows,
-            if self.warnings.is_empty() {
-                "none"
-            } else {
-                "present"
-            }
-        )
+        [
+            "lilo doctor".to_string(),
+            "daemon".to_string(),
+            format!("  status: {daemon_status}"),
+            format!("  socket: {}", self.daemon.socket_path),
+            "database".to_string(),
+            format!("  status: {}", self.database.status),
+            format!("  path: {}", self.database.path),
+            format!(
+                "  pragmas: journal_mode={} busy_timeout={} synchronous={}",
+                self.database.pragmas.journal_mode,
+                self.database.pragmas.busy_timeout,
+                self.database.pragmas.synchronous,
+            ),
+            "substrates".to_string(),
+            format!(
+                "  identity: audit_rows={}",
+                self.substrates.identity.audit_rows
+            ),
+            format!("  session: active={}", self.substrates.sessions.active),
+            format!("  runtime: active={}", self.substrates.runtimes.active),
+            format!("warnings: {warnings}"),
+        ]
+        .join("\n")
     }
 
     fn render_json(&self) -> Result<String, Diagnostic> {
@@ -100,6 +103,16 @@ impl DaemonHealth {
             socket_exists: socket_path.exists(),
             reachable: UnixStream::connect(&socket_path).await.is_ok(),
             socket_path: socket_path.display().to_string(),
+        }
+    }
+
+    fn status_label(&self) -> &'static str {
+        if self.reachable {
+            "reachable"
+        } else if self.socket_exists {
+            "socket-not-ready"
+        } else {
+            "not-running"
         }
     }
 }
@@ -273,5 +286,51 @@ mod tests {
         assert_eq!(status.substrates.runtimes.active, 0);
         assert_eq!(status.substrates.identity.audit_rows, 0);
         assert!(status.warnings.is_empty());
+    }
+
+    #[test]
+    fn human_output_reflects_unified_cli_surface() {
+        let status = DoctorStatus {
+            daemon: DaemonHealth {
+                socket_path: "/tmp/lilod.sock".to_string(),
+                socket_exists: true,
+                reachable: false,
+            },
+            database: DatabaseHealth {
+                path: "/tmp/lilo.db".to_string(),
+                status: "ok",
+                pragmas: DbPragmas {
+                    journal_mode: "wal".to_string(),
+                    busy_timeout: 5_000,
+                    synchronous: 1,
+                },
+                error: None,
+            },
+            substrates: SubstrateHealth {
+                identity: IdentityHealth { audit_rows: 3 },
+                sessions: SessionHealth { active: 2 },
+                runtimes: RuntimeHealth { active: 1 },
+            },
+            warnings: Vec::new(),
+        };
+
+        let expected = [
+            "lilo doctor",
+            "daemon",
+            "  status: socket-not-ready",
+            "  socket: /tmp/lilod.sock",
+            "database",
+            "  status: ok",
+            "  path: /tmp/lilo.db",
+            "  pragmas: journal_mode=wal busy_timeout=5000 synchronous=1",
+            "substrates",
+            "  identity: audit_rows=3",
+            "  session: active=2",
+            "  runtime: active=1",
+            "warnings: none",
+        ]
+        .join("\n");
+
+        assert_eq!(status.render_human(), expected);
     }
 }
