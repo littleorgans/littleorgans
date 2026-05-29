@@ -90,7 +90,6 @@ impl EventWatcher {
             EventBatch::CursorExpired { oldest } => {
                 self.cursor = Some(*oldest);
             }
-            _ => {}
         }
     }
 }

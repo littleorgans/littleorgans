@@ -182,10 +182,6 @@ async fn handle_rpc_result(
             let _ = state.record_shim_exit(exit).await?;
             Ok(RuntimeResponse::Ack)
         }
-        _ => Ok(RuntimeResponse::error(
-            lilo_rm_core::ErrorCode::ProtocolMismatch,
-            "unsupported runtime rpc",
-        )),
     }
 }
 
@@ -210,10 +206,6 @@ fn event_batch_response(batch: EventBatch) -> RuntimeResponse {
         EventBatch::CursorExpired { oldest } => {
             RuntimeResponse::CursorExpired(CursorExpiredPayload { oldest })
         }
-        _ => RuntimeResponse::error(
-            lilo_rm_core::ErrorCode::ProtocolMismatch,
-            "unsupported event batch variant",
-        ),
     }
 }
 

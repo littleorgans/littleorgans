@@ -78,7 +78,6 @@ impl From<StatusFilter> for StatusRequest {
 }
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
-#[non_exhaustive]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RuntimeRpc {
     Spawn {
@@ -224,7 +223,6 @@ pub struct ErrorPayload {
 }
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
-#[non_exhaustive]
 pub enum EventBatch {
     Events {
         events: Vec<RuntimeEvent>,
@@ -235,7 +233,6 @@ pub enum EventBatch {
 }
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
-#[non_exhaustive]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RuntimeResponse {
     Spawned(SpawnedPayload),
