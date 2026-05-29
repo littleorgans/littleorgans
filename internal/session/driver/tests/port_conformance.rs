@@ -8,6 +8,7 @@ use chrono::Utc;
 use common::OrPanic as _;
 use lilo_db::LiloDb;
 use lilo_paths::{LiloHome, LiloPaths};
+use lilo_port::ParityProof;
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureRequest, CaptureResponse, CursorExpiredPayload,
     DoctorPayload, EventBatch, EventsPayload, EventsRequest, HeadlessSpawnTarget, IsolationPolicy,
@@ -19,7 +20,7 @@ use lilo_rm_core::{
 use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig, RuntimeService, RuntimeServiceContext};
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::RuntimeKind as SessionRuntimeKind;
-use lilo_session_driver::{DriverError, InProcessRuntime, RuntimePort, SpawnLaunch};
+use lilo_session_driver::{InProcessRuntime, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::task::JoinHandle;
@@ -160,8 +161,71 @@ async fn runtime_ports_spawn_conflict_error_variant_matches() {
         .await
         .expect_err("socket spawn conflicts");
 
-    assert_spawn_conflict_eq(direct, via_socket);
+    assert_fault_parity(direct, via_socket);
     socket.server.await.or_panic("socket server exits");
+}
+
+#[tokio::test]
+async fn runtime_ports_invalid_session_id_fault_matches() {
+    let session_id = Uuid::now_v7();
+    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
+    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
+    let socket = unconnected_rtmd_driver(&socket_dir);
+
+    let direct = RuntimePort::nudge(&in_process.port, "not-a-uuid", "hello")
+        .await
+        .expect_err("in-process invalid session id faults");
+    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello")
+        .await
+        .expect_err("socket invalid session id faults");
+
+    assert_fault_parity(direct, via_socket);
+}
+
+#[tokio::test]
+async fn runtime_ports_invalid_signal_fault_matches() {
+    let session_id = Uuid::now_v7();
+    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
+    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
+    let socket = unconnected_rtmd_driver(&socket_dir);
+
+    let direct = RuntimePort::terminate(
+        &in_process.port,
+        &session_id.to_string(),
+        "not-a-signal",
+        Duration::from_secs(1),
+    )
+    .await
+    .expect_err("in-process invalid signal faults");
+    let via_socket = RuntimePort::terminate(
+        &socket,
+        &session_id.to_string(),
+        "not-a-signal",
+        Duration::from_secs(1),
+    )
+    .await
+    .expect_err("socket invalid signal faults");
+
+    assert_fault_parity(direct, via_socket);
+}
+
+#[tokio::test]
+async fn runtime_ports_invalid_target_fault_matches() {
+    let session_id = Uuid::now_v7();
+    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
+    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
+    let socket = unconnected_rtmd_driver(&socket_dir);
+    let mut launch = spawn_launch(in_process.dir.path().to_path_buf());
+    launch.target = "invalid-target".to_string();
+
+    let direct = RuntimePort::spawn(&in_process.port, &session_id.to_string(), &launch)
+        .await
+        .expect_err("in-process invalid target faults");
+    let via_socket = RuntimePort::spawn(&socket, &session_id.to_string(), &launch)
+        .await
+        .expect_err("socket invalid target faults");
+
+    assert_fault_parity(direct, via_socket);
 }
 
 #[tokio::test]
@@ -331,6 +395,10 @@ fn mock_rtmd_once(expected: RuntimeRpc, response: RuntimeResponse) -> SocketFixt
     SocketFixture { driver, server }
 }
 
+fn unconnected_rtmd_driver(dir: &tempfile::TempDir) -> lilo_session_driver::RtmdDriver {
+    lilo_session_driver::RtmdDriver::new(dir.path().join("rtmd.sock"))
+}
+
 fn event_batch_response(batch: EventBatch) -> RuntimeResponse {
     match batch {
         EventBatch::Events { events, cursor } => {
@@ -451,23 +519,24 @@ fn spawn_request(session_id: Uuid, launch: &SpawnLaunch) -> SpawnRequest {
     }
 }
 
-fn assert_spawn_conflict_eq(direct: DriverError, via_socket: DriverError) {
-    let DriverError::SpawnConflict {
-        kind: direct_kind,
-        message: direct_message,
-    } = direct
-    else {
-        panic!("expected in-process spawn conflict, got {direct:?}");
+// Separate arms are intentional. Each RuntimeFault variant keeps a compile tripwire.
+#[allow(clippy::match_same_arms)]
+fn assert_fault_parity(direct: RuntimeError, via_socket: RuntimeError) -> ParityProof {
+    let direct = runtime_fault("in-process", direct);
+    let via_socket = runtime_fault("socket", via_socket);
+    match &direct {
+        RuntimeFault::SpawnConflict { .. } => lilo_port::prove_eq(&direct, &via_socket),
+        RuntimeFault::InvalidSignal(_) => lilo_port::prove_eq(&direct, &via_socket),
+        RuntimeFault::InvalidSessionId(_) => lilo_port::prove_eq(&direct, &via_socket),
+        RuntimeFault::InvalidTarget(_) => lilo_port::prove_eq(&direct, &via_socket),
+    }
+}
+
+fn runtime_fault(adapter: &str, error: RuntimeError) -> RuntimeFault {
+    let RuntimeError::Fault(fault) = error else {
+        panic!("expected {adapter} runtime fault, got {error:?}");
     };
-    let DriverError::SpawnConflict {
-        kind: socket_kind,
-        message: socket_message,
-    } = via_socket
-    else {
-        panic!("expected socket spawn conflict, got {via_socket:?}");
-    };
-    assert_eq!(direct_kind, socket_kind);
-    assert_eq!(direct_message, socket_message);
+    fault
 }
 
 fn exited_lifecycle(session_id: Uuid) -> Lifecycle {

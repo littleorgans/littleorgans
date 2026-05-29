@@ -10,7 +10,7 @@ use lilo_rm_core::{
 };
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
-use lilo_session_driver::{DriverError, SpawnLaunch, runtime_spawn_request};
+use lilo_session_driver::{RuntimeError, RuntimeFault, SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
 use sqlx::{Sqlite, pool::PoolConnection};
 use uuid::Uuid;
@@ -368,9 +368,9 @@ fn running_event_from_lifecycle(lifecycle: &Lifecycle) -> Result<RuntimeEvent> {
     })
 }
 
-fn runtime_spawn_failure(error: &DriverError) -> String {
+fn runtime_spawn_failure(error: &RuntimeError) -> String {
     match error {
-        DriverError::SpawnConflict { kind, .. } => {
+        RuntimeError::Fault(RuntimeFault::SpawnConflict { kind, .. }) => {
             format!("spawn conflict: {kind:?}")
         }
         other => other.to_string(),

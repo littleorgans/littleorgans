@@ -1,4 +1,4 @@
-use lilo_rm_client::ClientError;
+use lilo_port::PortError;
 pub use lilo_rm_core::LaunchEnv;
 use lilo_rm_core::{
     CaptureResponse, IsolationPolicy, Lifecycle, MountSpec, ShellResume, SpawnConflictKind,
@@ -38,23 +38,12 @@ pub struct ChildExit {
     pub transcript_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Error)]
-pub enum DriverError {
+#[derive(Debug, PartialEq, Eq, Error)]
+pub enum RuntimeFault {
     #[error("unsupported signal: {0}")]
     InvalidSignal(String),
-    #[error(transparent)]
-    Client(#[from] ClientError),
     #[error("invalid runtime session id: {0}")]
     InvalidSessionId(String),
-    #[error("runtime session has no runtime pid: {0}")]
-    MissingRuntimePid(String),
-    #[error("unsupported driver operation {operation}; scheduled for {pass}")]
-    Unsupported {
-        operation: &'static str,
-        pass: &'static str,
-    },
-    #[error("unknown runtime variant: {variant}")]
-    UnknownRuntimeVariant { variant: String },
     #[error("{message}")]
     SpawnConflict {
         kind: SpawnConflictKind,
@@ -62,11 +51,9 @@ pub enum DriverError {
     },
     #[error("invalid runtime target: {0}")]
     InvalidTarget(String),
-    #[error("runtime capture failed: {0}")]
-    CaptureFailed(String),
-    #[error("runtime domain failed: {0}")]
-    Runtime(String),
 }
+
+pub type RuntimeError = PortError<RuntimeFault>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NudgeResult {

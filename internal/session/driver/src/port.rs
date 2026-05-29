@@ -9,11 +9,11 @@ use uuid::Uuid;
 
 use crate::conv::{status_session, terminal_child_exit};
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, NudgeResult, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
 };
 
 pub type RuntimePortFuture<'a, T> =
-    Pin<Box<dyn Future<Output = Result<T, DriverError>> + Send + 'a>>;
+    Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
 pub trait RuntimePort: Send + Sync {
     fn spawn<'a>(
@@ -56,7 +56,7 @@ pub async fn wait_for_terminal<P: RuntimePort + ?Sized>(
     port: &P,
     session_id: Uuid,
     grace: Duration,
-) -> Result<Option<ChildExit>, DriverError> {
+) -> Result<Option<ChildExit>, RuntimeError> {
     let timeout = grace.max(Duration::from_secs(1));
     let deadline = Instant::now() + timeout;
     loop {

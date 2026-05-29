@@ -16,7 +16,7 @@ use crate::conv::{
     terminal_child_exit,
 };
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, NudgeResult, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
 };
 use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
@@ -40,8 +40,8 @@ impl InProcessRuntime {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn domain_error(error: impl std::fmt::Display) -> DriverError {
-        DriverError::Runtime(error.to_string())
+    fn domain_error(error: impl std::fmt::Display) -> RuntimeError {
+        RuntimeError::local(error)
     }
 }
 
@@ -123,9 +123,10 @@ impl RuntimePort for InProcessRuntime {
                     wait_for_terminal(self, session_id, grace).await?
                 }
                 _ => {
-                    return Err(DriverError::UnknownRuntimeVariant {
-                        variant: kill_outcome_label(outcome),
-                    });
+                    return Err(RuntimeError::local(format!(
+                        "unknown runtime variant: {}",
+                        kill_outcome_label(outcome)
+                    )));
                 }
             };
             if exit.is_some() {

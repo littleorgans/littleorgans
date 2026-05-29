@@ -1370,6 +1370,7 @@ dependencies = [
  "chrono",
  "lilo-db",
  "lilo-paths",
+ "lilo-port",
  "lilo-rm-client",
  "lilo-rm-core",
  "lilo-runtime-daemon",

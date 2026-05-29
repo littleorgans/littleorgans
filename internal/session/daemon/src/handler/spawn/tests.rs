@@ -8,7 +8,8 @@ use lilo_rm_core::{
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{Namespace, RuntimeDoctorReport, RuntimeKind};
 use lilo_session_driver::{
-    CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimePort, SpawnedProcess,
+    CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimeFault,
+    RuntimePort, SpawnedProcess,
 };
 use lilo_session_store::SqliteStore;
 use std::future::Future;
@@ -19,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 type PortFuture<'a, T> =
-    Pin<Box<dyn Future<Output = std::result::Result<T, DriverError>> + Send + 'a>>;
+    Pin<Box<dyn Future<Output = std::result::Result<T, RuntimeError>> + Send + 'a>>;
 
 #[tokio::test]
 async fn namespace_deleted_recovery_kills_runtime_before_abort() {
@@ -278,8 +279,9 @@ impl RuntimePort for StaticStatusRuntimePort {
         _grace: Duration,
     ) -> PortFuture<'a, Option<ChildExit>> {
         Box::pin(async move {
-            let session_id_uuid = Uuid::parse_str(session_id)
-                .map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))?;
+            let session_id_uuid = Uuid::parse_str(session_id).map_err(|_| {
+                RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string()))
+            })?;
             self.terminated_session_ids
                 .lock()
                 .expect("terminated ids lock succeeds")
@@ -393,10 +395,9 @@ fn running_lifecycle(session_id: Uuid, runtime_pid: u32) -> Lifecycle {
 
 fn unsupported_port_call<T: Send + 'static>(operation: &'static str) -> PortFuture<'static, T> {
     Box::pin(async move {
-        Err(DriverError::Unsupported {
-            operation,
-            pass: "test",
-        })
+        Err(RuntimeError::local(format!(
+            "unsupported driver operation {operation}; scheduled for test"
+        )))
     })
 }
 

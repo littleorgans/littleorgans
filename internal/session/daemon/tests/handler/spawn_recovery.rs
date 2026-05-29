@@ -11,14 +11,15 @@ use lilo_rm_core::{
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, RuntimeDoctorReport, RuntimeKind, SessionRpc};
 use lilo_session_driver::{
-    CaptureResult, ChildExit, DriverError, NudgeResult, RuntimePort, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch,
+    SpawnedProcess,
 };
 use lilo_session_store::SqliteStore;
 use uuid::Uuid;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_request};
 
-type PortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, DriverError>> + Send + 'a>>;
+type PortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
 const TEST_RUNTIME_PID: u32 = 42_424;
 
@@ -148,7 +149,7 @@ impl FaultingRuntimePort {
         &self,
         session_id: &str,
         launch: &SpawnLaunch,
-    ) -> Result<SpawnedProcess, DriverError> {
+    ) -> Result<SpawnedProcess, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         *self
             .spawned_session_id
@@ -163,9 +164,9 @@ impl FaultingRuntimePort {
                     launch.isolation.clone(),
                 ))
             }
-            SpawnFault::FailRuntimeSpawn => Err(DriverError::Runtime(
-                "forced runtime spawn failure".to_string(),
-            )),
+            SpawnFault::FailRuntimeSpawn => {
+                Err(RuntimeError::local("forced runtime spawn failure"))
+            }
         }
     }
 }
@@ -233,15 +234,15 @@ impl RuntimePort for FaultingRuntimePort {
 
 fn unsupported<T: Send + 'static>(operation: &'static str) -> PortFuture<'static, T> {
     Box::pin(async move {
-        Err(DriverError::Unsupported {
-            operation,
-            pass: "WS5 test",
-        })
+        Err(RuntimeError::local(format!(
+            "unsupported driver operation {operation}; scheduled for WS5 test"
+        )))
     })
 }
 
-fn parse_session_id(session_id: &str) -> Result<Uuid, DriverError> {
-    Uuid::parse_str(session_id).map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))
+fn parse_session_id(session_id: &str) -> Result<Uuid, RuntimeError> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
 }
 
 fn spawned_process(
@@ -278,7 +279,7 @@ fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
 async fn install_tx_b_resolve_failure(
     store: &SqliteStore,
     session_id: Uuid,
-) -> Result<(), DriverError> {
+) -> Result<(), RuntimeError> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS ws5_forced_resolve_failures (
             session_id TEXT PRIMARY KEY NOT NULL
@@ -286,7 +287,7 @@ async fn install_tx_b_resolve_failure(
     )
     .execute(store.pool())
     .await
-    .map_err(|error| DriverError::Runtime(format!("failed to create Tx-B fault table: {error}")))?;
+    .map_err(|error| RuntimeError::local(format!("failed to create Tx-B fault table: {error}")))?;
     sqlx::query(
         "CREATE TRIGGER IF NOT EXISTS ws5_fail_spawn_intent_resolve
          BEFORE UPDATE OF status ON session_spawn_intents
@@ -304,13 +305,13 @@ async fn install_tx_b_resolve_failure(
     .execute(store.pool())
     .await
     .map_err(|error| {
-        DriverError::Runtime(format!("failed to create Tx-B fault trigger: {error}"))
+        RuntimeError::local(format!("failed to create Tx-B fault trigger: {error}"))
     })?;
     sqlx::query("INSERT INTO ws5_forced_resolve_failures (session_id) VALUES (?)")
         .bind(session_id.to_string())
         .execute(store.pool())
         .await
-        .map_err(|error| DriverError::Runtime(format!("failed to install Tx-B fault: {error}")))?;
+        .map_err(|error| RuntimeError::local(format!("failed to install Tx-B fault: {error}")))?;
     Ok(())
 }
 

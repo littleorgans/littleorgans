@@ -17,7 +17,7 @@ use crate::conv::{
     terminal_child_exit,
 };
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, NudgeResult, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
 };
 use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
@@ -47,7 +47,7 @@ impl RtmdDriver {
         &self,
         session_id: &str,
         launch: &SpawnLaunch,
-    ) -> Result<SpawnedProcess, DriverError> {
+    ) -> Result<SpawnedProcess, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         self.locked_terminal_sessions().remove(&session_id);
         let request = runtime_spawn_request(session_id, launch)?;
@@ -59,7 +59,7 @@ impl RtmdDriver {
         &self,
         session_id: &str,
         scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, DriverError> {
+    ) -> Result<CaptureResult, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         let response = self
             .client
@@ -67,12 +67,17 @@ impl RtmdDriver {
                 session_id,
                 scrollback_lines,
             })
-            .await?;
+            .await
+            .map_err(RuntimeError::wire)?;
         Ok(capture_result(response))
     }
 
-    pub async fn reap_exited(&self) -> Result<Vec<ChildExit>, DriverError> {
-        let payload = self.client.status(StatusFilter::empty()).await?;
+    pub async fn reap_exited(&self) -> Result<Vec<ChildExit>, RuntimeError> {
+        let payload = self
+            .client
+            .status(StatusFilter::empty())
+            .await
+            .map_err(RuntimeError::wire)?;
         let mut terminal_sessions = self.locked_terminal_sessions();
         let mut exits = Vec::new();
         for lifecycle in payload.lifecycles {
@@ -90,7 +95,7 @@ impl RtmdDriver {
         session_id: &str,
         signal: &str,
         grace: Duration,
-    ) -> Result<Option<ChildExit>, DriverError> {
+    ) -> Result<Option<ChildExit>, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         let signal = parse_runtime_signal(signal)?;
         let outcome = self
@@ -100,16 +105,18 @@ impl RtmdDriver {
                 signal,
                 grace_secs: grace.as_secs(),
             })
-            .await?;
+            .await
+            .map_err(RuntimeError::wire)?;
 
         let exit = match outcome {
             KillOutcome::Signalled | KillOutcome::AlreadyExited => {
                 wait_for_terminal(self, session_id, grace).await?
             }
             _ => {
-                return Err(DriverError::UnknownRuntimeVariant {
-                    variant: kill_outcome_label(outcome),
-                });
+                return Err(RuntimeError::local(format!(
+                    "unknown runtime variant: {}",
+                    kill_outcome_label(outcome)
+                )));
             }
         };
         if exit.is_some() {
@@ -118,7 +125,11 @@ impl RtmdDriver {
         Ok(exit)
     }
 
-    pub async fn nudge(&self, session_id: &str, content: &str) -> Result<NudgeResult, DriverError> {
+    pub async fn nudge(
+        &self,
+        session_id: &str,
+        content: &str,
+    ) -> Result<NudgeResult, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         let response = self
             .client
@@ -126,19 +137,28 @@ impl RtmdDriver {
                 session_id,
                 content: content.to_string(),
             })
-            .await?;
+            .await
+            .map_err(RuntimeError::wire)?;
         Ok(nudge_result(&response.outcome))
     }
 
-    pub async fn status(&self, filter: StatusFilter) -> Result<Vec<Lifecycle>, DriverError> {
-        Ok(self.client.status(filter).await?.lifecycles)
+    pub async fn status(&self, filter: StatusFilter) -> Result<Vec<Lifecycle>, RuntimeError> {
+        Ok(self
+            .client
+            .status(filter)
+            .await
+            .map_err(RuntimeError::wire)?
+            .lifecycles)
     }
 
-    pub async fn poll_events(&self, request: EventsRequest) -> Result<EventBatch, DriverError> {
-        Ok(self.client.events(request).await?)
+    pub async fn poll_events(&self, request: EventsRequest) -> Result<EventBatch, RuntimeError> {
+        self.client
+            .events(request)
+            .await
+            .map_err(RuntimeError::wire)
     }
 
-    pub async fn doctor(&self) -> Result<RuntimeDoctorReport, DriverError> {
+    pub async fn doctor(&self) -> Result<RuntimeDoctorReport, RuntimeError> {
         let socket_path = Some(self.socket_path.display().to_string());
         Ok(match self.client.doctor().await {
             Ok(payload) => runtime_doctor_report(payload.doctor, socket_path),
@@ -159,10 +179,10 @@ impl RtmdDriver {
     }
 }
 
-fn spawn_error(error: ClientError) -> DriverError {
+fn spawn_error(error: ClientError) -> RuntimeError {
     match error {
         ClientError::SpawnConflict(payload) => crate::conv::spawn_conflict(payload.as_ref()),
-        other => DriverError::Client(other),
+        other => RuntimeError::wire(other),
     }
 }
 

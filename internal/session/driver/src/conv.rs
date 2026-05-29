@@ -16,13 +16,13 @@ use lilo_session_core::{
 use uuid::Uuid;
 
 use crate::driver::{
-    CaptureResult, ChildExit, DriverError, NudgeResult, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, SpawnLaunch, SpawnedProcess,
 };
 
 pub fn runtime_spawn_request(
     session_id: Uuid,
     launch: &SpawnLaunch,
-) -> Result<RuntimeSpawnRequest, DriverError> {
+) -> Result<RuntimeSpawnRequest, RuntimeError> {
     Ok(RuntimeSpawnRequest {
         session_id,
         runtime: runtime_kind(launch.runtime),
@@ -32,13 +32,13 @@ pub fn runtime_spawn_request(
         mounts: launch.mounts.clone(),
         cwd: launch.cwd.clone(),
         target: RuntimeSpawnTarget::from_str(&launch.target)
-            .map_err(|_| DriverError::InvalidTarget(launch.target.clone()))?,
+            .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidTarget(launch.target.clone())))?,
         force: launch.force,
         shell_resume: launch.shell_resume.clone(),
     })
 }
 
-pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, DriverError> {
+pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, RuntimeError> {
     let lifecycle = payload.lifecycle;
     let runtime_pid = runtime_pid(&lifecycle)?;
     let tmux_pane = lifecycle.tmux_pane.as_ref().map(ToString::to_string);
@@ -52,7 +52,7 @@ pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, Driver
     })
 }
 
-pub(crate) fn spawn_outcome(outcome: SpawnOutcome) -> Result<SpawnedProcess, DriverError> {
+pub(crate) fn spawn_outcome(outcome: SpawnOutcome) -> Result<SpawnedProcess, RuntimeError> {
     match outcome {
         SpawnOutcome::Spawned(payload) => spawned_process(payload),
         SpawnOutcome::Conflict(payload) => Err(spawn_conflict(&payload)),
@@ -85,15 +85,18 @@ pub(crate) fn status_session(session_id: Uuid) -> StatusFilter {
     StatusFilter::for_session(session_id)
 }
 
-pub(crate) fn terminal_child_exit(lifecycle: &Lifecycle) -> Result<Option<ChildExit>, DriverError> {
+pub(crate) fn terminal_child_exit(
+    lifecycle: &Lifecycle,
+) -> Result<Option<ChildExit>, RuntimeError> {
     let exit_code = match lifecycle.state {
         LifecycleState::Forking | LifecycleState::Running => return Ok(None),
         LifecycleState::Exited(exit) => exit.code,
         LifecycleState::Lost(_) => None,
         _ => {
-            return Err(DriverError::UnknownRuntimeVariant {
-                variant: lifecycle_state_label(&lifecycle.state),
-            });
+            return Err(RuntimeError::local(format!(
+                "unknown runtime variant: {}",
+                lifecycle_state_label(&lifecycle.state)
+            )));
         }
     };
     Ok(Some(ChildExit {
@@ -165,19 +168,21 @@ pub(crate) fn runtime_doctor_error(
     }
 }
 
-pub(crate) fn parse_session_id(session_id: &str) -> Result<Uuid, DriverError> {
-    Uuid::parse_str(session_id).map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))
+pub(crate) fn parse_session_id(session_id: &str) -> Result<Uuid, RuntimeError> {
+    Uuid::parse_str(session_id)
+        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
 }
 
-pub(crate) fn parse_runtime_signal(signal: &str) -> Result<RuntimeSignal, DriverError> {
-    RuntimeSignal::from_str(signal).map_err(|_| DriverError::InvalidSignal(signal.to_string()))
+pub(crate) fn parse_runtime_signal(signal: &str) -> Result<RuntimeSignal, RuntimeError> {
+    RuntimeSignal::from_str(signal)
+        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSignal(signal.to_string())))
 }
 
-pub(crate) fn spawn_conflict(payload: &SpawnConflictPayload) -> DriverError {
-    DriverError::SpawnConflict {
+pub(crate) fn spawn_conflict(payload: &SpawnConflictPayload) -> RuntimeError {
+    RuntimeError::Fault(RuntimeFault::SpawnConflict {
         kind: payload.kind,
         message: format_spawn_conflict(payload),
-    }
+    })
 }
 
 fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
@@ -187,10 +192,13 @@ fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
     }
 }
 
-fn runtime_pid(lifecycle: &Lifecycle) -> Result<u32, DriverError> {
-    lifecycle
-        .runtime_pid
-        .ok_or_else(|| DriverError::MissingRuntimePid(lifecycle.session_id.to_string()))
+fn runtime_pid(lifecycle: &Lifecycle) -> Result<u32, RuntimeError> {
+    lifecycle.runtime_pid.ok_or_else(|| {
+        RuntimeError::local(format!(
+            "runtime session has no runtime pid: {}",
+            lifecycle.session_id
+        ))
+    })
 }
 
 fn runtime_doctor_status(doctor: &RuntimeDoctorResponse) -> String {
