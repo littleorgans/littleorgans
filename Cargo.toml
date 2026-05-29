@@ -17,6 +17,7 @@ members = [
     "internal/runtime/store",
     "internal/runtime/daemon",
     "internal/runtime/app",
+    "internal/port",
     "internal/session/core",
     "internal/session/store",
     "internal/session/driver",
@@ -51,6 +52,7 @@ lilo-im-core = { path = "crates/lilo-im-core", version = "0.8.0" }
 lilo-im-store = { path = "crates/lilo-im-store", version = "0.8.0" }
 lilo-im-stub = { path = "crates/lilo-im-stub", version = "0.8.0" }
 lilo-db = { path = "internal/db" }
+lilo-port = { path = "internal/port" }
 lilo-wire = { path = "internal/wire" }
 lilo-identity-service = { path = "internal/identity/service" }
 lilo-paths = { path = "crates/lilo-paths", version = "0.8.0" }
