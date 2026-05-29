@@ -163,7 +163,7 @@ define_commands!(
     #[command(next_help_heading = "Daemon lifecycle", about = generated_help::DAEMON_ABOUT)]
     Daemon(DaemonCli) => "daemon",
     #[command(hide = true)]
-    RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
+    RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__runtime-shim",
 );
 
 #[derive(Debug, Args)]
@@ -184,7 +184,7 @@ mod tests {
 
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
-        assert!(!help.contains("__shim"));
+        assert!(!help.contains("__runtime-shim"));
     }
 
     #[test]
@@ -215,6 +215,32 @@ mod tests {
             .expect("parse doctor json output");
 
         assert_eq!(cli.output(), Output::Json);
+    }
+
+    #[test]
+    fn operator_namespaces_have_w3_subcommands() {
+        let session_id = "018f6e28-0000-7000-8000-000000000001";
+
+        for args in [
+            vec![
+                "lilo",
+                "runtime",
+                "spawn",
+                "--runtime",
+                "claude",
+                "--session-id",
+                session_id,
+                "--target",
+                "headless",
+            ],
+            vec!["lilo", "runtime", "status", "--session-id", session_id],
+            vec!["lilo", "runtime", "events"],
+            vec!["lilo", "runtime", "kill", session_id],
+            vec!["lilo", "session", "config", "set-context", "default"],
+            vec!["lilo", "__runtime-shim", "--session-id", session_id],
+        ] {
+            Cli::try_parse_from(args).expect("operator command parses");
+        }
     }
 
     #[tokio::test]

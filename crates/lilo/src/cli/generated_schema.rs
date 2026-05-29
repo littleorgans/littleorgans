@@ -147,7 +147,7 @@ pub const CLI_SURFACE_JSON: &str = r#"{
       "const_name": "RUNTIME_SHIM",
       "group": null,
       "hidden": true,
-      "name": "__shim"
+      "name": "__runtime-shim"
     }
   ],
   "surface": {

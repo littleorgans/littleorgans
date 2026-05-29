@@ -153,26 +153,60 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
 #[tokio::test]
 async fn raw_runtime_spawn_keeps_session_tables_empty() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
-    let lifecycle_store = LifecycleStore::open(&fixture.db);
+    let runtime_path = fake_runtime_path("claude")?;
+    let mut daemon = LiloDaemon::start(
+        lilo_home(&fixture)?,
+        fixture.paths.run_root().join("lilod.sock"),
+        Some(runtime_path.path()),
+    )?;
+    let workspace = fixture.paths.tmp_root().join("raw-runtime-workspace");
+    fs::create_dir_all(&workspace)?;
     let session_id = fixed_uuid(10);
 
-    insert_audit(
-        fixture.db.identity_pool(),
-        "audit-raw-runtime-spawn",
-        session_id,
-    )
-    .await?;
-    lifecycle_store
-        .insert_forking(&lilo_rm_core::Lifecycle::forking(
-            session_id,
-            lilo_rm_core::RuntimeKind::Claude,
-        ))
-        .await?;
+    let spawn = daemon
+        .command(["runtime", "spawn", "--runtime", "claude", "--session-id"])
+        .arg(session_id.to_string())
+        .args(["--target", "headless", "--cwd"])
+        .arg(&workspace)
+        .output()
+        .context("lilo runtime spawn executes")?;
+    assert_success("lilo runtime spawn", &spawn);
 
-    assert_eq!(audit_count(&fixture, session_id).await?, 1);
+    let status = daemon
+        .command(["runtime", "status", "--session-id"])
+        .arg(session_id.to_string())
+        .output()
+        .context("lilo runtime status executes")?;
+    assert_success("lilo runtime status", &status);
+    assert_eq!(runtime_status_session_ids(&status)?, vec![session_id]);
+
+    let events = daemon
+        .command(["runtime", "events"])
+        .output()
+        .context("lilo runtime events executes")?;
+    assert_success("lilo runtime events", &events);
+    assert!(runtime_event_session_ids(&events)?.contains(&session_id));
+
+    let get = daemon
+        .command(["get", "session", "--json"])
+        .output()
+        .context("lilo get session executes")?;
+    assert_success("lilo get session --json", &get);
+    assert!(!listed_session_ids(&get)?.contains(&session_id));
+
+    assert!(allowed_spawn_audit_count(&fixture, session_id).await? >= 1);
     assert_eq!(lifecycle_count(&fixture, session_id).await?, 1);
     assert_eq!(pending_count(&fixture, session_id).await?, 0);
     assert_eq!(session_count(&fixture, session_id).await?, 0);
+
+    let kill = daemon
+        .command(["runtime", "kill"])
+        .arg(session_id.to_string())
+        .output()
+        .context("lilo runtime kill executes")?;
+    assert_success("lilo runtime kill", &kill);
+
+    daemon.stop();
     Ok(())
 }
 
@@ -264,15 +298,6 @@ where
     Ok(())
 }
 
-async fn audit_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
-    count_rows(
-        fixture.db.identity_pool(),
-        "SELECT COUNT(*) FROM identity_audit WHERE session_ref = ?",
-        &session_id.to_string(),
-    )
-    .await
-}
-
 async fn lifecycle_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
     count_rows(
         fixture.db.runtime_pool(),
@@ -345,13 +370,45 @@ fn listed_session_ids(output: &Output) -> Result<Vec<Uuid>> {
         .context("session list JSON is an array")?;
     array
         .iter()
-        .map(|session| {
-            session
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .context("session JSON has an id")?
-                .parse()
-                .context("session JSON id parses")
+        .map(|session| uuid_field(session, "id"))
+        .collect()
+}
+
+fn runtime_status_session_ids(output: &Output) -> Result<Vec<Uuid>> {
+    let lifecycles: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("runtime status JSON parses")?;
+    let array = lifecycles
+        .as_array()
+        .context("runtime status JSON is an array")?;
+    array
+        .iter()
+        .map(|lifecycle| uuid_field(lifecycle, "session_id"))
+        .collect()
+}
+
+fn runtime_event_session_ids(output: &Output) -> Result<Vec<Uuid>> {
+    let payload: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("runtime events JSON parses")?;
+    let array = payload
+        .get("events")
+        .and_then(serde_json::Value::as_array)
+        .context("runtime events JSON has an events array")?;
+    array
+        .iter()
+        .map(|event| {
+            let payload = event
+                .get("payload")
+                .context("runtime event JSON has a payload")?;
+            uuid_field(payload, "session_id")
         })
         .collect()
+}
+
+fn uuid_field(value: &serde_json::Value, field: &'static str) -> Result<Uuid> {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .with_context(|| format!("JSON object has {field}"))?
+        .parse()
+        .with_context(|| format!("JSON {field} parses"))
 }

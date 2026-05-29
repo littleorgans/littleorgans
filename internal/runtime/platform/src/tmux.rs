@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn respawn_pane_args_only_carry_provided_env() {
         let env = vec![LaunchEnv::new("LILO_SOCKET_PATH", "/tmp/lilod.sock")];
-        let command_argv = vec!["rtm".to_owned(), "__shim".to_owned()];
+        let command_argv = vec!["lilo".to_owned(), "__runtime-shim".to_owned()];
         let respawn_args = build_respawn_pane_args(&pane(), &command_argv, &env).expect("args");
 
         let mut e_flags = Vec::new();
@@ -250,7 +250,7 @@ mod tests {
         // Runtime env (secrets, PATH, etc.) must travel over the post-spawn UDS
         // ShimLaunch handoff, never via tmux's -e flag or argv.
         let env = vec![LaunchEnv::new("LILO_SOCKET_PATH", "/tmp/lilod.sock")];
-        let command_argv = vec!["rtm".to_owned(), "__shim".to_owned()];
+        let command_argv = vec!["lilo".to_owned(), "__runtime-shim".to_owned()];
         let respawn_args = build_respawn_pane_args(&pane(), &command_argv, &env).expect("args");
 
         let e_values: Vec<&str> = respawn_args

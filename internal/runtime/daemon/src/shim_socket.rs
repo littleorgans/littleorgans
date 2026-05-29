@@ -75,7 +75,7 @@ async fn launch_headless_shim(
 
     let mut command = Command::new(&config.shim_path);
     command
-        .arg("__shim")
+        .arg("__runtime-shim")
         .arg("--session-id")
         .arg(request.session_id.to_string());
     for entry in env {
@@ -123,7 +123,7 @@ where
 fn shim_argv(config: &DaemonConfig, request: &SpawnRequest) -> Vec<String> {
     vec![
         config.shim_path.to_string_lossy().into_owned(),
-        "__shim".to_owned(),
+        "__runtime-shim".to_owned(),
         "--session-id".to_owned(),
         request.session_id.to_string(),
     ]

@@ -14,7 +14,7 @@ fn pid_alive(pid: u32) -> bool {
 
 #[tokio::test]
 async fn daemon_drain_reaps_spawned_shim() {
-    // Regression: a spawned `lilo __shim` (and its runtime child) must not
+    // Regression: a spawned `lilo __runtime-shim` (and its runtime child) must not
     // outlive the daemon. Before the fix these accumulated as live orphans
     // across every test run. Draining SIGTERMs the shim, which forwards
     // SIGTERM to its runtime child and reaps it, tearing down the subtree.

@@ -29,20 +29,22 @@ fn main() -> Result<()> {
 fn shim_session_id() -> Result<Option<Uuid>> {
     let mut args = std::env::args_os();
     let _bin = args.next();
-    if args.next().as_deref() != Some(std::ffi::OsStr::new("__shim")) {
+    if args.next().as_deref() != Some(std::ffi::OsStr::new("__runtime-shim")) {
         return Ok(None);
     }
 
-    let flag = args.next().context("__shim requires --session-id")?;
+    let flag = args
+        .next()
+        .context("__runtime-shim requires --session-id")?;
     if flag != "--session-id" {
         bail!(
-            "__shim expects --session-id, got {}",
+            "__runtime-shim expects --session-id, got {}",
             flag.to_string_lossy()
         );
     }
     let session_id = args
         .next()
-        .context("__shim requires a session id")?
+        .context("__runtime-shim requires a session id")?
         .into_string()
         .map_err(|value| {
             anyhow::anyhow!("invalid unicode session id: {}", value.to_string_lossy())

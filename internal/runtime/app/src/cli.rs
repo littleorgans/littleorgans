@@ -51,7 +51,7 @@ enum Command {
     Doctor(DoctorArgs),
     Events(events::EventsArgs),
     Initdb,
-    #[command(name = "__shim", hide = true)]
+    #[command(name = "__runtime-shim", hide = true)]
     Shim(shim::ShimArgs),
 }
 

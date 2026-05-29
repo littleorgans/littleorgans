@@ -116,7 +116,7 @@ group = "daemon"
 about = "Manage the local lilo daemon process"
 
 [[commands]]
-name = "__shim"
+name = "__runtime-shim"
 const_name = "RUNTIME_SHIM"
 about = "Run the hidden runtime shim"
 hidden = true
