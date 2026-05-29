@@ -10,7 +10,7 @@ use lilo_session_core::{
 };
 use uuid::Uuid;
 
-use crate::driver::{DriverError, DriverProbe, SpawnLaunch, SpawnedProcess};
+use crate::driver::{ChildExit, DriverError, DriverProbe, SpawnLaunch, SpawnedProcess};
 
 pub fn runtime_spawn_request(
     session_id: Uuid,
@@ -108,6 +108,25 @@ pub(crate) fn kill_outcome_label(outcome: KillOutcome) -> String {
 
 pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf> {
     session_lifecycle_transcript_path(lifecycle)
+}
+
+pub(crate) fn terminal_child_exit(lifecycle: &Lifecycle) -> Result<Option<ChildExit>, DriverError> {
+    let exit_code = match lifecycle.state {
+        LifecycleState::Forking | LifecycleState::Running => return Ok(None),
+        LifecycleState::Exited(exit) => exit.code,
+        LifecycleState::Lost(_) => None,
+        _ => {
+            return Err(DriverError::UnknownRuntimeVariant {
+                variant: lifecycle_state_label(&lifecycle.state),
+            });
+        }
+    };
+    Ok(Some(ChildExit {
+        session_id: lifecycle.session_id.to_string(),
+        runtime_pid: lifecycle.runtime_pid.unwrap_or_default(),
+        exit_code,
+        transcript_path: lifecycle_transcript_path(lifecycle),
+    }))
 }
 
 fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {

@@ -6,16 +6,16 @@ use std::time::Duration;
 
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
-    CaptureRequest, KillOutcome, KillRequest, Lifecycle, LifecycleState, NudgeFailureReason,
-    NudgeOutcome, NudgeRequest, RuntimeKind as RtmdRuntimeKind, RuntimeSignal, SpawnConflictKind,
-    SpawnConflictPayload, StatusFilter, ValidateTargetOutcome,
+    CaptureRequest, KillOutcome, KillRequest, NudgeFailureReason, NudgeOutcome, NudgeRequest,
+    RuntimeKind as RtmdRuntimeKind, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload,
+    StatusFilter, ValidateTargetOutcome,
 };
 use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
 use crate::conv::{
-    kill_outcome_label, lifecycle_state_label, lifecycle_to_probe, lifecycle_transcript_path,
-    runtime_spawn_request, spawned_process,
+    kill_outcome_label, lifecycle_to_probe, runtime_spawn_request, spawned_process,
+    terminal_child_exit,
 };
 use crate::driver::{
     CaptureResult, ChildExit, DriverError, DriverProbe, NudgeResult, SpawnLaunch, SpawnedProcess,
@@ -233,25 +233,6 @@ fn nudge_result(outcome: &NudgeOutcome) -> NudgeResult {
     }
 }
 
-fn terminal_child_exit(lifecycle: &Lifecycle) -> Result<Option<ChildExit>, DriverError> {
-    let exit_code = match lifecycle.state {
-        LifecycleState::Forking | LifecycleState::Running => return Ok(None),
-        LifecycleState::Exited(exit) => exit.code,
-        LifecycleState::Lost(_) => None,
-        _ => {
-            return Err(DriverError::UnknownRuntimeVariant {
-                variant: lifecycle_state_label(&lifecycle.state),
-            });
-        }
-    };
-    Ok(Some(ChildExit {
-        session_id: lifecycle.session_id.to_string(),
-        runtime_pid: lifecycle.runtime_pid.unwrap_or_default(),
-        exit_code,
-        transcript_path: lifecycle_transcript_path(lifecycle),
-    }))
-}
-
 fn status_session(session_id: Uuid) -> StatusFilter {
     StatusFilter {
         session_id: Some(session_id),
@@ -306,7 +287,7 @@ fn format_spawn_conflict(payload: &SpawnConflictPayload) -> String {
 mod tests {
     use super::*;
     use crate::test_support::OrPanic as _;
-    use lilo_rm_core::{IsolationPolicy, TmuxAddress};
+    use lilo_rm_core::{IsolationPolicy, Lifecycle, LifecycleState, TmuxAddress};
 
     fn lifecycle(tmux_pane: Option<TmuxAddress>) -> Lifecycle {
         Lifecycle {
