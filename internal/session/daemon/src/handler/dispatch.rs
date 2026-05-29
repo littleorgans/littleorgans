@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::identity_client::RequestContext;
 
+use super::authz::{self, AuthzPlan};
 use super::{DaemonState, HandlerResult};
 
 impl DaemonState {
@@ -44,6 +45,15 @@ impl DaemonState {
         context: RequestContext,
         request: SessionRpc,
     ) -> HandlerResult {
+        if let AuthzPlan::AtDoor { action } = authz::authz_plan(&request)
+            && let Err(error) = self
+                .identity
+                .authorize(&context.principal, action, &ResourceSpec::default())
+                .await
+        {
+            return response(Err(error), false);
+        }
+
         match request {
             SessionRpc::Spawn { request } => response(self.spawn(&context, *request).await, false),
             SessionRpc::List { request } => response(self.list(request).await, false),
