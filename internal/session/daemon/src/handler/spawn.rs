@@ -80,7 +80,13 @@ impl DaemonState {
         };
         let event = running_event_from_lifecycle(&spawned.lifecycle)?;
         let session = self
-            .complete_spawn_intent(&intent, spawned.lifecycle, event, spawned.stdout_path)
+            .complete_spawn_intent(
+                &intent,
+                spawned.lifecycle,
+                event,
+                spawned.stdout_path,
+                OnCommitFailure::AbortRunning,
+            )
             .await?;
 
         Ok(RpcResponse::Spawned {
@@ -138,6 +144,7 @@ impl DaemonState {
         lifecycle: Lifecycle,
         event: RuntimeEvent,
         stdout_path: Option<std::path::PathBuf>,
+        on_commit_failure: OnCommitFailure,
     ) -> Result<Session> {
         let updated_at = Utc::now();
         let session = intent
@@ -150,28 +157,7 @@ impl DaemonState {
             .await
             .context("failed to revalidate namespace before session commit")?
         {
-            let session_id = intent.session_id.to_string();
-            match self
-                .runtime
-                .terminate(&session_id, "SIGTERM", Duration::from_secs(5))
-                .await
-            {
-                Ok(Some(_)) => {}
-                Ok(None) => {
-                    tracing::warn!(
-                        session_id = %intent.session_id,
-                        "recovery kill did not observe orphaned runtime process exit"
-                    );
-                }
-                Err(error) => {
-                    tracing::warn!(
-                        error = %error,
-                        session_id = %intent.session_id,
-                        "recovery kill of orphaned runtime process failed"
-                    );
-                }
-            }
-            self.abort_spawn_intent(intent.session_id, "namespace deleted before session commit")
+            self.abort_running_spawn(intent.session_id, "namespace deleted before session commit")
                 .await?;
             anyhow::bail!(
                 "namespace deleted before session commit: {}",
@@ -202,13 +188,56 @@ impl DaemonState {
             Ok(())
         }
         .await;
-        finish_immediate_tx(&mut conn, result, "session spawn Tx B").await?;
+        if let Err(error) = finish_immediate_tx(&mut conn, result, "session spawn Tx B").await {
+            match on_commit_failure {
+                OnCommitFailure::AbortRunning => {
+                    let abort_reason = format!("session commit failed: {error}");
+                    if let Err(abort_error) = self
+                        .abort_running_spawn(intent.session_id, &abort_reason)
+                        .await
+                    {
+                        tracing::warn!(
+                            error = %abort_error,
+                            session_id = %intent.session_id,
+                            "failed to abort running spawn after session commit failure"
+                        );
+                    }
+                }
+                OnCommitFailure::LeavePending => {}
+            }
+            return Err(error);
+        }
 
         self.runtime_service
             .append_event(event)
             .await
             .context("failed to append runtime event after session commit")?;
         Ok(session)
+    }
+
+    async fn abort_running_spawn(&self, session_id: Uuid, reason: &str) -> Result<()> {
+        let session_id_string = session_id.to_string();
+        match self
+            .runtime
+            .terminate(&session_id_string, "SIGTERM", Duration::from_secs(5))
+            .await
+        {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    "recovery kill did not observe orphaned runtime process exit"
+                );
+            }
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    session_id = %session_id,
+                    "recovery kill of orphaned runtime process failed"
+                );
+            }
+        }
+        self.abort_spawn_intent(session_id, reason).await
     }
 
     async fn abort_spawn_intent(&self, session_id: Uuid, reason: &str) -> Result<()> {
@@ -285,8 +314,14 @@ impl DaemonState {
             session_draft: intent.session_draft,
             created_at: intent.created_at,
         };
-        self.complete_spawn_intent(&pending, lifecycle, event, None)
-            .await?;
+        self.complete_spawn_intent(
+            &pending,
+            lifecycle,
+            event,
+            None,
+            OnCommitFailure::LeavePending,
+        )
+        .await?;
         Ok(())
     }
 
@@ -303,6 +338,12 @@ impl DaemonState {
         begin_immediate_tx(&mut conn, label).await?;
         Ok(conn)
     }
+}
+
+#[derive(Clone, Copy)]
+enum OnCommitFailure {
+    AbortRunning,
+    LeavePending,
 }
 
 fn running_event_from_lifecycle(lifecycle: &Lifecycle) -> Result<RuntimeEvent> {

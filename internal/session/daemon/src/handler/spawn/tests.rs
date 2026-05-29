@@ -56,7 +56,13 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     let event = running_event_from_lifecycle(&lifecycle).expect("running event builds");
 
     let error = state
-        .complete_spawn_intent(&intent, lifecycle, event, None)
+        .complete_spawn_intent(
+            &intent,
+            lifecycle,
+            event,
+            None,
+            OnCommitFailure::AbortRunning,
+        )
         .await
         .expect_err("namespace deleted branch fails");
 
