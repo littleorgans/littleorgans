@@ -6,6 +6,7 @@
 //! The daemon handles sockets, request dispatch, persistence, Docker wrapping,
 //! event delivery, spawn orchestration, and reconciliation.
 
+mod api;
 mod backend;
 mod docker_argv;
 mod docker_command;
@@ -28,6 +29,7 @@ pub mod socket;
 mod spawn_preflight;
 pub(crate) mod version;
 
+pub use api::SpawnOutcome;
 pub use reconcile::ReconcileConfig;
 pub use server::{DaemonConfig, run_daemon};
-pub use service::{RuntimeService, RuntimeServiceContext, SpawnOutcome};
+pub use service::{RuntimeService, RuntimeServiceContext};

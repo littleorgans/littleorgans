@@ -14,12 +14,14 @@ use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 
 use crate::{
-    doctor,
+    api::{
+        SpawnOutcome, capture_domain, doctor_domain, kill_by_pid_domain, kill_runtime_domain,
+        nudge_runtime_domain, poll_events_batch, spawn_domain, status_domain,
+    },
     error::{RpcErrorContext, protocol_error_response, rpc_error_response},
     identity::authorize_runtime_rpc,
     mcp_bridge,
     server::ServerState,
-    service::{SpawnOutcome, poll_events_batch, spawn_domain},
 };
 
 pub(crate) async fn handle_connection(
@@ -137,20 +139,20 @@ async fn handle_rpc_result(
             }))
         }
         RuntimeRpc::Kill { request } => Ok(RuntimeResponse::Killed(KilledPayload {
-            outcome: state.kill_runtime(request).await?,
+            outcome: kill_runtime_domain(&state, request).await?,
         })),
         RuntimeRpc::KillByPid { request } => Ok(RuntimeResponse::KillByPid(KillByPidPayload {
-            response: state.kill_pid(request).await?,
+            response: kill_by_pid_domain(&state, request).await?,
         })),
         RuntimeRpc::Nudge { request } => {
-            let response = state.nudge_runtime(request).await?;
+            let response = nudge_runtime_domain(&state, request).await?;
             Ok(RuntimeResponse::Nudge(NudgePayload { response }))
         }
         RuntimeRpc::Capture { request } => Ok(RuntimeResponse::Capture(CapturePayload {
-            response: state.capture_pane(request).await?,
+            response: capture_domain(&state, request).await?,
         })),
         RuntimeRpc::Status { request } => Ok(RuntimeResponse::Status(StatusPayload {
-            lifecycles: state.status(request.into()).await,
+            lifecycles: status_domain(&state, request.into()).await,
         })),
         RuntimeRpc::Version => Ok(RuntimeResponse::Version(VersionPayload {
             version: crate::version::runtime_version_info(),
@@ -159,7 +161,7 @@ async fn handle_rpc_result(
             watchers: state.watcher_counts().await,
         })),
         RuntimeRpc::Doctor => Ok(RuntimeResponse::Doctor(DoctorPayload {
-            doctor: doctor::collect(state).await?,
+            doctor: doctor_domain(state).await?,
         })),
         RuntimeRpc::Events { request } => events_response(&state, request).await,
         RuntimeRpc::Stop => Ok(RuntimeResponse::Stopping),
