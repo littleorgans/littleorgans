@@ -29,7 +29,7 @@ pub struct Cli {
     output: Output,
     #[arg(long, global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
-    #[arg(long, global = true)]
+    #[arg(long, short = 'c', global = true)]
     pub config: Option<PathBuf>,
     #[command(subcommand)]
     command: Command,
@@ -43,6 +43,10 @@ impl Cli {
     pub async fn run(self) -> Result<(), Diagnostic> {
         let output = self.output;
         let json_output = output == Output::Json;
+        if self.config.is_some() {
+            return Err(unsupported_config_file());
+        }
+
         match self.command {
             Command::Run(args) => {
                 run_session(session_cli_def::Command::Run(args), json_output).await
@@ -142,6 +146,12 @@ fn reject_unsupported_json_output(command: &str, json_output: bool) -> Result<()
     }
 
     Ok(())
+}
+
+fn unsupported_config_file() -> Diagnostic {
+    Diagnostic::input_validation(
+        "--config/-c is not supported; lilo configuration is environment only. Use LILO_HOME, LILO_SOCKET_PATH, or LILO_LOG.",
+    )
 }
 
 fn unsupported_json_output(command: &str) -> Diagnostic {
@@ -298,6 +308,36 @@ mod tests {
             .expect("parse doctor json output");
 
         assert_eq!(cli.output(), Output::Json);
+    }
+
+    #[tokio::test]
+    async fn config_file_flag_is_rejected_before_dispatch() {
+        for flag in ["--config", "-c"] {
+            let cli = Cli::try_parse_from(["lilo", flag, "x.toml", "doctor"])
+                .unwrap_or_else(|error| panic!("parse {flag}: {error}"));
+
+            let error = match cli.run().await {
+                Ok(()) => panic!("{flag} unexpectedly succeeded"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code, "input_validation");
+            assert_ne!(error.exit_code, 0);
+            for expected in ["--config/-c", "LILO_HOME", "LILO_SOCKET_PATH", "LILO_LOG"] {
+                assert!(
+                    error.message.contains(expected),
+                    "{flag} returned unexpected message: {}",
+                    error.message
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn config_file_flag_absent_leaves_config_unset() {
+        let cli = Cli::try_parse_from(["lilo", "doctor"]).expect("parse doctor without config");
+
+        assert!(cli.config.is_none());
     }
 
     #[test]
