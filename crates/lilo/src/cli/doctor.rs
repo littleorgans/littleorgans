@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use clap::Args;
 use lilo_common::diagnostic::Diagnostic;
 use lilo_db::LiloDb;
@@ -7,6 +9,7 @@ use serde::Serialize;
 
 use super::{Output, resolve_lilo_paths};
 
+const DOCTOR_RPC_TIMEOUT: Duration = Duration::from_secs(3);
 const UNKNOWN_DAEMON_VERSION: &str = "unknown/pre-field";
 
 fn daemon_version_skew_warning(daemon_version: &str) -> String {
@@ -125,13 +128,18 @@ struct DaemonHealth {
 
 impl DaemonHealth {
     async fn collect(paths: &LiloPaths) -> Self {
+        Self::collect_with_timeout(paths, DOCTOR_RPC_TIMEOUT).await
+    }
+
+    async fn collect_with_timeout(paths: &LiloPaths, timeout: Duration) -> Self {
         let socket_path = paths.socket_path();
         let endpoint = DaemonEndpoint::from_paths(paths);
-        let response = lilo_session_daemon::send_request(
+        let response = lilo_session_daemon::send_request_with_timeout(
             &endpoint,
             &SessionRpc::Doctor {
                 request: DoctorRequest::default(),
             },
+            timeout,
         )
         .await;
         let (reachable, version) = match response {
@@ -299,6 +307,8 @@ fn paths() -> Result<LiloPaths, Diagnostic> {
 mod tests {
     use super::*;
     use lilo_paths::LiloHome;
+    use tokio::net::UnixListener;
+    use tokio::time::Instant;
 
     #[tokio::test]
     async fn collected_status_has_backend_probe_shape() {
@@ -326,6 +336,30 @@ mod tests {
         assert_eq!(status.substrates.runtimes.active, 0);
         assert_eq!(status.substrates.identity.audit_rows, 0);
         assert!(status.warnings.is_empty());
+    }
+
+    #[tokio::test]
+    async fn doctor_rpc_timeout_marks_hung_socket_unreachable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let paths = LiloPaths::new(
+            LiloHome::from_path(dir.path().join("lilo")).expect("home path is valid"),
+        );
+        std::fs::create_dir_all(paths.run_root()).expect("run dir exists");
+        let listener = UnixListener::bind(paths.socket_path()).expect("bind hung daemon socket");
+        let server = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.expect("accept client");
+            tokio::time::sleep(Duration::from_mins(1)).await;
+        });
+
+        let started = Instant::now();
+        let health = DaemonHealth::collect_with_timeout(&paths, Duration::from_millis(50)).await;
+        let elapsed = started.elapsed();
+        server.abort();
+
+        assert!(elapsed < Duration::from_secs(1), "elapsed: {elapsed:?}");
+        assert!(health.socket_exists);
+        assert!(!health.reachable);
+        assert_eq!(health.version, None);
     }
 
     #[test]
