@@ -1157,6 +1157,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lilo-port"
+version = "0.8.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "lilo-rm-client"
 version = "0.8.0"
 dependencies = [
@@ -1363,6 +1370,7 @@ dependencies = [
  "chrono",
  "lilo-db",
  "lilo-paths",
+ "lilo-port",
  "lilo-rm-client",
  "lilo-rm-core",
  "lilo-runtime-daemon",

@@ -130,7 +130,7 @@ mod tests {
         Label, Namespace, RuntimeDoctorReport, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
     use lilo_session_driver::{
-        CaptureResult, ChildExit, DriverError, InProcessRuntime, NudgeResult, RuntimePort,
+        CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimePort,
         SpawnLaunch, SpawnedProcess,
     };
     use lilo_session_store::SqliteStore;
@@ -146,7 +146,7 @@ mod tests {
     }
 
     type PortFuture<'a, T> =
-        Pin<Box<dyn Future<Output = std::result::Result<T, DriverError>> + Send + 'a>>;
+        Pin<Box<dyn Future<Output = std::result::Result<T, RuntimeError>> + Send + 'a>>;
 
     struct PollErrorThenBatchRuntimePort {
         polls: AtomicUsize,
@@ -211,12 +211,11 @@ mod tests {
         fn poll_events(&self, _request: EventsRequest) -> PortFuture<'_, EventBatch> {
             Box::pin(async move {
                 match self.polls.fetch_add(1, Ordering::SeqCst) {
-                    0 => Err(DriverError::Runtime(
-                        "forced poll_events failure".to_string(),
-                    )),
+                    0 => Err(RuntimeError::local("forced poll_events failure")),
                     1 => Ok(self.batch.clone()),
                     _ => {
-                        std::future::pending::<std::result::Result<EventBatch, DriverError>>().await
+                        std::future::pending::<std::result::Result<EventBatch, RuntimeError>>()
+                            .await
                     }
                 }
             })
@@ -421,10 +420,9 @@ mod tests {
 
     fn unsupported_port_call<T: Send + 'static>(operation: &'static str) -> PortFuture<'static, T> {
         Box::pin(async move {
-            Err(DriverError::Unsupported {
-                operation,
-                pass: "test",
-            })
+            Err(RuntimeError::local(format!(
+                "unsupported driver operation {operation}; scheduled for test"
+            )))
         })
     }
 
