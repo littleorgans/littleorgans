@@ -8,7 +8,7 @@ use lilo_im_store::SqliteAuditSink;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{RpcResponse, SessionRpc};
-use lilo_session_driver::RtmdDriver;
+use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SqliteStore;
 
 use crate::handler::{DaemonState, HandlerResult};
@@ -58,17 +58,19 @@ impl SessionService {
         let (paths, db, runtime) = ctx.into_parts();
         fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
         let store = SqliteStore::open(&db);
-        let driver = RtmdDriver::new(paths.socket_path());
+        let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
         let identity = IdentityClient::new(
             SqliteAuditSink::with_pool(db.identity_pool().clone()),
             nix::unistd::getuid().as_raw(),
         );
-        let state = Arc::new(
-            DaemonState::new(store, Arc::new(driver), Arc::new(identity), runtime)
-                .with_rtmd_socket_path(paths.socket_path()),
-        );
+        let state = Arc::new(DaemonState::new(
+            store,
+            Arc::new(runtime_port),
+            Arc::new(identity),
+            runtime,
+        ));
         let lifecycle = LifecycleTask::spawn(Arc::clone(&state));
-        let events = RuntimeEventTask::spawn(Arc::clone(&state), paths.socket_path());
+        let events = RuntimeEventTask::spawn(Arc::clone(&state));
         Ok(Self {
             paths,
             state,
@@ -99,13 +101,17 @@ impl SessionService {
             shutdown: false,
         }
     }
+
+    pub async fn shutdown(&self) {
+        let ((), ()) = tokio::join!(self.lifecycle.shutdown(), self.events.shutdown());
+    }
 }
 
 impl Drop for SessionService {
     fn drop(&mut self) {
         let _ = &self.lifecycle;
         let _ = &self.events;
-        self.state.driver.terminate_all();
+        self.state.runtime.terminate_all();
     }
 }
 

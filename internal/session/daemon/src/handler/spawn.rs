@@ -67,8 +67,9 @@ impl DaemonState {
         );
 
         self.begin_spawn_intent(context, &request, &intent).await?;
+        // TODO(WS4): move mutating spawn to RuntimePort with domain state-change audit.
         let payload = match self
-            .runtime
+            .runtime_service
             .handle_rpc(
                 context.principal.clone(),
                 RuntimeRpc::Spawn {
@@ -160,8 +161,9 @@ impl DaemonState {
             .await
             .context("failed to revalidate namespace before session commit")?
         {
+            // TODO(WS4): move recovery kill to RuntimePort with domain state-change audit.
             let kill_response = self
-                .runtime
+                .runtime_service
                 .handle_rpc(
                     Principal::Local(nix::unistd::getuid().as_raw()),
                     RuntimeRpc::Kill {
@@ -224,7 +226,7 @@ impl DaemonState {
         .await;
         finish_immediate_tx(&mut conn, result, "session spawn Tx B").await?;
 
-        self.runtime
+        self.runtime_service
             .append_event(event)
             .await
             .context("failed to append runtime event after session commit")?;
@@ -267,8 +269,9 @@ impl DaemonState {
     }
 
     async fn reconcile_pending_spawn_intent(&self, intent: SessionSpawnIntent) -> Result<()> {
+        // TODO(WS4): move spawn-lifecycle status reconcile to RuntimePort with read audit de-dup.
         let response = self
-            .runtime
+            .runtime_service
             .handle_rpc(
                 lilo_im_core::Principal::Local(nix::unistd::getuid().as_raw()),
                 RuntimeRpc::Status {

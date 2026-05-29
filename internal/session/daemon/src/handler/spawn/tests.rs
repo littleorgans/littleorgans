@@ -5,7 +5,7 @@ use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, ShimReady};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{Namespace, RuntimeKind};
-use lilo_session_driver::RtmdDriver;
+use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SqliteStore;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -25,9 +25,10 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
             .await
             .expect("runtime service builds"),
     );
+    let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
     let state = DaemonState::new(
         SqliteStore::open(&db),
-        Arc::new(RtmdDriver::new(paths.socket_path())),
+        runtime_port,
         Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
         Arc::clone(&runtime),
     );

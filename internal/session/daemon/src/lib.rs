@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod agent_config;
+mod background_task;
 pub mod events;
 pub mod handler;
 pub mod identity_client;

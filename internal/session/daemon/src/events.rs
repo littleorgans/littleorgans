@@ -1,86 +1,58 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use lilo_rm_client::{EventWatcher, RuntimeClient};
-use lilo_rm_core::{EventBatch, EventCursor, StatusFilter};
-use tokio::task::JoinHandle;
+use lilo_rm_core::{EventBatch, EventCursor, EventsRequest, StatusFilter};
 
+use crate::background_task::BackgroundTask;
 use crate::handler::DaemonState;
 
 const EVENT_WAIT_MS: u32 = 30_000;
-const BACKOFF_INITIAL: Duration = Duration::from_millis(200);
-const BACKOFF_MAX: Duration = Duration::from_secs(5);
+const EVENT_ERROR_RETRY: Duration = Duration::from_millis(500);
 
 pub struct RuntimeEventTask {
-    handle: JoinHandle<()>,
+    task: BackgroundTask,
 }
 
 impl RuntimeEventTask {
-    pub fn spawn(state: Arc<DaemonState>, socket_path: PathBuf) -> Self {
-        let handle = tokio::spawn(async move {
-            if let Err(error) = run_event_loop(state, socket_path).await {
-                eprintln!("runtime event loop stopped: {error:#}");
+    pub fn spawn(state: Arc<DaemonState>) -> Self {
+        let task = BackgroundTask::spawn(async move {
+            if let Err(error) = run_event_loop(state).await {
+                tracing::warn!(error = ?error, "runtime event loop stopped");
             }
         });
 
-        Self { handle }
+        Self { task }
+    }
+
+    pub async fn shutdown(&self) {
+        self.task.shutdown().await;
     }
 }
 
-impl Drop for RuntimeEventTask {
-    fn drop(&mut self) {
-        self.handle.abort();
-    }
-}
-
-async fn run_event_loop(state: Arc<DaemonState>, socket_path: PathBuf) -> Result<()> {
+async fn run_event_loop(state: Arc<DaemonState>) -> Result<()> {
     let mut cursor = state
         .store()
         .event_cursor()
         .await
         .context("failed to load runtime event cursor")?;
-    let mut backoff = BACKOFF_INITIAL;
 
     loop {
-        let client = RuntimeClient::new(socket_path.clone());
-        let status_client = client.clone();
-        let mut builder = EventWatcher::builder().wait_ms(EVENT_WAIT_MS);
-        if let Some(cursor) = cursor {
-            builder = builder.since(cursor);
-        }
-        let mut watcher = match builder.connect(client).await {
-            Ok(watcher) => watcher,
-            Err(error) => {
-                eprintln!("failed to connect runtime event watcher: {error:#}");
-                tokio::time::sleep(backoff).await;
-                backoff = next_backoff(backoff);
-                continue;
-            }
-        };
-        backoff = BACKOFF_INITIAL;
+        let batch = state
+            .runtime
+            .poll_events(EventsRequest {
+                since: cursor,
+                wait_ms: Some(EVENT_WAIT_MS),
+            })
+            .await
+            .context("failed to poll runtime events")?;
 
-        loop {
-            match watcher.next().await {
-                Ok(batch) => match handle_batch(&state, &status_client, &mut cursor, batch).await {
-                    Ok(_) => {
-                        backoff = BACKOFF_INITIAL;
-                    }
-                    Err(error) => {
-                        eprintln!("unsupported runtime event batch: {error:#}");
-                        tokio::time::sleep(backoff).await;
-                        backoff = next_backoff(backoff);
-                        break;
-                    }
-                },
-                Err(error) => {
-                    eprintln!("runtime event watcher failed: {error:#}");
-                    tokio::time::sleep(backoff).await;
-                    backoff = next_backoff(backoff);
-                    break;
-                }
-            }
+        if let Err(error) = handle_batch(&state, &mut cursor, batch).await {
+            tracing::warn!(
+                error = ?error,
+                "failed to process runtime event batch; retrying without advancing cursor"
+            );
+            tokio::time::sleep(EVENT_ERROR_RETRY).await;
         }
     }
 }
@@ -93,7 +65,6 @@ pub(crate) enum BatchOutcome {
 
 pub(crate) async fn handle_batch(
     state: &DaemonState,
-    status_client: &RuntimeClient,
     cursor: &mut Option<EventCursor>,
     batch: EventBatch,
 ) -> Result<BatchOutcome> {
@@ -111,11 +82,12 @@ pub(crate) async fn handle_batch(
             Ok(BatchOutcome::Advanced)
         }
         EventBatch::CursorExpired { oldest } => {
-            let payload = status_client
+            let lifecycles = state
+                .runtime
                 .status(StatusFilter::empty())
                 .await
                 .context("failed to reconcile expired runtime cursor")?;
-            crate::reconcile::reconcile_lifecycles(state, &payload.lifecycles).await?;
+            crate::reconcile::reconcile_lifecycles(state, &lifecycles).await?;
             state
                 .store()
                 .apply_cursor(oldest)
@@ -127,48 +99,47 @@ pub(crate) async fn handle_batch(
     }
 }
 
-fn next_backoff(current: Duration) -> Duration {
-    std::cmp::min(current.saturating_mul(2), BACKOFF_MAX)
-}
-
 #[cfg(test)]
 mod tests {
     use crate::test_support::OrPanic as _;
-    use std::path::Path;
+    use std::path::PathBuf;
 
     use chrono::Utc;
     use lilo_db::LiloDb;
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         IsolationPolicy, Lifecycle, LifecycleState, LostEvidence, RuntimeEvent, RuntimeKind,
-        RuntimeResponse, StatusPayload, TerminationEvidence, read_json_line, write_json_line,
+        TerminationEvidence,
     };
     use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
+    use lilo_runtime_store::LifecycleStore;
     use lilo_session_core::{
         Label, Namespace, RuntimeKind as SmRuntimeKind, Session, SessionState,
     };
-    use lilo_session_driver::RtmdDriver;
+    use lilo_session_driver::InProcessRuntime;
     use lilo_session_store::SqliteStore;
-    use lilo_wire::LilodRpc;
-    use tokio::io::BufReader;
-    use tokio::net::UnixListener;
     use uuid::Uuid;
 
     use crate::identity_client::IdentityClient;
 
     use super::*;
 
+    struct TestState {
+        daemon: DaemonState,
+        runtime_lifecycles: LifecycleStore,
+    }
+
     #[tokio::test]
     async fn handle_batch_applies_events_and_advances_cursor() {
-        let state = test_state().await;
-        let running = insert_session(&state, SessionState::Spawning).await;
-        let terminated = insert_session(&state, SessionState::Running).await;
-        let lost = insert_session(&state, SessionState::Running).await;
+        let test = test_state().await;
+        let state = &test.daemon;
+        let running = insert_session(state, SessionState::Spawning).await;
+        let terminated = insert_session(state, SessionState::Running).await;
+        let lost = insert_session(state, SessionState::Running).await;
         let mut cursor = None;
 
         let outcome = handle_batch(
-            &state,
-            &RuntimeClient::new("/unused.sock"),
+            state,
             &mut cursor,
             EventBatch::Events {
                 events: vec![
@@ -196,29 +167,28 @@ mod tests {
 
         assert_eq!(outcome, BatchOutcome::Advanced);
         assert_eq!(cursor, Some(42));
-        assert_eq!(session_state(&state, running).await, SessionState::Running);
+        assert_eq!(session_state(state, running).await, SessionState::Running);
         assert_eq!(
-            session_state(&state, terminated).await,
+            session_state(state, terminated).await,
             SessionState::Terminated
         );
         assert_eq!(
-            session_state(&state, lost).await,
+            session_state(state, lost).await,
             SessionState::Lost {
                 evidence: LostEvidence::PidNotAlive
             }
         );
-        assert_eq!(stored_cursor(&state).await, Some(42));
+        assert_eq!(stored_cursor(state).await, Some(42));
     }
 
     #[tokio::test]
     async fn handle_batch_reconciles_status_when_cursor_expires() {
-        let state = test_state().await;
-        let session_id = insert_session(&state, SessionState::Running).await;
-        let socket_dir = tempfile::tempdir().or_panic("socket dir creates");
-        let socket_path = socket_dir.path().join("rtmd.sock");
-        let server = spawn_status_server(
-            &socket_path,
-            vec![Lifecycle {
+        let test = test_state().await;
+        let state = &test.daemon;
+        let session_id = insert_session(state, SessionState::Running).await;
+        insert_runtime_lifecycle(
+            &test,
+            Lifecycle {
                 session_id,
                 runtime: RuntimeKind::Claude,
                 isolation: IsolationPolicy::default(),
@@ -228,32 +198,27 @@ mod tests {
                 start_time: Some(Utc::now()),
                 tmux_pane: None,
                 log_availability: None,
-            }],
-        );
+            },
+        )
+        .await;
         let mut cursor = Some(1);
 
-        let outcome = handle_batch(
-            &state,
-            &RuntimeClient::new(socket_path),
-            &mut cursor,
-            EventBatch::CursorExpired { oldest: 9 },
-        )
-        .await
-        .or_panic("cursor expiry reconciles");
-        server.await.or_panic("status server completes");
+        let outcome = handle_batch(state, &mut cursor, EventBatch::CursorExpired { oldest: 9 })
+            .await
+            .or_panic("cursor expiry reconciles");
 
         assert_eq!(outcome, BatchOutcome::Reconciled);
         assert_eq!(cursor, Some(9));
         assert_eq!(
-            session_state(&state, session_id).await,
+            session_state(state, session_id).await,
             SessionState::Lost {
                 evidence: LostEvidence::PidReuseDetected
             }
         );
-        assert_eq!(stored_cursor(&state).await, Some(9));
+        assert_eq!(stored_cursor(state).await, Some(9));
     }
 
-    async fn test_state() -> DaemonState {
+    async fn test_state() -> TestState {
         let audit_dir = tempfile::tempdir().or_panic("tempdir creates");
         let identity = IdentityClient::connect(&audit_dir.path().join("audit.sqlite"), 42)
             .await
@@ -267,18 +232,33 @@ mod tests {
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves"),
-                db,
+                db.clone(),
             ))
             .await
             .or_panic("runtime service builds"),
         );
+        let runtime_lifecycles = LifecycleStore::open(&db);
+        let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
         std::mem::forget(dir);
-        DaemonState::new(
-            store,
-            Arc::new(RtmdDriver::new(paths.socket_path())),
-            Arc::new(identity),
-            runtime,
-        )
+        TestState {
+            daemon: DaemonState::new(store, runtime_port, Arc::new(identity), runtime),
+            runtime_lifecycles,
+        }
+    }
+
+    async fn insert_runtime_lifecycle(state: &TestState, lifecycle: Lifecycle) {
+        let mut forking = lifecycle.clone();
+        forking.state = LifecycleState::Forking;
+        state
+            .runtime_lifecycles
+            .insert_forking(&forking)
+            .await
+            .or_panic("runtime lifecycle inserts");
+        state
+            .runtime_lifecycles
+            .update_lifecycle(&lifecycle)
+            .await
+            .or_panic("runtime lifecycle updates");
     }
 
     async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
@@ -328,29 +308,5 @@ mod tests {
             updated_at: now,
             labels: Vec::<Label>::new(),
         }
-    }
-
-    fn spawn_status_server(
-        socket_path: &Path,
-        lifecycles: Vec<Lifecycle>,
-    ) -> tokio::task::JoinHandle<()> {
-        let listener = UnixListener::bind(socket_path).or_panic("listener binds");
-        tokio::spawn(async move {
-            let (stream, _) = listener.accept().await.or_panic("client connects");
-            let (reader, mut writer) = stream.into_split();
-            let mut reader = BufReader::new(reader);
-            let envelope: LilodRpc = read_json_line(&mut reader)
-                .await
-                .or_panic("status request reads");
-            let LilodRpc::Runtime(_) = envelope else {
-                panic!("expected runtime rpc");
-            };
-            write_json_line(
-                &mut writer,
-                &RuntimeResponse::Status(StatusPayload { lifecycles }),
-            )
-            .await
-            .or_panic("status response writes");
-        })
     }
 }

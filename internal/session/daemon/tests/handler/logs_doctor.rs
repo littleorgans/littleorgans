@@ -1,13 +1,12 @@
 use chrono::Utc;
 
-use crate::common::{
-    LOCAL_UID, OrPanic as _, TestDaemon, local_context, mock_rtmd_doctor, runtime_doctor_response,
-    spawn_test_session,
-};
+use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_test_session};
 use lilo_session_core::{
     DoctorRequest, LogsRequest, LostEvidence, RpcResponse, Selector, SessionRpc, WaitCondition,
     WaitRequest,
 };
+use lilo_session_driver::RtmdDriver;
+use std::sync::Arc;
 
 #[tokio::test]
 pub(crate) async fn spawn_persists_runtime_stdout_path_for_logs() {
@@ -136,8 +135,7 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
 pub(crate) async fn doctor_includes_runtime_matters_payload() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let (socket_path, server) = mock_rtmd_doctor(runtime_doctor_response());
-    let state = daemon.state.with_rtmd_socket_path(socket_path);
+    let state = daemon.in_process_state().await;
 
     let doctor = state
         .handle(
@@ -154,6 +152,8 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
     assert_eq!(response.status, "ok");
     assert!(response.runtime.starts_with("rtmd (lilo-rm-client 0.6.x"));
     assert_eq!(response.runtime_matters.status, "ok");
+    assert_eq!(response.runtime_matters.socket_path, None);
+    assert_eq!(response.runtime_matters.code, None);
     assert_eq!(
         response
             .runtime_matters
@@ -161,9 +161,8 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
             .or_panic("runtime doctor payload")
             .watchers
             .process_exit_watchers,
-        1
+        0
     );
-    server.await.or_panic("rtmd doctor server");
 }
 
 #[tokio::test]
@@ -171,7 +170,9 @@ pub(crate) async fn doctor_reports_runtime_matters_unavailable() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let socket_path = daemon.dir.path().join("missing-rtmd.sock");
-    let state = daemon.state.with_rtmd_socket_path(socket_path);
+    let state = daemon
+        .state_with_runtime_port(Arc::new(RtmdDriver::new(socket_path)))
+        .await;
 
     let doctor = state
         .handle(

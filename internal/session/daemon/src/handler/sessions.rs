@@ -47,7 +47,7 @@ impl DaemonState {
             )
             .await?;
         let capture = self
-            .driver
+            .runtime
             .capture(&session.id.to_string(), request.scrollback_lines)
             .await
             .context("runtime capture failed")?
@@ -109,7 +109,7 @@ impl DaemonState {
             return Ok(session);
         }
         let exit = self
-            .driver
+            .runtime
             .terminate(
                 &id_string,
                 &request.signal,

@@ -112,7 +112,6 @@ fn assert_mail_flow_audit(rows: &[AuditRow]) {
             Action::MailSend,
             Action::MailRead,
             Action::Nudge,
-            Action::Nudge,
         ]
     );
     assert!(rows.iter().all(|row| row.decision == AuditDecision::Allow));

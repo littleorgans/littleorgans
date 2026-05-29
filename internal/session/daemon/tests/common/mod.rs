@@ -14,7 +14,7 @@ use lilo_session_core::{
 };
 use lilo_session_daemon::handler::{DaemonState, HandlerResult};
 use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
-use lilo_session_driver::{LaunchEnv, RtmdDriver};
+use lilo_session_driver::{InProcessRuntime, LaunchEnv, RtmdDriver, RuntimePort};
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
 use std::os::unix::fs::PermissionsExt;
@@ -36,6 +36,7 @@ pub struct TestDaemon {
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
     pub runtime: Arc<RuntimeService>,
+    pub local_uid: u32,
     runtime_socket_task: JoinHandle<()>,
 }
 
@@ -67,17 +68,43 @@ impl TestDaemon {
             .or_panic("runtime service builds"),
         );
         let runtime_socket_path = paths.socket_path();
-        let driver = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
+        let runtime_port = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
-        let state = DaemonState::new(store, driver, Arc::new(identity), Arc::clone(&runtime))
-            .with_rtmd_socket_path(runtime_socket_path);
+        let state = DaemonState::new(
+            store,
+            runtime_port,
+            Arc::new(identity),
+            Arc::clone(&runtime),
+        );
         Self {
             state,
             audit_path,
             dir,
             runtime,
+            local_uid,
             runtime_socket_task,
         }
+    }
+
+    pub async fn state_with_runtime_port(&self, runtime_port: Arc<dyn RuntimePort>) -> DaemonState {
+        let db = LiloDb::open_path(self.audit_path.clone())
+            .await
+            .or_panic("store db reopens");
+        let identity = IdentityClient::new(
+            lilo_im_store::SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            self.local_uid,
+        );
+        DaemonState::new(
+            SqliteStore::open(&db),
+            runtime_port,
+            Arc::new(identity),
+            Arc::clone(&self.runtime),
+        )
+    }
+
+    pub async fn in_process_state(&self) -> DaemonState {
+        self.state_with_runtime_port(Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))))
+            .await
     }
 
     pub async fn audit_rows(&self) -> Vec<AuditRow> {
@@ -280,7 +307,6 @@ pub fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> (PathBuf, JoinH
     let listener = UnixListener::bind(&socket_path).or_panic("rtmd test socket binds");
     let server = tokio::spawn(async move {
         let _tempdir = tempdir;
-        respond_to_rtmd_status(&listener).await;
         let mut rpc = read_rtmd_rpc(&listener).await;
         assert_eq!(rpc.0, RuntimeRpc::Doctor);
         write_json_line(
@@ -291,21 +317,6 @@ pub fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> (PathBuf, JoinH
         .or_panic("write rtmd doctor response");
     });
     (socket_path, server)
-}
-
-async fn respond_to_rtmd_status(listener: &UnixListener) {
-    let mut rpc = read_rtmd_rpc(listener).await;
-    let RuntimeRpc::Status { .. } = rpc.0 else {
-        panic!("expected status rpc before doctor");
-    };
-    write_json_line(
-        &mut rpc.1,
-        &RuntimeResponse::Status(lilo_rm_core::StatusPayload {
-            lifecycles: Vec::new(),
-        }),
-    )
-    .await
-    .or_panic("write rtmd status response");
 }
 
 async fn read_rtmd_rpc(listener: &UnixListener) -> (RuntimeRpc, tokio::net::unix::OwnedWriteHalf) {

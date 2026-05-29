@@ -5,39 +5,37 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_session_core::Session;
 use lilo_session_driver::ChildExit;
-use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+use crate::background_task::BackgroundTask;
 use crate::handler::DaemonState;
 
 pub struct LifecycleTask {
-    handle: JoinHandle<()>,
+    task: BackgroundTask,
 }
 
 impl LifecycleTask {
     pub fn spawn(state: Arc<DaemonState>) -> Self {
-        let handle = tokio::spawn(async move {
+        let task = BackgroundTask::spawn(async move {
             loop {
                 if let Err(error) = refresh_exits(&state).await {
-                    eprintln!("failed to refresh session lifecycle: {error:#}");
+                    tracing::warn!(error = ?error, "failed to refresh session lifecycle");
                 }
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
         });
 
-        Self { handle }
+        Self { task }
     }
-}
 
-impl Drop for LifecycleTask {
-    fn drop(&mut self) {
-        self.handle.abort();
+    pub async fn shutdown(&self) {
+        self.task.shutdown().await;
     }
 }
 
 pub async fn refresh_exits(state: &DaemonState) -> Result<()> {
     for child_exit in state
-        .driver
+        .runtime
         .reap_exited()
         .await
         .context("failed to reap children")?
