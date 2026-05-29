@@ -2,15 +2,24 @@ use super::*;
 use crate::identity_client::IdentityClient;
 use lilo_db::LiloDb;
 use lilo_paths::{LiloHome, LiloPaths};
-use lilo_rm_core::{IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, ShimReady};
+use lilo_rm_core::{
+    EventBatch, EventsRequest, IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, ShimReady,
+};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
-use lilo_session_core::{Namespace, RuntimeKind};
-use lilo_session_driver::InProcessRuntime;
+use lilo_session_core::{Namespace, RuntimeDoctorReport, RuntimeKind};
+use lilo_session_driver::{
+    CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimePort, SpawnedProcess,
+};
 use lilo_session_store::SqliteStore;
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+type PortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = std::result::Result<T, DriverError>> + Send + 'a>>;
 
 #[tokio::test]
 async fn namespace_deleted_recovery_kills_runtime_before_abort() {
@@ -83,6 +92,85 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     db.close().await;
 }
 
+#[tokio::test]
+async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = LiloPaths::new(LiloHome::from_path(temp.path().join("lilo")).expect("home"));
+    let db = LiloDb::open(&paths).await.expect("db");
+    let runtime = Arc::new(
+        RuntimeService::build(RuntimeServiceContext::new(
+            DaemonConfig::from_lilo_paths(&paths).expect("runtime config"),
+            db.clone(),
+        ))
+        .await
+        .expect("runtime service builds"),
+    );
+    let store = SqliteStore::open(&db);
+    let lifecycle_store = LifecycleStore::open(&db);
+    let bad_session_id = Uuid::now_v7();
+    let good_session_id = Uuid::now_v7();
+    let bad_request = spawn_request(
+        bad_session_id,
+        Namespace::new("deleted").expect("namespace validates"),
+        temp.path(),
+    );
+    let good_request = spawn_request(good_session_id, Namespace::default(), temp.path());
+    let bad_intent = pending_intent(bad_session_id, &bad_request);
+    let good_intent = pending_intent(good_session_id, &good_request);
+    store
+        .insert_pending_spawn_intent(&bad_intent)
+        .await
+        .expect("bad pending intent inserts");
+    store
+        .insert_pending_spawn_intent(&good_intent)
+        .await
+        .expect("good pending intent inserts");
+    let bad_lifecycle = running_lifecycle(bad_session_id, 1001);
+    let good_lifecycle = running_lifecycle(good_session_id, 1002);
+    insert_running_lifecycle(&lifecycle_store, &bad_lifecycle).await;
+    insert_running_lifecycle(&lifecycle_store, &good_lifecycle).await;
+    let runtime_port = Arc::new(StaticStatusRuntimePort::new(vec![
+        bad_lifecycle,
+        good_lifecycle,
+    ]));
+    let state = DaemonState::new(
+        store.clone(),
+        runtime_port.clone(),
+        Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
+        Arc::clone(&runtime),
+    );
+
+    state
+        .reconcile_pending_spawn_intents()
+        .await
+        .expect("reconcile sweep completes after one intent fails");
+
+    assert!(runtime_port.terminated(bad_session_id));
+    assert!(
+        store
+            .get_session(&bad_session_id)
+            .await
+            .expect("bad session lookup succeeds")
+            .is_none()
+    );
+    assert!(
+        store
+            .get_session(&good_session_id)
+            .await
+            .expect("good session lookup succeeds")
+            .is_some()
+    );
+    assert!(
+        store
+            .list_pending_spawn_intents()
+            .await
+            .expect("pending intent list succeeds")
+            .is_empty()
+    );
+    runtime.shutdown().await.expect("runtime shuts down");
+    db.close().await;
+}
+
 struct ChildGuard {
     child: Child,
     runtime_pid: u32,
@@ -139,6 +227,89 @@ impl Drop for ChildGuard {
             let _ = self.child.wait();
         }
     }
+}
+
+struct StaticStatusRuntimePort {
+    lifecycles: Vec<Lifecycle>,
+    terminated_session_ids: Mutex<Vec<Uuid>>,
+}
+
+impl StaticStatusRuntimePort {
+    fn new(lifecycles: Vec<Lifecycle>) -> Self {
+        Self {
+            lifecycles,
+            terminated_session_ids: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn terminated(&self, session_id: Uuid) -> bool {
+        self.terminated_session_ids
+            .lock()
+            .expect("terminated ids lock succeeds")
+            .contains(&session_id)
+    }
+}
+
+impl RuntimePort for StaticStatusRuntimePort {
+    fn spawn<'a>(
+        &'a self,
+        _session_id: &'a str,
+        _launch: &'a SpawnLaunch,
+    ) -> PortFuture<'a, SpawnedProcess> {
+        unsupported_port_call("spawn")
+    }
+
+    fn reap_exited(&self) -> PortFuture<'_, Vec<ChildExit>> {
+        unsupported_port_call("reap_exited")
+    }
+
+    fn capture<'a>(
+        &'a self,
+        _session_id: &'a str,
+        _scrollback_lines: Option<u32>,
+    ) -> PortFuture<'a, CaptureResult> {
+        unsupported_port_call("capture")
+    }
+
+    fn terminate<'a>(
+        &'a self,
+        session_id: &'a str,
+        _signal: &'a str,
+        _grace: Duration,
+    ) -> PortFuture<'a, Option<ChildExit>> {
+        Box::pin(async move {
+            let session_id_uuid = Uuid::parse_str(session_id)
+                .map_err(|_| DriverError::InvalidSessionId(session_id.to_string()))?;
+            self.terminated_session_ids
+                .lock()
+                .expect("terminated ids lock succeeds")
+                .push(session_id_uuid);
+            Ok(Some(ChildExit {
+                session_id: session_id.to_string(),
+                runtime_pid: 1001,
+                exit_code: Some(143),
+                transcript_path: None,
+            }))
+        })
+    }
+
+    fn nudge<'a>(&'a self, _session_id: &'a str, _content: &'a str) -> PortFuture<'a, NudgeResult> {
+        unsupported_port_call("nudge")
+    }
+
+    fn status(&self, _filter: StatusFilter) -> PortFuture<'_, Vec<Lifecycle>> {
+        Box::pin(async move { Ok(self.lifecycles.clone()) })
+    }
+
+    fn poll_events(&self, _request: EventsRequest) -> PortFuture<'_, EventBatch> {
+        unsupported_port_call("poll_events")
+    }
+
+    fn doctor(&self) -> PortFuture<'_, RuntimeDoctorReport> {
+        unsupported_port_call("doctor")
+    }
+
+    fn terminate_all(&self) {}
 }
 
 fn read_runtime_pid(pid_file: &Path, child: &mut Child) -> u32 {
@@ -198,6 +369,35 @@ fn mark_running(lifecycle: &mut Lifecycle, runtime_pid: u32) {
         start_time: Utc::now(),
         tmux_pane: None,
     }));
+}
+
+async fn insert_running_lifecycle(store: &LifecycleStore, lifecycle: &Lifecycle) {
+    let mut forking = lifecycle.clone();
+    forking.state = LifecycleState::Forking;
+    store
+        .insert_forking(&forking)
+        .await
+        .expect("forking lifecycle inserts");
+    store
+        .update_lifecycle(lifecycle)
+        .await
+        .expect("running lifecycle updates");
+}
+
+fn running_lifecycle(session_id: Uuid, runtime_pid: u32) -> Lifecycle {
+    let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
+    lifecycle.isolation = IsolationPolicy::Host;
+    mark_running(&mut lifecycle, runtime_pid);
+    lifecycle
+}
+
+fn unsupported_port_call<T: Send + 'static>(operation: &'static str) -> PortFuture<'static, T> {
+    Box::pin(async move {
+        Err(DriverError::Unsupported {
+            operation,
+            pass: "test",
+        })
+    })
 }
 
 fn spawn_request(session_id: Uuid, namespace: Namespace, dir: &Path) -> SpawnRequest {

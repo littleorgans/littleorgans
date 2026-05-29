@@ -270,7 +270,14 @@ impl DaemonState {
             .await
             .context("failed to list pending spawn intents")?;
         for intent in pending {
-            self.reconcile_pending_spawn_intent(intent).await?;
+            let session_id = intent.session_id;
+            if let Err(error) = self.reconcile_pending_spawn_intent(intent).await {
+                tracing::warn!(
+                    error = ?error,
+                    session_id = %session_id,
+                    "failed to reconcile pending spawn intent; continuing"
+                );
+            }
         }
         Ok(())
     }
