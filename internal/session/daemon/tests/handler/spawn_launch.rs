@@ -1,4 +1,5 @@
 use crate::common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
+use lilo_im_core::{Action, AuditDecision};
 use lilo_session_core::{
     IsolationPolicy, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
 };
@@ -55,4 +56,48 @@ pub(crate) async fn spawn_launch_cwd_is_request_workspace() {
     assert_eq!(session.workspace, daemon.dir.path().display().to_string());
     assert_eq!(session.dir, daemon.dir.path());
     assert!(session.runtime_pid > 0);
+}
+
+#[tokio::test]
+pub(crate) async fn composed_spawn_writes_one_session_door_audit_row() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let state = daemon.in_process_state().await;
+    let context = local_context();
+    let principal = context.principal.clone();
+
+    let spawned = state
+        .handle(
+            context,
+            SessionRpc::Spawn {
+                request: Box::new(SpawnRequest {
+                    runtime: RuntimeKind::Claude,
+                    role: "pm".to_string(),
+                    workspace: daemon.dir.path().display().to_string(),
+                    dir: None,
+                    namespace: None,
+                    target: "headless".to_string(),
+                    agent_config: None,
+                    isolation: IsolationPolicy::default(),
+                    image: None,
+                    env: Vec::new(),
+                    mounts: Vec::new(),
+                    shell_resume: None,
+                    labels: Vec::new(),
+                    force: false,
+                }),
+            },
+        )
+        .await;
+    let RpcResponse::Spawned { response } = spawned.response else {
+        panic!("expected spawn response");
+    };
+
+    let rows = daemon.audit_rows().await;
+    let spawn_rows = rows
+        .iter()
+        .filter(|row| row.principal == principal && row.action == Action::Spawn)
+        .collect::<Vec<_>>();
+    assert_eq!(spawn_rows.len(), 1);
+    assert_eq!(spawn_rows[0].decision, AuditDecision::Allow);
+    assert_eq!(spawn_rows[0].resource.session_id, Some(response.session.id));
 }

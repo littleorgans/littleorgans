@@ -2,6 +2,8 @@ mod common;
 
 #[path = "handler/agent_config.rs"]
 mod agent_config;
+#[path = "handler/authz_gate.rs"]
+mod authz_gate;
 #[path = "handler/lifecycle.rs"]
 mod lifecycle;
 #[path = "handler/logs_doctor.rs"]

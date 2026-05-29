@@ -1,12 +1,15 @@
 use lilo_rm_client::ClientError;
 pub use lilo_rm_core::LaunchEnv;
-use lilo_rm_core::{CaptureResponse, IsolationPolicy, MountSpec, ShellResume, SpawnConflictKind};
+use lilo_rm_core::{
+    CaptureResponse, IsolationPolicy, Lifecycle, MountSpec, ShellResume, SpawnConflictKind,
+};
 use lilo_session_core::RuntimeKind;
 use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpawnedProcess {
+    pub lifecycle: Lifecycle,
     pub runtime_pid: u32,
     pub log_dir: Option<PathBuf>,
     pub stdout_path: Option<PathBuf>,

@@ -1,3 +1,4 @@
+mod authz;
 mod dispatch;
 mod messaging;
 mod sessions;

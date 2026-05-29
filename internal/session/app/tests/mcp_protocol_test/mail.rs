@@ -102,10 +102,8 @@ fn assert_mail_flow_audit(rows: &[AuditRow]) {
         actions,
         vec![
             Action::Spawn,
-            Action::Spawn,
             Action::ShimCallback,
             Action::ShimCallback,
-            Action::Spawn,
             Action::Spawn,
             Action::ShimCallback,
             Action::ShimCallback,

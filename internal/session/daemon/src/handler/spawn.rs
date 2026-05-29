@@ -1,14 +1,16 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_db::{begin_immediate_tx, finish_immediate_tx};
-use lilo_im_core::{Action, Principal};
+use lilo_im_core::Action;
 use lilo_rm_core::{
-    KillRequest, LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, RuntimeResponse, RuntimeRpc,
-    RuntimeSignal, ShellResume, StatusRequest, capture_caller_env, capture_shell_resume,
+    LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, ShellResume, StatusFilter,
+    capture_caller_env, capture_shell_resume,
 };
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
-use lilo_session_driver::{SpawnLaunch, runtime_spawn_request};
+use lilo_session_driver::{DriverError, SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
 use sqlx::{Sqlite, pool::PoolConnection};
 use uuid::Uuid;
@@ -67,31 +69,18 @@ impl DaemonState {
         );
 
         self.begin_spawn_intent(context, &request, &intent).await?;
-        // TODO(WS4): move mutating spawn to RuntimePort with domain state-change audit.
-        let payload = match self
-            .runtime_service
-            .handle_rpc(
-                context.principal.clone(),
-                RuntimeRpc::Spawn {
-                    request: runtime_request,
-                },
-            )
-            .await
-        {
-            RuntimeResponse::Spawned(payload) => payload,
-            response => {
-                self.abort_spawn_intent(id, &runtime_spawn_failure(&response))
-                    .await?;
-                anyhow::bail!("runtime spawn failed: {}", runtime_spawn_failure(&response));
+        let id_string = id.to_string();
+        let spawned = match self.runtime.spawn(&id_string, &launch).await {
+            Ok(spawned) => spawned,
+            Err(error) => {
+                let failure = runtime_spawn_failure(&error);
+                self.abort_spawn_intent(id, &failure).await?;
+                anyhow::bail!("runtime spawn failed: {failure}");
             }
         };
+        let event = running_event_from_lifecycle(&spawned.lifecycle)?;
         let session = self
-            .complete_spawn_intent(
-                &intent,
-                payload.lifecycle,
-                payload.event,
-                payload.stdout_path,
-            )
+            .complete_spawn_intent(&intent, spawned.lifecycle, event, spawned.stdout_path)
             .await?;
 
         Ok(RpcResponse::Spawned {
@@ -161,35 +150,24 @@ impl DaemonState {
             .await
             .context("failed to revalidate namespace before session commit")?
         {
-            // TODO(WS4): move recovery kill to RuntimePort with domain state-change audit.
-            let kill_response = self
-                .runtime_service
-                .handle_rpc(
-                    Principal::Local(nix::unistd::getuid().as_raw()),
-                    RuntimeRpc::Kill {
-                        request: KillRequest {
-                            session_id: intent.session_id,
-                            signal: RuntimeSignal::Term,
-                            grace_secs: 5,
-                        },
-                    },
-                )
-                .await;
-            match kill_response {
-                RuntimeResponse::Killed(_) => {}
-                RuntimeResponse::Error(error) => {
+            let session_id = intent.session_id.to_string();
+            match self
+                .runtime
+                .terminate(&session_id, "SIGTERM", Duration::from_secs(5))
+                .await
+            {
+                Ok(Some(_)) => {}
+                Ok(None) => {
                     tracing::warn!(
-                        error = %error.message,
-                        code = ?error.code,
                         session_id = %intent.session_id,
-                        "recovery kill of orphaned runtime process failed"
+                        "recovery kill did not observe orphaned runtime process exit"
                     );
                 }
-                other => {
+                Err(error) => {
                     tracing::warn!(
-                        ?other,
+                        error = %error,
                         session_id = %intent.session_id,
-                        "recovery kill returned unexpected runtime response"
+                        "recovery kill of orphaned runtime process failed"
                     );
                 }
             }
@@ -269,29 +247,24 @@ impl DaemonState {
     }
 
     async fn reconcile_pending_spawn_intent(&self, intent: SessionSpawnIntent) -> Result<()> {
-        // TODO(WS4): move spawn-lifecycle status reconcile to RuntimePort with read audit de-dup.
-        let response = self
-            .runtime_service
-            .handle_rpc(
-                lilo_im_core::Principal::Local(nix::unistd::getuid().as_raw()),
-                RuntimeRpc::Status {
-                    request: StatusRequest {
-                        session_id: Some(intent.session_id),
-                        session_ids: Vec::new(),
-                        updated_since: None,
-                        runtime: None,
-                        state: None,
-                    },
-                },
-            )
-            .await;
-        let RuntimeResponse::Status(status) = response else {
-            self.abort_spawn_intent(intent.session_id, &runtime_spawn_failure(&response))
-                .await?;
-            return Ok(());
+        let status = match self
+            .runtime
+            .status(StatusFilter::for_session(intent.session_id))
+            .await
+        {
+            Ok(lifecycles) => lifecycles,
+            Err(error) => {
+                let failure = runtime_spawn_failure(&error);
+                self.abort_spawn_intent(intent.session_id, &failure).await?;
+                tracing::warn!(
+                    error = %error,
+                    session_id = %intent.session_id,
+                    "runtime status failed during spawn intent reconcile"
+                );
+                return Ok(());
+            }
         };
         let Some(lifecycle) = status
-            .lifecycles
             .into_iter()
             .find(|lifecycle| lifecycle.session_id == intent.session_id)
         else {
@@ -347,13 +320,12 @@ fn running_event_from_lifecycle(lifecycle: &Lifecycle) -> Result<RuntimeEvent> {
     })
 }
 
-fn runtime_spawn_failure(response: &RuntimeResponse) -> String {
-    match response {
-        RuntimeResponse::SpawnConflict(payload) => {
-            format!("spawn conflict: {:?}", payload.kind)
+fn runtime_spawn_failure(error: &DriverError) -> String {
+    match error {
+        DriverError::SpawnConflict { kind, .. } => {
+            format!("spawn conflict: {kind:?}")
         }
-        RuntimeResponse::Error(error) => error.message.clone(),
-        other => format!("unexpected runtime response: {other:?}"),
+        other => other.to_string(),
     }
 }
 
