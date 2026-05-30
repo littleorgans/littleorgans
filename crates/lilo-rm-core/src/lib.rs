@@ -39,7 +39,7 @@ pub use admin::{
 };
 pub use capture::{
     CaptureError, CaptureRequest, CaptureResponse, LogAvailability, LogsUnavailableReason,
-    PaneSnapshot,
+    PaneSnapshot, strip_ansi_escapes,
 };
 pub use cli_output::{Ack, CliOutput};
 pub use error::{ErrorCode, ProtocolError, RuntimeKindParseError};
