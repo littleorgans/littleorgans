@@ -5,11 +5,11 @@ use serde_json::Value;
 
 pub(crate) fn get_session_json(daemon: &common::DaemonFixture, id: &str) -> Value {
     let output = daemon
-        .command()
-        .args(["get", "session", id, "--json"])
+        .lilo_command()
+        .args(["get", "session", id, "--output", "json"])
         .output()
-        .or_panic("sm get session <id> --json executes");
-    assert_success("sm get session <id> --json", &output);
+        .or_panic("lilo get session <id> --output json executes");
+    assert_success("lilo get session <id> --output json", &output);
     serde_json::from_slice(&output.stdout).or_panic("session JSON parses")
 }
 

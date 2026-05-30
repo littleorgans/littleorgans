@@ -195,12 +195,11 @@ impl ServerState {
         {
             return Ok(CaptureResponse::Failed(CaptureError::PaneUnavailable));
         }
-        let scrollback_lines = request.scrollback_lines.unwrap_or(1000);
         Ok(
             match lilo_runtime_platform::tmux::TmuxGateway::capture_pane(
                 tmux_server_label,
                 tmux_pane,
-                scrollback_lines,
+                request.scrollback_lines,
             )
             .await
             {

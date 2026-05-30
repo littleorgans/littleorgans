@@ -66,11 +66,11 @@ fn create_and_get_namespace_support_human_and_json_output() {
     assert!(!stdout(&alias_single).contains("default"));
 
     let json = daemon
-        .command()
-        .args(["get", "namespace", "--json"])
+        .lilo_command()
+        .args(["get", "namespace", "--output", "json"])
         .output()
-        .or_panic("sm get namespace --json executes");
-    assert_success("sm get namespace --json", &json);
+        .or_panic("lilo get namespace --output json executes");
+    assert_success("lilo get namespace --output json", &json);
     let namespaces: Value = serde_json::from_slice(&json.stdout).or_panic("namespace JSON parses");
     assert_eq!(namespaces[0]["namespace"], "alpha");
     assert_eq!(namespaces[1]["namespace"], "default");
@@ -152,7 +152,6 @@ fn delete_namespace_cascades_sessions_and_clears_binding() {
             "engineer",
             "--dir",
             &daemon.dir.path().display().to_string(),
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");

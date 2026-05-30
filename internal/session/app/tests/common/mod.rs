@@ -124,7 +124,7 @@ impl DaemonFixture {
         let _ = self.child.wait();
     }
 
-    fn lilo_command(&self) -> Command {
+    pub fn lilo_command(&self) -> Command {
         let mut command = Command::new(lilo_bin());
         command
             .env_remove("CLAUDE_CONFIG_DIR")

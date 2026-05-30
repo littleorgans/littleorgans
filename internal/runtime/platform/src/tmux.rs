@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use lilo_rm_core::{CaptureError, LaunchEnv, PaneSnapshot, TmuxAddress};
+use lilo_rm_core::{CaptureError, LaunchEnv, PaneSnapshot, TmuxAddress, strip_ansi_escapes};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
@@ -80,11 +80,13 @@ impl TmuxGateway {
     pub async fn capture_pane(
         server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
-        scrollback_lines: u32,
+        scrollback_lines: Option<u32>,
     ) -> std::result::Result<PaneSnapshot, CaptureError> {
-        let content_output = tmux_capture_output(server_label, tmux_pane, scrollback_lines)
-            .await?
-            .ok_or(CaptureError::TmuxNotAvailable)?;
+        let scrollback_lines_requested = scrollback_lines.unwrap_or(1000);
+        let content_output =
+            tmux_capture_output(server_label, tmux_pane, scrollback_lines_requested)
+                .await?
+                .ok_or(CaptureError::TmuxNotAvailable)?;
         if !content_output.status.success() {
             return Err(CaptureError::CapturePaneFailed {
                 stderr: stderr(&content_output),
@@ -98,13 +100,14 @@ impl TmuxGateway {
                 stderr: stderr(&history_output),
             });
         }
-        let content = stdout(&content_output);
+        let raw_content = stdout(&content_output);
+        let content = trim_explicit_scrollback(&raw_content, scrollback_lines);
         let pane_history_lines = parse_history_lines(&stdout(&history_output))?;
         let scrollback_lines_included = content.lines().count().try_into().unwrap_or(u32::MAX);
         Ok(PaneSnapshot {
             content,
             captured_at_ms: unix_epoch_ms(),
-            scrollback_lines_requested: scrollback_lines,
+            scrollback_lines_requested,
             scrollback_lines_included,
             pane_history_lines,
         })
@@ -140,6 +143,21 @@ fn build_capture_pane_args(tmux_pane: &TmuxAddress, scrollback_lines: u32) -> Ve
         "-t".to_owned(),
         tmux_pane.to_string(),
     ]
+}
+
+fn trim_explicit_scrollback(content: &str, scrollback_lines: Option<u32>) -> String {
+    let mut lines = content.split_inclusive('\n').collect::<Vec<_>>();
+    while lines
+        .last()
+        .is_some_and(|line| strip_ansi_escapes(line).trim().is_empty())
+    {
+        lines.pop();
+    }
+
+    let start = scrollback_lines.map_or(0, |line_limit| {
+        lines.len().saturating_sub(line_limit as usize)
+    });
+    lines[start..].concat()
 }
 
 async fn tmux_history_output(
@@ -359,6 +377,58 @@ mod tests {
                 "-t".to_owned(),
                 "rtm:0.1".to_owned()
             ]
+        );
+    }
+
+    #[test]
+    fn explicit_scrollback_trims_to_last_requested_lines() {
+        let content = "one\ntwo\nthree\n\n\n".to_owned();
+
+        assert_eq!(trim_explicit_scrollback(&content, Some(2)), "two\nthree\n");
+    }
+
+    #[test]
+    fn omitted_scrollback_removes_trailing_blank_rows() {
+        let content = "one\ntwo\nthree\n\n\n".to_owned();
+
+        assert_eq!(
+            trim_explicit_scrollback(&content, None),
+            "one\ntwo\nthree\n"
+        );
+    }
+
+    #[test]
+    fn all_blank_capture_trims_to_empty_content() {
+        let content = "\u{1b}[0m\n   \n\n".to_owned();
+
+        assert_eq!(trim_explicit_scrollback(&content, Some(3)), "");
+        assert_eq!(trim_explicit_scrollback(&content, None), "");
+    }
+
+    #[test]
+    fn content_shorter_than_requested_after_trim_is_preserved() {
+        let content = "one\ntwo\n\n\n".to_owned();
+
+        assert_eq!(trim_explicit_scrollback(&content, Some(5)), "one\ntwo\n");
+    }
+
+    #[test]
+    fn ansi_only_trailing_lines_are_blank_without_stripping_content() {
+        let content = "\u{1b}[31mred\u{1b}[0m\n\u{1b}[0m\n".to_owned();
+
+        assert_eq!(
+            trim_explicit_scrollback(&content, None),
+            "\u{1b}[31mred\u{1b}[0m\n"
+        );
+    }
+
+    #[test]
+    fn leading_and_internal_blank_lines_are_preserved() {
+        let content = "\nfirst\n\u{1b}[0m\nlast\n\n".to_owned();
+
+        assert_eq!(
+            trim_explicit_scrollback(&content, None),
+            "\nfirst\n\u{1b}[0m\nlast\n"
         );
     }
 

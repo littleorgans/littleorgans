@@ -1,6 +1,6 @@
 use lilo_rm_core::{IsolationPolicy, MountSpec};
 
-use super::{DeleteRequest, MailSendRequest, NudgeRequest, SessionRpc, SpawnRequest};
+use super::{DeleteRequest, MailSendRequest, NudgeRequest, RpcResponse, SessionRpc, SpawnRequest};
 use crate::test_support::OrPanic as _;
 use crate::{RuntimeKind, Selector};
 
@@ -131,6 +131,31 @@ fn nudge_request_round_trips_as_tagged_json() {
     };
 
     assert_rpc_round_trip(&request);
+}
+
+#[test]
+fn doctor_response_decodes_old_daemon_without_version() {
+    let json = r#"{
+        "type": "doctor",
+        "response": {
+            "status": "ok",
+            "runtime": "rtmd",
+            "runtime_matters": {
+                "status": "ok",
+                "doctor": null,
+                "socket_path": null,
+                "code": null,
+                "message": null
+            },
+            "findings": []
+        }
+    }"#;
+
+    let decoded: RpcResponse = serde_json::from_str(json).or_panic("decodes old doctor response");
+    let RpcResponse::Doctor { response } = decoded else {
+        panic!("expected doctor response");
+    };
+    assert_eq!(response.daemon_version, None);
 }
 
 fn assert_rpc_round_trip(request: &SessionRpc) {

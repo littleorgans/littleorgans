@@ -45,8 +45,6 @@ pub const SESSION_CAPTURE_ABOUT: &str = "Capture tmux pane scrollback for one se
 pub const SESSION_CAPTURE_ID_HELP: &str = "Exact session id to capture.";
 #[rustfmt::skip]
 pub const SESSION_CAPTURE_SCROLLBACK_LINES_HELP: &str = "Maximum tmux scrollback lines to include. When omitted, runtime-matters uses its default capture depth.";
-#[rustfmt::skip]
-pub const SESSION_CAPTURE_JSON_HELP: &str = "Render the captured session and capture result as JSON.";
 
 #[rustfmt::skip]
 pub const SESSION_DELETE_ABOUT: &str = "Terminate daemon owned sessions by selector.";

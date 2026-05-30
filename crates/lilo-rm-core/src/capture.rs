@@ -87,9 +87,76 @@ impl CaptureResponse {
     }
 }
 
+pub fn strip_ansi_escapes(input: &str) -> String {
+    const ESC: u8 = 0x1b;
+    const BEL: u8 = 0x07;
+
+    enum State {
+        Ground,
+        Escape,
+        Csi,
+        Osc,
+        OscEscape,
+    }
+
+    let mut output = Vec::with_capacity(input.len());
+    let mut state = State::Ground;
+    for &byte in input.as_bytes() {
+        if byte == b'\n' {
+            output.push(byte);
+            state = State::Ground;
+            continue;
+        }
+
+        match state {
+            State::Ground => {
+                if byte == ESC {
+                    state = State::Escape;
+                } else {
+                    output.push(byte);
+                }
+            }
+            State::Escape => match byte {
+                b'[' => state = State::Csi,
+                b']' => state = State::Osc,
+                ESC => state = State::Escape,
+                _ => {
+                    output.push(byte);
+                    state = State::Ground;
+                }
+            },
+            State::Csi => {
+                if byte == ESC {
+                    state = State::Escape;
+                } else if is_csi_final(byte) {
+                    state = State::Ground;
+                }
+            }
+            State::Osc => match byte {
+                BEL => state = State::Ground,
+                ESC => state = State::OscEscape,
+                _ => {}
+            },
+            State::OscEscape => match byte {
+                b'\\' => state = State::Ground,
+                ESC => state = State::OscEscape,
+                b'[' => state = State::Csi,
+                b']' => state = State::Osc,
+                _ => state = State::Ground,
+            },
+        }
+    }
+
+    String::from_utf8(output).expect("stripped ANSI output remains valid UTF-8")
+}
+
+fn is_csi_final(byte: u8) -> bool {
+    matches!(byte, 0x40..=0x7e)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::LogsUnavailableReason;
+    use super::{LogsUnavailableReason, strip_ansi_escapes};
 
     #[test]
     fn logs_unavailable_reason_as_str_matches_serde_snake_case() {
@@ -107,5 +174,27 @@ mod tests {
             LogsUnavailableReason::RecorderFailed.as_str(),
             "recorder_failed"
         );
+    }
+
+    #[test]
+    fn strip_ansi_escapes_removes_csi_sequences() {
+        assert_eq!(
+            strip_ansi_escapes("plain \u{1b}[31mred\u{1b}[0m text"),
+            "plain red text"
+        );
+    }
+
+    #[test]
+    fn strip_ansi_escapes_removes_osc_sequences() {
+        let input = "a\u{1b}]8;;https://example.test\u{7}link\u{1b}]8;;\u{1b}\\b";
+
+        assert_eq!(strip_ansi_escapes(input), "alinkb");
+    }
+
+    #[test]
+    fn strip_ansi_escapes_preserves_newlines_and_lone_escape_text() {
+        let input = "one\u{1b}[31\ntwo\u{1b}three\u{1b}";
+
+        assert_eq!(strip_ansi_escapes(input), "one\ntwothree");
     }
 }

@@ -16,12 +16,18 @@ use crate::handler::DaemonState;
 use crate::identity_client::{IdentityClient, RequestContext};
 use crate::lifecycle::LifecycleTask;
 
-pub async fn run_daemon(paths: LiloPaths) -> Result<()> {
+pub async fn run_daemon(paths: LiloPaths, daemon_version: impl Into<String>) -> Result<()> {
+    let daemon_version = daemon_version.into();
     let db = LiloDb::open(&paths).await?;
-    run_daemon_with_db(paths, db).await
+    run_daemon_with_db(paths, daemon_version, db).await
 }
 
-pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
+pub async fn run_daemon_with_db(
+    paths: LiloPaths,
+    daemon_version: impl Into<String>,
+    db: LiloDb,
+) -> Result<()> {
+    let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
     let endpoint = DaemonEndpoint::from_paths(&paths);
     remove_stale_socket(&endpoint)?;
@@ -47,6 +53,7 @@ pub async fn run_daemon_with_db(paths: LiloPaths, db: LiloDb) -> Result<()> {
     );
     let state = Arc::new(DaemonState::new(
         store,
+        daemon_version,
         Arc::new(runtime_port),
         Arc::new(identity),
         runtime,

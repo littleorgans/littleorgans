@@ -14,6 +14,12 @@ use crate::{
     ValidateTargetResponse, WatcherCounts,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EmptyIoError {
+    Propagate,
+    TreatAsEmpty,
+}
+
 pub type EventCursor = u64;
 
 pub const EVENT_LOG_RETENTION_MIN_AGE_SECS: u64 = 7 * 24 * 60 * 60;
@@ -270,9 +276,47 @@ where
     R: AsyncBufRead + Unpin,
     T: DeserializeOwned,
 {
-    let mut line = String::new();
-    let read = reader.read_line(&mut line).await?;
-    parse_read_json_line(read, &line)
+    read_async_json_line(
+        reader,
+        || Err(ProtocolError::Eof),
+        EmptyIoError::Propagate,
+        parse_json_line_bytes,
+    )
+    .await
+}
+
+pub async fn read_optional_json_line<R, T>(reader: &mut R) -> Result<Option<T>, ProtocolError>
+where
+    R: AsyncBufRead + Unpin,
+    T: DeserializeOwned,
+{
+    read_async_json_line(
+        reader,
+        || Ok(None),
+        EmptyIoError::TreatAsEmpty,
+        |line| serde_json::from_slice(line).map(Some).map_err(Into::into),
+    )
+    .await
+}
+
+async fn read_async_json_line<R, T, Empty, Parse>(
+    reader: &mut R,
+    empty_read: Empty,
+    empty_io_error: EmptyIoError,
+    parse: Parse,
+) -> Result<T, ProtocolError>
+where
+    R: AsyncBufRead + Unpin,
+    Empty: Fn() -> Result<T, ProtocolError>,
+    Parse: FnOnce(&[u8]) -> Result<T, ProtocolError>,
+{
+    let mut bytes = Vec::new();
+    match reader.read_until(b'\n', &mut bytes).await {
+        Ok(0) => empty_read(),
+        Ok(_) => parse(&bytes),
+        Err(_) if bytes.is_empty() && empty_io_error == EmptyIoError::TreatAsEmpty => empty_read(),
+        Err(error) => Err(error.into()),
+    }
 }
 
 pub async fn write_json_line<W, T>(writer: &mut W, message: &T) -> Result<(), ProtocolError>
@@ -314,6 +358,16 @@ where
     Ok(serde_json::from_str(line.trim_end())?)
 }
 
+fn parse_json_line_bytes<T>(line: &[u8]) -> Result<T, ProtocolError>
+where
+    T: DeserializeOwned,
+{
+    let line = std::str::from_utf8(line).map_err(|error| {
+        ProtocolError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    })?;
+    parse_json_line(line)
+}
+
 fn parse_read_json_line<T>(bytes_read: usize, line: &str) -> Result<T, ProtocolError>
 where
     T: DeserializeOwned,
@@ -335,7 +389,59 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
     use super::*;
+    use tokio::io::{AsyncBufRead, AsyncRead, BufReader, ReadBuf};
+
+    struct FailingBufRead {
+        bytes: &'static [u8],
+    }
+
+    impl FailingBufRead {
+        const fn new(bytes: &'static [u8]) -> Self {
+            Self { bytes }
+        }
+    }
+
+    impl AsyncRead for FailingBufRead {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            let this = self.get_mut();
+            if this.bytes.is_empty() {
+                return Poll::Ready(Err(std::io::Error::other("test io error")));
+            }
+            let len = buf.remaining().min(this.bytes.len());
+            let (head, tail) = this.bytes.split_at(len);
+            buf.put_slice(head);
+            this.bytes = tail;
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncBufRead for FailingBufRead {
+        fn poll_fill_buf(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<&[u8]>> {
+            let this = self.get_mut();
+            if this.bytes.is_empty() {
+                Poll::Ready(Err(std::io::Error::other("test io error")))
+            } else {
+                Poll::Ready(Ok(this.bytes))
+            }
+        }
+
+        fn consume(self: Pin<&mut Self>, amt: usize) {
+            let this = self.get_mut();
+            let consumed = amt.min(this.bytes.len());
+            this.bytes = &this.bytes[consumed..];
+        }
+    }
 
     #[test]
     fn clamped_event_wait_ms_applies_ceiling_and_default() {
@@ -349,5 +455,65 @@ mod tests {
             clamped_event_wait_ms(Some(EVENT_WAIT_MAX_MS + 1)),
             EVENT_WAIT_MAX_MS
         );
+    }
+
+    #[tokio::test]
+    async fn read_json_line_returns_eof_on_empty_read() {
+        let mut reader = BufReader::new(&b""[..]);
+
+        let error = read_json_line::<_, serde_json::Value>(&mut reader)
+            .await
+            .expect_err("empty read is eof");
+        assert!(matches!(error, ProtocolError::Eof));
+    }
+
+    #[tokio::test]
+    async fn read_json_line_propagates_empty_io_error() {
+        let mut reader = FailingBufRead::new(b"");
+
+        let error = read_json_line::<_, serde_json::Value>(&mut reader)
+            .await
+            .expect_err("empty io error propagates");
+        assert!(matches!(error, ProtocolError::Io(_)));
+    }
+
+    #[tokio::test]
+    async fn read_json_line_preserves_invalid_utf8_as_io_error() {
+        let mut reader = BufReader::new(&b"\xff\n"[..]);
+
+        let error = read_json_line::<_, serde_json::Value>(&mut reader)
+            .await
+            .expect_err("invalid utf-8 remains an io fault");
+        assert!(matches!(error, ProtocolError::Io(_)));
+    }
+
+    #[tokio::test]
+    async fn optional_json_line_returns_none_on_empty_read() {
+        let mut reader = BufReader::new(&b""[..]);
+
+        let parsed: Option<serde_json::Value> = read_optional_json_line(&mut reader)
+            .await
+            .expect("empty read is optional");
+        assert_eq!(parsed, None);
+    }
+
+    #[tokio::test]
+    async fn optional_json_line_returns_none_on_empty_io_error() {
+        let mut reader = FailingBufRead::new(b"");
+
+        let parsed: Option<serde_json::Value> = read_optional_json_line(&mut reader)
+            .await
+            .expect("empty io error is optional");
+        assert_eq!(parsed, None);
+    }
+
+    #[tokio::test]
+    async fn optional_json_line_preserves_malformed_partial_read() {
+        let mut reader = BufReader::new(&b"{"[..]);
+
+        let error = read_optional_json_line::<_, serde_json::Value>(&mut reader)
+            .await
+            .expect_err("partial malformed json remains a fault");
+        assert!(matches!(error, ProtocolError::Json(_)));
     }
 }

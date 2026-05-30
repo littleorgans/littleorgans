@@ -38,6 +38,7 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
     let state = DaemonState::new(
         SqliteStore::open(&db),
+        "test-daemon",
         runtime_port,
         Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
         Arc::clone(&runtime),
@@ -136,6 +137,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
     ]));
     let state = DaemonState::new(
         store.clone(),
+        "test-daemon",
         runtime_port.clone(),
         Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
         Arc::clone(&runtime),

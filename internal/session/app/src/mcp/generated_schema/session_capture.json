@@ -12,10 +12,6 @@
         "format": "uuid",
         "type": "string"
       },
-      "json": {
-        "description": "Render the captured session and capture result as JSON.",
-        "type": "boolean"
-      },
       "namespace": {
         "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
         "type": "string"

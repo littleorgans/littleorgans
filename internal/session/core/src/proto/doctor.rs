@@ -6,6 +6,7 @@ pub struct DoctorRequest {}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DoctorResponse {
     pub status: String,
+    pub daemon_version: Option<String>,
     pub runtime: String,
     pub runtime_matters: RuntimeDoctorReport,
     pub findings: Vec<DoctorFinding>,

@@ -63,7 +63,6 @@ fn run_accepts_docker_isolation_and_preserves_host_default() {
             .command()
             .args(["run", "claude", "--role", "x", "--dir", &project_arg])
             .args(extra_args)
-            .args(["--detach"])
             .output()
             .or_panic("sm run executes");
 

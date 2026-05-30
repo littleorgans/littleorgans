@@ -16,7 +16,7 @@ pub(crate) fn get_session_help_exposes_only_session_read_arguments() {
         assert!(stdout.contains("--namespace"));
         assert!(stdout.contains("Namespace scope for resolving session selectors"));
         assert!(stdout.contains("--all-namespaces"));
-        assert!(stdout.contains("--json"));
+        assert!(!stdout.contains("--json"));
         assert!(stdout.contains("--show-labels"));
     }
 }
@@ -31,7 +31,7 @@ pub(crate) fn get_namespace_help_exposes_only_namespace_read_arguments() {
 
         assert_success("sm get namespace help", &output);
         let stdout = stdout(&output);
-        assert!(stdout.contains("--json"));
+        assert!(!stdout.contains("--json"));
         assert!(!stdout.contains("--selector"));
         assert!(!stdout.contains("--namespace <NAMESPACE>"));
         assert!(!stdout.contains("--all-namespaces"));
@@ -84,4 +84,17 @@ pub(crate) fn run_help_exposes_force_as_imperative_argument() {
     let stdout = stdout(&output);
     assert!(stdout.contains("--force"));
     assert!(stdout.contains("Preempt an occupied tmux pane"));
+    assert!(!stdout.contains("--detach"));
+}
+
+#[test]
+pub(crate) fn run_detach_is_rejected_by_clap() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_sm"))
+        .args(["run", "claude", "--role", "engineer", "--detach"])
+        .output()
+        .or_panic("sm run --detach executes");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unexpected argument '--detach'"));
 }

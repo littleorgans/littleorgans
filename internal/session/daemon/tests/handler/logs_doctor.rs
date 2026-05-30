@@ -1,6 +1,8 @@
 use chrono::Utc;
 
-use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_test_session};
+use crate::common::{
+    LOCAL_UID, OrPanic as _, TEST_DAEMON_VERSION, TestDaemon, local_context, spawn_test_session,
+};
 use lilo_session_core::{
     DoctorRequest, LogsRequest, LostEvidence, RpcResponse, Selector, SessionRpc, WaitCondition,
     WaitRequest,
@@ -150,6 +152,10 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
     };
 
     assert_eq!(response.status, "ok");
+    assert_eq!(
+        response.daemon_version.as_deref(),
+        Some(TEST_DAEMON_VERSION)
+    );
     assert!(response.runtime.starts_with("rtmd (lilo-rm-client 0.6.x"));
     assert_eq!(response.runtime_matters.status, "ok");
     assert_eq!(response.runtime_matters.socket_path, None);

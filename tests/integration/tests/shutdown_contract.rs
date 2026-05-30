@@ -54,6 +54,7 @@ async fn run_shutdown_contract(trigger: ShutdownTrigger) -> Result<()> {
     let compose_task = tokio::spawn(compose::run_with_shutdown_observer(
         fixture.paths.clone(),
         observer,
+        "test-daemon",
     ));
     wait_for_accepting_socket(&socket_path).await?;
     assert_no_session_partial_rows(&fixture.db).await?;

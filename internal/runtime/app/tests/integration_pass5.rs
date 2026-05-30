@@ -146,6 +146,18 @@ fn capture_tmux_pane_returns_snapshot_json() {
     assert!(snapshot.content.contains(&marker), "{snapshot:?}");
     assert!(snapshot.scrollback_lines_included > 0, "{snapshot:?}");
 
+    let one_line_response = capture_rpc(&harness, session_id.parse().expect("session id"), Some(1));
+    let RuntimeResponse::Capture(one_line_payload) = one_line_response else {
+        panic!("unexpected capture response: {one_line_response:?}");
+    };
+    let one_line_snapshot = match one_line_payload.response {
+        CaptureResponse::Captured(snapshot) => snapshot,
+        other => panic!("unexpected capture payload: {other:?}"),
+    };
+    assert_eq!(one_line_snapshot.scrollback_lines_requested, 1);
+    assert_eq!(one_line_snapshot.scrollback_lines_included, 1);
+    assert_eq!(one_line_snapshot.content.lines().count(), 1);
+
     let output = harness.cli(&["capture", &session_id, "--scrollback-lines", "200"]);
     assert!(output.status.success(), "capture CLI failed: {output:?}");
     let snapshot: lilo_rm_core::PaneSnapshot =

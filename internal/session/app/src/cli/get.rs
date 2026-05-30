@@ -6,15 +6,15 @@ use crate::cli::cli_def::{GetArgs, GetResource, SessionGetArgs, SessionListArgs}
 use crate::cli::output::{print_session_line, print_session_table};
 use crate::cli::selector_scope::scoped_selector;
 
-pub async fn run(args: GetArgs) -> Result<()> {
+pub async fn run(args: GetArgs, json_output: bool) -> Result<()> {
     match args.resource {
-        GetResource::Session(args) if args.id.is_some() => get_session(args).await,
-        GetResource::Session(args) => list_sessions(args.into()).await,
-        GetResource::Namespace(args) => crate::cli::namespace::get(args.slug, args.json).await,
+        GetResource::Session(args) if args.id.is_some() => get_session(args, json_output).await,
+        GetResource::Session(args) => list_sessions(args.into(), json_output).await,
+        GetResource::Namespace(args) => crate::cli::namespace::get(args.slug, json_output).await,
     }
 }
 
-async fn get_session(args: SessionGetArgs) -> Result<()> {
+async fn get_session(args: SessionGetArgs, json_output: bool) -> Result<()> {
     let id = args
         .id
         .as_deref()
@@ -22,7 +22,7 @@ async fn get_session(args: SessionGetArgs) -> Result<()> {
     let response = send_list(scoped_selector(Some(id), &args.read.scope)?).await?;
 
     match response {
-        RpcResponse::Listed { response } if args.read.json => {
+        RpcResponse::Listed { response } if json_output => {
             let session = response
                 .sessions
                 .into_iter()
@@ -47,7 +47,7 @@ async fn get_session(args: SessionGetArgs) -> Result<()> {
     }
 }
 
-async fn list_sessions(args: SessionListArgs) -> Result<()> {
+async fn list_sessions(args: SessionListArgs, json_output: bool) -> Result<()> {
     let response = send_list(scoped_selector(
         args.read.selector.as_deref(),
         &args.read.scope,
@@ -55,7 +55,7 @@ async fn list_sessions(args: SessionListArgs) -> Result<()> {
     .await?;
 
     match response {
-        RpcResponse::Listed { response } if args.read.json => {
+        RpcResponse::Listed { response } if json_output => {
             println!("{}", serde_json::to_string_pretty(&response.sessions)?);
             Ok(())
         }

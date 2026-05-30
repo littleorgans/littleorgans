@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result};
 use lilo_paths::DaemonEndpoint;
 use lilo_rm_core::{read_json_line, write_json_line};
@@ -5,6 +7,7 @@ use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::{UnixStream, unix::OwnedReadHalf};
+use tokio::time;
 
 pub async fn send_request(endpoint: &DaemonEndpoint, request: &SessionRpc) -> Result<RpcResponse> {
     let stream = UnixStream::connect(endpoint.as_path())
@@ -16,6 +19,16 @@ pub async fn send_request(endpoint: &DaemonEndpoint, request: &SessionRpc) -> Re
         .context("failed to write request")?;
 
     read_response(read_half).await
+}
+
+pub async fn send_request_with_timeout(
+    endpoint: &DaemonEndpoint,
+    request: &SessionRpc,
+    timeout: Duration,
+) -> Result<RpcResponse> {
+    time::timeout(timeout, send_request(endpoint, request))
+        .await
+        .with_context(|| format!("timed out waiting for daemon response after {timeout:?}"))?
 }
 
 pub(crate) async fn read_response(read_half: OwnedReadHalf) -> Result<RpcResponse> {

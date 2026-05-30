@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::peer_creds;
 use lilo_paths::{LiloHome, LiloPaths};
-use lilo_rm_core::{ErrorCode, RuntimeResponse, read_json_line, write_json_line};
+use lilo_rm_core::{ErrorCode, RuntimeResponse, read_optional_json_line, write_json_line};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::RpcResponse;
 use lilo_session_daemon::{SessionService, SessionServiceContext};
@@ -59,20 +59,24 @@ impl ShutdownObserver {
     }
 }
 
-pub async fn run_from_env() -> Result<()> {
+pub async fn run_from_env(daemon_version: impl Into<String>) -> Result<()> {
+    let daemon_version = daemon_version.into();
     let home = LiloHome::from_env().context("failed to resolve lilo home")?;
-    run(LiloPaths::new(home)).await
+    run(LiloPaths::new(home), daemon_version).await
 }
 
-pub async fn run(paths: LiloPaths) -> Result<()> {
-    run_with_shutdown_observer(paths, ShutdownObserver::default()).await
+pub async fn run(paths: LiloPaths, daemon_version: impl Into<String>) -> Result<()> {
+    let daemon_version = daemon_version.into();
+    run_with_shutdown_observer(paths, ShutdownObserver::default(), daemon_version).await
 }
 
 #[doc(hidden)]
 pub async fn run_with_shutdown_observer(
     paths: LiloPaths,
     shutdown: ShutdownObserver,
+    daemon_version: impl Into<String>,
 ) -> Result<()> {
+    let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
     let db = LiloDb::open(&paths).await?;
     let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
@@ -81,6 +85,7 @@ pub async fn run_with_shutdown_observer(
     );
     let session = Arc::new(SessionService::build(SessionServiceContext::new(
         paths.clone(),
+        daemon_version,
         db.clone(),
         Arc::clone(&runtime),
     ))?);
@@ -152,38 +157,45 @@ async fn handle_connection(
     session: Arc<SessionService>,
     cancellation: CancellationToken,
 ) -> Result<()> {
-    let principal = match peer_creds::extract(&stream).await {
-        Ok(principal) => principal,
-        Err(error) => {
-            let response = RuntimeResponse::error(ErrorCode::ProtocolMismatch, error.to_string());
-            let (_read_half, mut write_half) = stream.into_split();
-            write_json_line(&mut write_half, &response).await?;
-            return Ok(());
-        }
-    };
-
-    let (read_half, mut write_half) = stream.into_split();
-    let mut reader = BufReader::new(read_half);
-    match read_json_line::<_, LilodRpc>(&mut reader).await {
-        Ok(LilodRpc::Runtime(request)) => {
-            let response = runtime.handle_rpc(principal, request).await;
-            if matches!(response, RuntimeResponse::Stopping) {
-                cancellation.cancel();
-            }
-            write_json_line(&mut write_half, &response).await?;
-        }
-        Ok(LilodRpc::Session(request)) => {
-            let result = session.handle_rpc(principal, request).await;
-            if result.shutdown {
-                cancellation.cancel();
-            }
-            write_json_line(&mut write_half, &result.response).await?;
-        }
+    let mut reader = BufReader::new(stream);
+    let request = match read_optional_json_line::<_, LilodRpc>(&mut reader).await {
+        Ok(Some(request)) => request,
+        Ok(None) => return Ok(()),
         Err(error) => {
             let response = RpcResponse::Error {
                 message: error.to_string(),
             };
-            write_json_line(&mut write_half, &response).await?;
+            let mut stream = reader.into_inner();
+            write_json_line(&mut stream, &response).await?;
+            return Ok(());
+        }
+    };
+
+    let principal = match peer_creds::extract(reader.get_ref()).await {
+        Ok(principal) => principal,
+        Err(error) => {
+            let response = RuntimeResponse::error(ErrorCode::ProtocolMismatch, error.to_string());
+            let mut stream = reader.into_inner();
+            write_json_line(&mut stream, &response).await?;
+            return Ok(());
+        }
+    };
+
+    let mut stream = reader.into_inner();
+    match request {
+        LilodRpc::Runtime(request) => {
+            let response = runtime.handle_rpc(principal, request).await;
+            if matches!(response, RuntimeResponse::Stopping) {
+                cancellation.cancel();
+            }
+            write_json_line(&mut stream, &response).await?;
+        }
+        LilodRpc::Session(request) => {
+            let result = session.handle_rpc(principal, request).await;
+            if result.shutdown {
+                cancellation.cancel();
+            }
+            write_json_line(&mut stream, &result.response).await?;
         }
     }
     Ok(())

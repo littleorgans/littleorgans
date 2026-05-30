@@ -71,7 +71,6 @@ fn run_help_describes_every_flag() {
         "Container image for docker isolated runtimes",
         "Runtime target",
         "Preempt an occupied tmux pane",
-        "Return after creating the session instead of waiting on the runtime",
     ] {
         assert!(
             stdout.contains(description),
@@ -189,14 +188,13 @@ fn capture_help_targets_one_session_id() {
         "Exact session id to capture.",
         "--scrollback-lines",
         "runtime-matters uses its default capture depth",
-        "--json",
-        "Render the captured session and capture result as JSON.",
     ] {
         assert!(
             stdout.contains(expected),
             "capture help missing {expected:?}\n{stdout}"
         );
     }
+    assert!(!stdout.contains("--json"), "{stdout}");
     assert!(!stdout.contains("--selector"), "{stdout}");
     assert!(!stdout.contains("role:<name>"), "{stdout}");
 }
@@ -243,13 +241,13 @@ fn get_help_collapses_resources_to_singular_with_plural_aliases() {
     let session = help(&["get", "sessions", "--help"]);
     assert!(session.contains("Optional session id to load instead of listing."));
     assert!(session.contains("--selector"));
-    assert!(session.contains("Render output as JSON."));
+    assert!(!session.contains("Render output as JSON."));
     assert!(session.contains("--show-labels"));
     assert!(session.contains("JSON output already includes labels."));
 
     let namespace = help(&["get", "namespaces", "--help"]);
     assert!(namespace.contains("Optional namespace slug to load instead of listing."));
-    assert!(namespace.contains("Render output as JSON."));
+    assert!(!namespace.contains("Render output as JSON."));
     assert!(!namespace.contains("--selector"));
 }
 

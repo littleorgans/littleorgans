@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::fs;
-use std::io::{ErrorKind, Read};
+use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -31,7 +31,7 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     let run = daemon
         .command(["run", "claude", "--role", "worker", "--dir"])
         .arg(&workspace)
-        .args(["--target", "headless", "--detach"])
+        .args(["--target", "headless"])
         .output()
         .context("lilo run executes")?;
     assert_success("lilo run", &run);
@@ -61,10 +61,10 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
         .await?;
 
     let get = daemon
-        .command(["get", "session", "--json"])
+        .command(["get", "session", "--output", "json"])
         .output()
         .context("lilo get session executes")?;
-    assert_success("lilo get session --json", &get);
+    assert_success("lilo get session --output json", &get);
     let listed_ids = listed_session_ids(&get)?;
     assert_eq!(listed_ids.len(), 2, "stdout: {}", stdout(&get));
     assert!(listed_ids.contains(&run_id));
@@ -72,6 +72,45 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     assert!(!listed_ids.contains(&raw_runtime_id));
 
     daemon.stop();
+    Ok(())
+}
+
+#[tokio::test]
+async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()> {
+    let fixture = IntegrationFixture::open().await?;
+    let mut daemon = LiloDaemon::start(&fixture)?;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let stderr_before = daemon.stderr();
+    let doctor = daemon
+        .command(["doctor"])
+        .output()
+        .context("lilo doctor executes")?;
+    assert_success("lilo doctor", &doctor);
+    let doctor_stdout = stdout(&doctor);
+    assert!(
+        doctor_stdout.contains("daemon: reachable"),
+        "doctor must keep daemon reachability output\nstdout:\n{doctor_stdout}"
+    );
+    assert!(
+        doctor_stdout.contains("warnings: none"),
+        "matching daemon and client builds must not warn\nstdout:\n{doctor_stdout}"
+    );
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let stderr_after = daemon.stderr();
+    let daemon_stderr = stderr_after
+        .strip_prefix(&stderr_before)
+        .unwrap_or(&stderr_after);
+    let _ = daemon.kill_and_stderr();
+    assert!(
+        !daemon_stderr.contains("Broken pipe"),
+        "doctor bare-connect probe must not emit broken-pipe warning\nstderr:\n{daemon_stderr}"
+    );
+    assert!(
+        !daemon_stderr.contains("lilod connection failed"),
+        "doctor bare-connect probe must not emit connection warning\nstderr:\n{daemon_stderr}"
+    );
     Ok(())
 }
 
@@ -220,6 +259,7 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     let service = lilo_session_daemon::SessionService::build(
         lilo_session_daemon::SessionServiceContext::new(
             fixture.paths.clone(),
+            "test-daemon",
             fixture.db.clone(),
             Arc::clone(&runtime),
         ),
@@ -325,6 +365,7 @@ struct LiloDaemon {
     lilo: PathBuf,
     home: PathBuf,
     socket: PathBuf,
+    stderr: PathBuf,
     path: OsString,
 }
 
@@ -334,9 +375,11 @@ impl LiloDaemon {
         let home = lilo_home(fixture)?;
         let socket = fixture.paths.run_root().join("lilod.sock");
         let fake_bin = fixture.paths.tmp_root().join("fake-bin");
+        let stderr = fixture.paths.tmp_root().join("lilod.stderr.log");
         fs::create_dir_all(&fake_bin)?;
         write_sleeping_runtime(&fake_bin, "claude")?;
         let path = path_with_prefix(&fake_bin)?;
+        let stderr_file = fs::File::create(&stderr).context("daemon stderr log creates")?;
         let mut child = Command::new(&lilo)
             .args(["daemon", "start"])
             .env("LILO_HOME", &home)
@@ -344,15 +387,16 @@ impl LiloDaemon {
             .env("HOME", &home)
             .env("PATH", &path)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::from(stderr_file))
             .spawn()
             .context("lilo daemon start spawns")?;
-        wait_for_socket(&socket, &mut child)?;
+        wait_for_socket(&socket, &mut child, &stderr)?;
         Ok(Self {
             child: Some(child),
             lilo,
             home,
             socket,
+            stderr,
             path,
         })
     }
@@ -368,7 +412,7 @@ impl LiloDaemon {
         command
     }
 
-    fn stop(&mut self) {
+    fn stop(&mut self) -> String {
         let _ = Command::new(&self.lilo)
             .args(["daemon", "stop"])
             .env("LILO_HOME", &self.home)
@@ -381,13 +425,28 @@ impl LiloDaemon {
             let deadline = Instant::now() + DAEMON_TIMEOUT;
             while Instant::now() < deadline {
                 if child.try_wait().ok().flatten().is_some() {
-                    return;
+                    return self.stderr();
                 }
                 std::thread::sleep(Duration::from_millis(25));
             }
             let _ = child.kill();
             let _ = child.wait();
+            return self.stderr();
         }
+        String::new()
+    }
+
+    fn stderr(&self) -> String {
+        read_daemon_stderr(&self.stderr)
+    }
+
+    fn kill_and_stderr(&mut self) -> String {
+        let Some(mut child) = self.child.take() else {
+            return String::new();
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+        self.stderr()
     }
 }
 
@@ -427,7 +486,7 @@ fn path_with_prefix(prefix: &Path) -> Result<OsString> {
     std::env::join_paths(paths).context("PATH can be joined")
 }
 
-fn wait_for_socket(socket: &Path, child: &mut Child) -> Result<()> {
+fn wait_for_socket(socket: &Path, child: &mut Child, stderr: &Path) -> Result<()> {
     let deadline = Instant::now() + DAEMON_TIMEOUT;
     let mut last_error = None;
     while Instant::now() < deadline {
@@ -446,7 +505,7 @@ fn wait_for_socket(socket: &Path, child: &mut Child) -> Result<()> {
         if let Some(status) = child.try_wait()? {
             bail!(
                 "daemon exited before socket accepted connections: {status}\nstderr:\n{}",
-                daemon_stderr(child)
+                read_daemon_stderr(stderr)
             );
         }
         std::thread::sleep(Duration::from_millis(25));
@@ -502,11 +561,6 @@ fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
-fn daemon_stderr(child: &mut Child) -> String {
-    let Some(stderr) = child.stderr.as_mut() else {
-        return String::new();
-    };
-    let mut contents = String::new();
-    let _ = stderr.read_to_string(&mut contents);
-    contents
+fn read_daemon_stderr(path: &Path) -> String {
+    fs::read_to_string(path).unwrap_or_default()
 }

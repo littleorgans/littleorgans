@@ -30,6 +30,7 @@ pub mod shared_test_support;
 pub use shared_test_support::OrPanic;
 
 pub const LOCAL_UID: u32 = 42;
+pub const TEST_DAEMON_VERSION: &str = "test-daemon";
 
 pub struct TestDaemon {
     pub state: DaemonState,
@@ -72,6 +73,7 @@ impl TestDaemon {
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
         let state = DaemonState::new(
             store,
+            TEST_DAEMON_VERSION,
             runtime_port,
             Arc::new(identity),
             Arc::clone(&runtime),
@@ -96,6 +98,7 @@ impl TestDaemon {
         );
         DaemonState::new(
             SqliteStore::open(&db),
+            TEST_DAEMON_VERSION,
             runtime_port,
             Arc::new(identity),
             Arc::clone(&self.runtime),

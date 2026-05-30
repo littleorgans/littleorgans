@@ -39,7 +39,7 @@ pub use admin::{
 };
 pub use capture::{
     CaptureError, CaptureRequest, CaptureResponse, LogAvailability, LogsUnavailableReason,
-    PaneSnapshot,
+    PaneSnapshot, strip_ansi_escapes,
 };
 pub use cli_output::{Ack, CliOutput};
 pub use error::{ErrorCode, ProtocolError, RuntimeKindParseError};
@@ -65,7 +65,7 @@ pub use proto::{
     RuntimeResponse, RuntimeRpc, ShimLaunchPayload, SpawnConflictKind, SpawnConflictPayload,
     SpawnedPayload, StatusPayload, StatusRequest, ValidateTargetPayload, VersionPayload,
     WatchersPayload, clamped_event_wait_ms, read_json_line, read_json_line_blocking,
-    write_json_line, write_json_line_blocking,
+    read_optional_json_line, write_json_line, write_json_line_blocking,
 };
 pub use spawn_context::{
     CALLER_ENV_DENYLIST, CALLER_ENV_DENYLIST_PREFIXES, capture_caller_cwd, capture_caller_env,

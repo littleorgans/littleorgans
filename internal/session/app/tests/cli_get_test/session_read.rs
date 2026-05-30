@@ -8,6 +8,8 @@ pub(crate) fn removed_get_forms_are_rejected_by_clap() {
         ["get", "agent", "--help"].as_slice(),
         ["get", "agents", "--help"].as_slice(),
         ["get", "label", "--help"].as_slice(),
+        ["get", "session", "--json"].as_slice(),
+        ["get", "namespace", "--json"].as_slice(),
         ["get", "namespace", "--selector", "all"].as_slice(),
         ["get", "namespace", "namespace:default"].as_slice(),
     ] {
@@ -36,7 +38,6 @@ pub(crate) fn session_resources_list_and_get_by_id() {
             &daemon.dir.path().display().to_string(),
             "--label",
             "area=get",
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");
@@ -78,11 +79,11 @@ pub(crate) fn session_resources_list_and_get_by_id() {
     assert!(labeled_stdout.contains("area=get"));
 
     let json_list = daemon
-        .command()
-        .args(["get", "session", "--json"])
+        .lilo_command()
+        .args(["get", "session", "--output", "json"])
         .output()
-        .or_panic("sm get session --json executes");
-    assert_success("sm get session --json", &json_list);
+        .or_panic("lilo get session --output json executes");
+    assert_success("lilo get session --output json", &json_list);
     let sessions: Value = serde_json::from_slice(&json_list.stdout).or_panic("list JSON parses");
     assert!(sessions.as_array().is_some_and(|items| !items.is_empty()));
 
@@ -122,7 +123,6 @@ pub(crate) fn capture_takes_exact_session_id() {
             "engineer",
             "--dir",
             &daemon.dir.path().display().to_string(),
-            "--detach",
         ])
         .output()
         .or_panic("sm run executes");
@@ -130,16 +130,43 @@ pub(crate) fn capture_takes_exact_session_id() {
     let id = first_field(&run.stdout);
 
     let capture = daemon
-        .command()
-        .args(["capture", &id, "--json", "--scrollback-lines", "20"])
+        .lilo_command()
+        .args([
+            "capture",
+            &id,
+            "--output",
+            "json",
+            "--scrollback-lines",
+            "20",
+        ])
         .output()
-        .or_panic("sm capture <id> --json executes");
-    assert_success("sm capture <id> --json", &capture);
+        .or_panic("lilo capture <id> --output json executes");
+    assert_success("lilo capture <id> --output json", &capture);
     let body: Value = serde_json::from_slice(&capture.stdout).or_panic("capture JSON parses");
     assert_eq!(body["session"]["id"], id);
     assert_eq!(body["capture"]["status"], "failed");
 
+    let operator_capture = daemon
+        .lilo_command()
+        .args([
+            "session",
+            "capture",
+            &id,
+            "--output",
+            "json",
+            "--scrollback-lines",
+            "20",
+        ])
+        .output()
+        .or_panic("lilo session capture <id> --output json executes");
+    assert_success("lilo session capture <id> --output json", &operator_capture);
+    let body: Value =
+        serde_json::from_slice(&operator_capture.stdout).or_panic("capture JSON parses");
+    assert_eq!(body["session"]["id"], id);
+    assert_eq!(body["capture"]["status"], "failed");
+
     for args in [
+        ["capture", &id, "--json"].as_slice(),
         ["capture", "--selector", "all"].as_slice(),
         ["capture", "all"].as_slice(),
         ["capture", "role:engineer"].as_slice(),
