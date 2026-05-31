@@ -4,11 +4,12 @@ use std::future::Future;
 use std::io::{self, Read, Write};
 use std::path::Path;
 use std::pin::Pin;
+use std::process::{Command, ExitStatus};
 use std::task::{Context, Poll};
 
 use crate::creds::PeerCred;
 use crate::process::ProcessStartTime;
-use crate::signal::SignalOutcome;
+use crate::signal::{Signal, SignalDisposition, SignalOutcome};
 use crate::{Error, Result};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::oneshot;
@@ -49,9 +50,28 @@ pub(crate) fn watch_process_exit(_pid: u32) -> Result<(ProcessExitWatcher, onesh
     ))
 }
 
+pub(crate) fn reset_child_user_interrupts_before_exec(_command: &mut Command) {}
+
+pub(crate) fn exec_replace(_command: &mut Command) -> io::Error {
+    unsupported_io("process image replacement is not available on this platform")
+}
+
+pub(crate) fn exit_signal(_status: ExitStatus) -> Option<i32> {
+    None
+}
+
 pub(crate) fn send_signal(_pid: u32, _signal: i32) -> Result<SignalOutcome> {
     Err(Error::Unsupported(
         "process signal delivery is not available on this platform",
+    ))
+}
+
+pub(crate) fn install_signal_disposition(
+    _signal: Signal,
+    _disposition: SignalDisposition,
+) -> io::Result<()> {
+    Err(unsupported_io(
+        "signal disposition installation is not available on this platform",
     ))
 }
 

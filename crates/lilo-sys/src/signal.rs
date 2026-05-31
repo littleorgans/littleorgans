@@ -12,8 +12,26 @@ pub enum SignalOutcome {
     ProcessGone,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    Interrupt,
+    Quit,
+    Terminate,
+}
+
+#[derive(Clone, Copy)]
+pub enum SignalDisposition {
+    Default,
+    Ignore,
+    Handler(extern "C" fn(i32)),
+}
+
 pub fn send_signal(pid: u32, signal: i32) -> Result<SignalOutcome> {
     crate::sys::send_signal(pid, signal)
+}
+
+pub fn install_disposition(signal: Signal, disposition: SignalDisposition) -> io::Result<()> {
+    crate::sys::install_signal_disposition(signal, disposition)
 }
 
 pub fn on_shutdown() -> io::Result<impl Future<Output = ()> + Send> {

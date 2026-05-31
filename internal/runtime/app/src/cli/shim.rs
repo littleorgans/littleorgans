@@ -1,4 +1,3 @@
-use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Command, ExitStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -10,6 +9,7 @@ use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     LaunchSpec, RuntimeExit, RuntimeSignal, ShellResume, ShimExit, ShimLaunchRequest, ShimReady,
 };
+use lilo_sys::signal::{Signal, SignalDisposition};
 use uuid::Uuid;
 
 pub const SHIM_RECONNECT_MAX_ATTEMPTS: usize = 10;
@@ -104,7 +104,7 @@ fn runtime_command(launch: &LaunchSpec) -> Result<Command> {
 
 fn exec_shell_resume(resume: &ShellResume) -> Result<()> {
     let mut command = shell_resume_command(resume)?;
-    let error = command.exec();
+    let error = lilo_sys::process::exec_replace(&mut command);
     Err(error).context("failed to exec shell after runtime exit")
 }
 
@@ -172,60 +172,41 @@ fn terminate_runtime(child: &mut std::process::Child, grace: Duration) -> Result
 }
 
 fn install_sigterm_handler() -> Result<()> {
-    // SAFETY: the handler only flips an atomic flag, which is async-signal-safe.
-    let previous = unsafe {
-        libc::signal(
-            libc::SIGTERM,
-            mark_sigterm as *const () as libc::sighandler_t,
-        )
-    };
-    if previous == libc::SIG_ERR {
-        return Err(std::io::Error::last_os_error()).context("failed to install SIGTERM handler");
-    }
-    Ok(())
+    lilo_sys::signal::install_disposition(
+        Signal::Terminate,
+        SignalDisposition::Handler(mark_sigterm),
+    )
+    .context("failed to install SIGTERM handler")
 }
 
 fn ignore_user_interrupts() -> Result<()> {
-    set_user_interrupt_disposition(libc::SIG_IGN)
+    set_user_interrupt_disposition(SignalDisposition::Ignore)
 }
 
 fn restore_user_interrupts_before_exec(command: &mut Command) {
-    // SAFETY: pre_exec runs in the child after fork and before exec. The closure
-    // only resets signal dispositions through libc::signal.
-    unsafe {
-        command.pre_exec(|| {
-            set_user_interrupt_disposition(libc::SIG_DFL).map_err(std::io::Error::other)
-        });
-    }
+    lilo_sys::process::reset_child_user_interrupts_before_exec(command);
 }
 
-fn set_user_interrupt_disposition(handler: libc::sighandler_t) -> Result<()> {
-    set_signal_disposition(libc::SIGINT, handler)?;
-    set_signal_disposition(libc::SIGQUIT, handler)
+fn set_user_interrupt_disposition(disposition: SignalDisposition) -> Result<()> {
+    lilo_sys::signal::install_disposition(Signal::Interrupt, disposition)
+        .context("failed to update SIGINT disposition")?;
+    lilo_sys::signal::install_disposition(Signal::Quit, disposition)
+        .context("failed to update SIGQUIT disposition")
 }
 
-fn set_signal_disposition(signal: libc::c_int, handler: libc::sighandler_t) -> Result<()> {
-    // SAFETY: installing SIG_IGN or SIG_DFL does not capture Rust state.
-    let previous = unsafe { libc::signal(signal, handler) };
-    if previous == libc::SIG_ERR {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("failed to update signal disposition for {signal}"));
-    }
-    Ok(())
-}
-
-extern "C" fn mark_sigterm(_: libc::c_int) {
+extern "C" fn mark_sigterm(_: i32) {
     SIGTERM_RECEIVED.store(true, Ordering::SeqCst);
 }
 
 fn runtime_exit(status: ExitStatus) -> RuntimeExit {
-    RuntimeExit::new(status.code(), status.signal())
+    RuntimeExit::new(status.code(), lilo_sys::process::exit_signal(status))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use lilo_rm_core::LaunchEnv;
+    use std::os::unix::process::ExitStatusExt;
     use std::path::PathBuf;
 
     // Spawn a child that prints "ready" then blocks on `read` (held-open stdin
