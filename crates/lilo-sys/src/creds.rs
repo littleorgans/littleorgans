@@ -11,6 +11,6 @@ pub fn current_uid() -> u32 {
     crate::sys::current_uid()
 }
 
-pub fn peer_cred(fd: libc::c_int) -> Result<PeerCred> {
-    crate::sys::peer_cred(fd)
+pub fn peer_cred(stream: &crate::ipc::IpcStream) -> Result<PeerCred> {
+    crate::sys::peer_cred(stream.as_raw_fd())
 }
