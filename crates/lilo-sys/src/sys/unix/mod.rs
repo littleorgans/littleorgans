@@ -1,6 +1,13 @@
 use crate::signal::SignalOutcome;
 use crate::{Error, Result};
 
+mod ipc;
+
+pub(crate) use ipc::{
+    BlockingIpcStream, IpcListener, IpcStream, bind_ipc, connect_blocking_ipc, connect_ipc,
+    remove_socket_file,
+};
+
 std::cfg_select! {
     target_os = "linux" => {
         mod linux;
@@ -60,4 +67,14 @@ pub(crate) fn send_signal(pid: u32, signal: i32) -> Result<SignalOutcome> {
         format!("failed to send signal {signal} to pid {pid}"),
         error,
     ))
+}
+
+pub(crate) fn on_shutdown() -> std::io::Result<crate::signal::ShutdownSignal> {
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    Ok(Box::pin(async move {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminate.recv() => {}
+        }
+    }))
 }

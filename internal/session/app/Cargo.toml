@@ -32,6 +32,7 @@ clap.workspace = true
 lilo-rm-core.workspace = true
 lilo-session-core.workspace = true
 lilo-session-daemon.workspace = true
+lilo-sys.workspace = true
 nix.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

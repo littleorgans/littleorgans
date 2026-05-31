@@ -5,6 +5,7 @@
 
 pub mod creds;
 pub mod error;
+pub mod ipc;
 pub mod process;
 pub mod process_exit;
 pub mod signal;

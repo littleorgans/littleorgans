@@ -14,10 +14,10 @@ use lilo_rm_core::{
     RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnedPayload, StatusFilter, StatusPayload,
     ValidateTargetRequest, ValidateTargetResponse, VersionPayload, read_json_line, write_json_line,
 };
+use lilo_sys::ipc::IpcStream;
 use lilo_wire::LilodRpc;
 use thiserror::Error;
 use tokio::io::BufReader;
-use tokio::net::UnixStream;
 
 mod event_watcher;
 
@@ -256,12 +256,12 @@ pub async fn request(
     rpc: RuntimeRpc,
 ) -> Result<RuntimeResponse, ClientError> {
     let socket_path = socket_path.as_ref();
-    let stream = UnixStream::connect(socket_path).await.map_err(|source| {
-        ClientError::DaemonUnavailable {
+    let stream = lilo_sys::ipc::connect(socket_path)
+        .await
+        .map_err(|source| ClientError::DaemonUnavailable {
             socket_path: socket_path.to_path_buf(),
             source,
-        }
-    })?;
+        })?;
     request_on_stream(stream, rpc).await
 }
 
@@ -299,7 +299,7 @@ fn response_name(response: &RuntimeResponse) -> &'static str {
 }
 
 async fn request_on_stream(
-    stream: UnixStream,
+    stream: IpcStream,
     rpc: RuntimeRpc,
 ) -> Result<RuntimeResponse, ClientError> {
     let (read_half, mut write_half) = stream.into_split();

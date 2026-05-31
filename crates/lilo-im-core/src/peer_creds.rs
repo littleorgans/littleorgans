@@ -1,14 +1,14 @@
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
-#[cfg(unix)]
-use tokio::net::UnixStream;
-
 use crate::{AuthzError, Principal};
 
 #[cfg(unix)]
 #[allow(clippy::unused_async)]
-pub async fn extract(stream: &UnixStream) -> Result<Principal, AuthzError> {
+pub async fn extract<S>(stream: &S) -> Result<Principal, AuthzError>
+where
+    S: AsRawFd + ?Sized,
+{
     let credentials = lilo_sys::creds::peer_cred(stream.as_raw_fd())
         .map_err(|error| internal_error("failed", error))?;
 

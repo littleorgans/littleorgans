@@ -7,12 +7,10 @@ use lilo_rm_core::{
 };
 use lilo_wire::LilodRpc;
 use std::io::BufReader as StdBufReader;
-use std::os::unix::net::UnixStream as StdUnixStream;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
 use tokio::process::Command;
 
 use crate::server::DaemonConfig;
@@ -160,7 +158,7 @@ pub async fn request_launch(
     socket_path: &std::path::Path,
     request: ShimLaunchRequest,
 ) -> Result<LaunchSpec> {
-    let stream = UnixStream::connect(socket_path)
+    let stream = lilo_sys::ipc::connect(socket_path)
         .await
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     let (read_half, mut write_half) = stream.into_split();
@@ -178,7 +176,7 @@ pub fn request_launch_blocking(
     socket_path: &std::path::Path,
     request: ShimLaunchRequest,
 ) -> Result<LaunchSpec> {
-    let mut stream = StdUnixStream::connect(socket_path)
+    let mut stream = lilo_sys::ipc::connect_blocking(socket_path)
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     write_json_line_blocking(
         &mut stream,
@@ -210,7 +208,7 @@ async fn send_shim_rpc(
     rpc: RuntimeRpc,
     label: &'static str,
 ) -> Result<()> {
-    let stream = UnixStream::connect(socket_path)
+    let stream = lilo_sys::ipc::connect(socket_path)
         .await
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     let (read_half, mut write_half) = stream.into_split();
@@ -225,7 +223,7 @@ fn send_shim_rpc_blocking(
     rpc: &RuntimeRpc,
     label: &'static str,
 ) -> Result<()> {
-    let mut stream = StdUnixStream::connect(socket_path)
+    let mut stream = lilo_sys::ipc::connect_blocking(socket_path)
         .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
     write_json_line_blocking(&mut stream, &LilodRpc::Runtime(rpc.clone()))?;
 

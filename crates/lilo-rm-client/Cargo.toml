@@ -19,6 +19,7 @@ path = "src/lib.rs"
 [dependencies]
 lilo-wire.workspace = true
 lilo-rm-core.workspace = true
+lilo-sys.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
