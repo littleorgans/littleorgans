@@ -15,7 +15,7 @@ pub async fn run_daemon(config: DaemonConfig) -> Result<()> {
 }
 
 pub async fn run_daemon_with_db(config: DaemonConfig, db: LiloDb) -> Result<()> {
-    let bootstrap = prepare_runtime_bootstrap(&config, &db, nix::unistd::getuid().as_raw())?;
+    let bootstrap = prepare_runtime_bootstrap(&config, &db, lilo_sys::creds::current_uid())?;
     let socket_path = &bootstrap.socket_path;
     socket::prepare_socket(socket_path)?;
     let listener = UnixListener::bind(socket_path)

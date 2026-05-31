@@ -2,6 +2,7 @@
 
 use tokio::sync::oneshot;
 
+use crate::creds::PeerCred;
 use crate::process::ProcessStartTime;
 use crate::signal::SignalOutcome;
 use crate::{Error, Result};
@@ -10,6 +11,16 @@ pub struct ProcessExitWatcher;
 
 pub(crate) fn pid_alive(_pid: u32) -> bool {
     false
+}
+
+pub(crate) fn current_uid() -> u32 {
+    panic!("current_uid unsupported on this platform");
+}
+
+pub(crate) fn peer_cred(_fd: libc::c_int) -> Result<PeerCred> {
+    Err(Error::Unsupported(
+        "peer credential extraction unsupported on this platform",
+    ))
 }
 
 #[allow(clippy::unnecessary_wraps)]

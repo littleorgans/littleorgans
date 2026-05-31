@@ -49,7 +49,7 @@ pub async fn run_daemon_with_db(
     let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
     let identity = IdentityClient::new(
         SqliteAuditSink::with_pool(db.identity_pool().clone()),
-        nix::unistd::getuid().as_raw(),
+        lilo_sys::creds::current_uid(),
     );
     let state = Arc::new(DaemonState::new(
         store,

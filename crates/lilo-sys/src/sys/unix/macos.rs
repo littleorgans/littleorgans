@@ -7,6 +7,7 @@ use std::time::Duration;
 use chrono::{TimeZone, Utc};
 use tokio::sync::oneshot;
 
+use crate::creds::PeerCred;
 use crate::process::ProcessStartTime;
 use crate::{Error, Result};
 
@@ -21,6 +22,33 @@ impl Drop for ProcessExitWatcher {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
     }
+}
+
+pub(crate) fn peer_cred(fd: libc::c_int) -> Result<PeerCred> {
+    let mut uid = libc::uid_t::default();
+    let mut gid = libc::gid_t::default();
+
+    // SAFETY: uid and gid are valid output pointers for the duration of the
+    // syscall, and `fd` is borrowed from the caller.
+    let result = unsafe {
+        libc::getpeereid(
+            fd,
+            std::ptr::addr_of_mut!(uid),
+            std::ptr::addr_of_mut!(gid),
+        )
+    };
+    if result != 0 {
+        return Err(Error::io(
+            "getpeereid failed",
+            std::io::Error::last_os_error(),
+        ));
+    }
+
+    Ok(PeerCred {
+        uid,
+        gid,
+        pid: None,
+    })
 }
 
 pub(crate) fn start_time_probe_for_pid(pid: u32) -> Result<ProcessStartTime> {

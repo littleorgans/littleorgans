@@ -5,17 +5,22 @@ std::cfg_select! {
     target_os = "linux" => {
         mod linux;
         pub use linux::ProcessExitWatcher;
-        pub(crate) use linux::{start_time_probe_for_pid, watch_process_exit};
+        pub(crate) use linux::{peer_cred, start_time_probe_for_pid, watch_process_exit};
     }
     target_os = "macos" => {
         mod macos;
         pub use macos::ProcessExitWatcher;
-        pub(crate) use macos::{start_time_probe_for_pid, watch_process_exit};
+        pub(crate) use macos::{peer_cred, start_time_probe_for_pid, watch_process_exit};
     }
     _ => {
         pub use super::unsupported::ProcessExitWatcher;
-        pub(crate) use super::unsupported::{start_time_probe_for_pid, watch_process_exit};
+        pub(crate) use super::unsupported::{peer_cred, start_time_probe_for_pid, watch_process_exit};
     }
+}
+
+pub(crate) fn current_uid() -> libc::uid_t {
+    // SAFETY: getuid has no preconditions and only reads the process identity.
+    unsafe { libc::getuid() }
 }
 
 pub(crate) fn platform_pid(pid: u32) -> Option<libc::pid_t> {

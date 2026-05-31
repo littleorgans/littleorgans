@@ -52,7 +52,7 @@ impl ServerState {
     pub(crate) fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
         let identity = IdentityClient::new(
             SqliteAuditSink::with_pool(store.pool().clone()),
-            nix::unistd::getuid().as_raw(),
+            lilo_sys::creds::current_uid(),
         );
         Self::new_with_identity(config, store, identity)
     }

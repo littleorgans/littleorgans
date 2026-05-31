@@ -24,7 +24,7 @@ async fn extracts_local_principal_from_accepted_unix_socket() {
         .expect("connect client socket");
     let principal = server.await.expect("server task should finish");
 
-    assert_eq!(principal, Principal::Local(nix::unistd::getuid().as_raw()));
+    assert_eq!(principal, Principal::local(lilo_sys::creds::current_uid()));
     drop(client);
 }
 

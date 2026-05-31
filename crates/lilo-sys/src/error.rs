@@ -36,3 +36,15 @@ impl From<std::io::Error> for Error {
         Self::io("OS operation failed", source)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+
+    #[test]
+    fn unsupported_peer_cred_error_is_descriptive() {
+        let error = Error::Unsupported("peer credential extraction unsupported on this platform");
+
+        assert!(error.to_string().contains("unsupported on this platform"));
+    }
+}

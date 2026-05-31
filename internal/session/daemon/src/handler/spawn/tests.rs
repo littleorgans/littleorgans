@@ -40,7 +40,7 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
         SqliteStore::open(&db),
         "test-daemon",
         runtime_port,
-        Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
+        Arc::new(IdentityClient::from_db(&db, lilo_sys::creds::current_uid())),
         Arc::clone(&runtime),
     );
     let mut child = ChildGuard::spawn(temp.path());
@@ -139,7 +139,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         store.clone(),
         "test-daemon",
         runtime_port.clone(),
-        Arc::new(IdentityClient::from_db(&db, nix::unistd::getuid().as_raw())),
+        Arc::new(IdentityClient::from_db(&db, lilo_sys::creds::current_uid())),
         Arc::clone(&runtime),
     );
 

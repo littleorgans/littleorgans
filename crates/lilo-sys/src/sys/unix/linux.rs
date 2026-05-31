@@ -9,6 +9,7 @@ use std::time::Duration;
 use chrono::{TimeZone, Utc};
 use tokio::sync::oneshot;
 
+use crate::creds::PeerCred;
 use crate::process::ProcessStartTime;
 use crate::{Error, Result};
 
@@ -24,6 +25,40 @@ impl Drop for ProcessExitWatcher {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
     }
+}
+
+pub(crate) fn peer_cred(fd: libc::c_int) -> Result<PeerCred> {
+    let mut credentials = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut length =
+        libc::socklen_t::try_from(std::mem::size_of::<libc::ucred>()).expect("ucred size fits");
+
+    // SAFETY: `credentials` and `length` point to initialized writable memory
+    // for the duration of the syscall, and `fd` is borrowed from the caller.
+    let result = unsafe {
+        libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            std::ptr::addr_of_mut!(credentials).cast::<libc::c_void>(),
+            &mut length,
+        )
+    };
+    if result != 0 {
+        return Err(Error::io(
+            "SO_PEERCRED failed",
+            std::io::Error::last_os_error(),
+        ));
+    }
+
+    Ok(PeerCred {
+        uid: credentials.uid,
+        gid: credentials.gid,
+        pid: u32::try_from(credentials.pid).ok(),
+    })
 }
 
 pub(crate) fn start_time_probe_for_pid(pid: u32) -> Result<ProcessStartTime> {
