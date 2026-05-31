@@ -51,7 +51,7 @@ pub fn run_for_session_blocking(session_id: Uuid) -> Result<()> {
         session_id,
         shim_pid: std::process::id(),
         runtime_pid,
-        start_time: lilo_runtime_platform::process::start_time_for_pid(runtime_pid)?
+        start_time: lilo_sys::process::start_time_for_pid(runtime_pid)?
             .unwrap_or_else(chrono::Utc::now),
         tmux_pane: None,
     };
@@ -153,7 +153,7 @@ fn wait_for_runtime(child: &mut std::process::Child) -> Result<ExitStatus> {
 /// the shim always terminates promptly instead of blocking forever on a child
 /// that traps or ignores SIGTERM.
 fn terminate_runtime(child: &mut std::process::Child, grace: Duration) -> Result<ExitStatus> {
-    lilo_runtime_platform::signal::send_signal(child.id(), RuntimeSignal::Term)?;
+    lilo_runtime_daemon::signal::send_signal(child.id(), RuntimeSignal::Term)?;
     let deadline = Instant::now() + grace;
     while Instant::now() < deadline {
         if let Some(status) = child
@@ -165,7 +165,7 @@ fn terminate_runtime(child: &mut std::process::Child, grace: Duration) -> Result
         thread::sleep(RUNTIME_WAIT_POLL);
     }
     // Best-effort: a race where the child exits here is resolved by wait() below.
-    let _ = lilo_runtime_platform::signal::send_signal(child.id(), RuntimeSignal::Kill);
+    let _ = lilo_runtime_daemon::signal::send_signal(child.id(), RuntimeSignal::Kill);
     child
         .wait()
         .context("failed to wait for runtime child after SIGKILL")

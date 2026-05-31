@@ -26,8 +26,7 @@ impl TerminationCoordinator {
     }
 
     pub(super) async fn kill_pid(&self, request: KillByPidRequest) -> Result<KillByPidResponse> {
-        let outcome =
-            lilo_runtime_platform::signal::send_raw_signal_for_kill(request.pid, request.signal)?;
+        let outcome = crate::signal::send_raw_signal_for_kill(request.pid, request.signal)?;
         if matches!(outcome, KillOutcome::AlreadyExited) {
             return Ok(KillByPidResponse {
                 pid: request.pid,
@@ -39,7 +38,7 @@ impl TerminationCoordinator {
         let deadline = Instant::now() + Duration::from_secs(request.grace_secs);
 
         while Instant::now() < deadline {
-            if !lilo_runtime_platform::process::pid_alive(request.pid) {
+            if !lilo_sys::process::pid_alive(request.pid) {
                 return Ok(KillByPidResponse {
                     pid: request.pid,
                     signal: request.signal,
@@ -51,9 +50,9 @@ impl TerminationCoordinator {
         }
 
         let mut killed_after_grace = false;
-        let kill_signal = lilo_runtime_platform::signal::signal_number(RuntimeSignal::Kill);
-        if lilo_runtime_platform::process::pid_alive(request.pid) && request.signal != kill_signal {
-            lilo_runtime_platform::signal::send_raw_signal(request.pid, kill_signal)?;
+        let kill_signal = crate::signal::signal_number(RuntimeSignal::Kill);
+        if lilo_sys::process::pid_alive(request.pid) && request.signal != kill_signal {
+            crate::signal::send_raw_signal(request.pid, kill_signal)?;
             killed_after_grace = true;
         }
         Ok(KillByPidResponse {
@@ -102,7 +101,7 @@ impl TerminationCoordinator {
             .await?
             .and_then(|lifecycle| lifecycle.shim_pid)
             .ok_or_else(|| anyhow!("session {session_id} missing shim pid"))?;
-        if lilo_runtime_platform::process::pid_alive(shim_pid) {
+        if lilo_sys::process::pid_alive(shim_pid) {
             Ok(TerminationEvidence::ProcessExit)
         } else {
             Ok(TerminationEvidence::Lost(

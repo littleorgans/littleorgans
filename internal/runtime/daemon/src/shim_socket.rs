@@ -44,13 +44,8 @@ async fn launch_tmux_shim(
 ) -> Result<()> {
     let argv = shim_argv(config, request);
     let tmux_server_label = config.tmux_server_label.as_deref();
-    match lilo_runtime_platform::tmux::TmuxGateway::respawn_pane(
-        tmux_server_label,
-        &target.address,
-        &argv,
-        env,
-    )
-    .await
+    match crate::tmux::TmuxGateway::respawn_pane(tmux_server_label, &target.address, &argv, env)
+        .await
     {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -64,7 +59,7 @@ async fn classify_tmux_respawn_error(
     address: &TmuxAddress,
     error: anyhow::Error,
 ) -> anyhow::Error {
-    match lilo_runtime_platform::tmux::TmuxGateway::is_alive(server_label, address).await {
+    match crate::tmux::TmuxGateway::is_alive(server_label, address).await {
         Ok(false) => RuntimeFailure::tmux_pane_dead(address.clone()),
         Ok(true) | Err(_) => error.context(format!("failed to respawn tmux pane {address}")),
     }
@@ -258,8 +253,8 @@ fn ack_from_response(response: RuntimeResponse, label: &'static str) -> Result<(
 mod tests {
     use super::*;
     use crate::error::{RpcErrorContext, rpc_error_response};
+    use crate::tmux_test_support::TmuxSession;
     use lilo_rm_core::{ErrorCode, RuntimeKind, RuntimeResponse};
-    use lilo_runtime_platform::test_support::TmuxSession;
     use std::path::PathBuf;
 
     fn test_config() -> DaemonConfig {

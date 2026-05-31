@@ -164,7 +164,7 @@ impl ServerState {
             });
         }
 
-        if !lilo_runtime_platform::tmux::TmuxGateway::nudge(
+        if !crate::tmux::TmuxGateway::nudge(
             self.config.tmux_server_label.as_deref(),
             tmux_pane,
             &request.content,
@@ -191,12 +191,11 @@ impl ServerState {
             return Ok(CaptureResponse::Failed(CaptureError::NotATmuxTarget));
         };
         let tmux_server_label = self.config.tmux_server_label.as_deref();
-        if !lilo_runtime_platform::tmux::TmuxGateway::is_alive(tmux_server_label, tmux_pane).await?
-        {
+        if !crate::tmux::TmuxGateway::is_alive(tmux_server_label, tmux_pane).await? {
             return Ok(CaptureResponse::Failed(CaptureError::PaneUnavailable));
         }
         Ok(
-            match lilo_runtime_platform::tmux::TmuxGateway::capture_pane(
+            match crate::tmux::TmuxGateway::capture_pane(
                 tmux_server_label,
                 tmux_pane,
                 request.scrollback_lines,
@@ -324,7 +323,7 @@ impl ServerState {
     pub(crate) fn drain_shims(&self) {
         let pids: Vec<u32> = self.shim_pids_guard().drain().map(|(_, pid)| pid).collect();
         for pid in pids {
-            let _ = lilo_runtime_platform::signal::send_signal(pid, RuntimeSignal::Term);
+            let _ = crate::signal::send_signal(pid, RuntimeSignal::Term);
         }
     }
 }

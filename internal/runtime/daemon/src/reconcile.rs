@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use chrono::Utc;
 use lilo_rm_core::{IsolationPolicy, Lifecycle, LostEvidence, RuntimeEvent};
-use lilo_runtime_platform::process::ProcessStartTime;
+use lilo_sys::process::ProcessStartTime;
 use tokio::sync::broadcast;
 use tokio::time::{Instant, sleep_until};
 
@@ -67,11 +67,11 @@ struct DockerCliLiveness;
 
 impl ProcessProbe for SystemProcessProbe {
     fn pid_alive(&self, pid: u32) -> bool {
-        lilo_runtime_platform::process::pid_alive(pid)
+        lilo_sys::process::pid_alive(pid)
     }
 
     fn start_time_for_pid(&self, pid: u32) -> Result<ProcessStartTime> {
-        lilo_runtime_platform::process::start_time_probe_for_pid(pid)
+        Ok(lilo_sys::process::start_time_probe_for_pid(pid)?)
     }
 }
 

@@ -67,7 +67,7 @@ flowchart LR
     Events["JSONL event stream"]
     Launchers["lilo-runtime-launchers<br/>command resolution"]
     Backend["runtime backend<br/>host or Docker"]
-    Platform["lilo-runtime-platform<br/>tmux, process, signal APIs"]
+    Platform["lilo-sys<br/>OS process, signal, watcher primitives"]
     Paths["lilo-paths<br/>home, socket, data, log paths"]
     Docker["Docker isolation<br/>preflight, mounts, argv"]
     Shim["runtime shim"]
@@ -156,7 +156,7 @@ shim, tmux, and Docker evidence.
 | `lilo-runtime-app` | Internal diagnostic app and shim entrypoint. Phase 6 absorbs the user verb surface into `lilo`. |
 | `lilo-runtime-daemon` | Internal daemon service. Owns request dispatch, lifecycle orchestration, event delivery, Docker wrapping, reconciliation, and `RuntimeService`. |
 | `lilo-runtime-launchers` | Internal launcher registry for runtime command resolution. |
-| `lilo-runtime-platform` | Internal host platform layer for tmux, signals, process status, and watcher support. |
+| `lilo-sys` | OS platform primitives for process status, signals, and exit watcher support on Unix (Linux and macOS). tmux behavior and `RuntimeSignal`/`KillOutcome` mapping stay daemon-internal. |
 | `lilo-runtime-store` | Internal SQLite lifecycle store, migrations, lifecycle reads, lifecycle writes, and migration metadata. |
 
 ## Task Routing
@@ -166,7 +166,8 @@ shim, tmux, and Docker evidence.
 | Wire protocol, lifecycle vocabulary, spawn shape, event cursor shape | `lilo-rm-core` | Update client helpers, daemon dispatch, store codec, CLI output, snapshots, and public docs. |
 | Runtime daemon lifecycle, reconciliation, doctor, or event delivery | `lilo-runtime-daemon` | Update integration tests and any status or event assertions in `lilo-runtime-app`. |
 | Runtime command construction | `lilo-runtime-launchers` | Update daemon preflight and launch tests when request semantics change. |
-| tmux, process, signal, or watcher behavior | `lilo-runtime-platform` | Update daemon lifecycle and status coverage. |
+| Process, signal, or watcher primitive behavior | `lilo-sys` | Update runtime daemon call sites and PAL tests. |
+| tmux behavior or runtime signal mapping | `lilo-runtime-daemon` | Update daemon lifecycle, status, capture, nudge, and kill coverage. |
 | Lifecycle persistence or migrations | `lilo-runtime-store` | Update daemon state code and migration assertions. |
 | User command, shim command, generated MCP, or generated help surface | `lilo-runtime-app` | Edit authored tool contract data first when generation owns the output. |
 | Path policy or home layout | `lilo-paths` | Check every daemon config, client endpoint, and store path consumer. |

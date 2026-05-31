@@ -9,7 +9,6 @@ projects:
     "internal/runtime/app": "internal/runtime/app"
     "internal/runtime/daemon": "internal/runtime/daemon"
     "internal/runtime/launchers": "internal/runtime/launchers"
-    "internal/runtime/platform": "internal/runtime/platform"
     "internal/runtime/store": "internal/runtime/store"
     "internal/session/app": "internal/session/app"
     "internal/session/core": "internal/session/core"

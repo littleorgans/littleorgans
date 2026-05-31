@@ -120,7 +120,7 @@ fn command_error(stderr: &[u8], label: &str) -> String {
 }
 
 async fn tmux_status() -> TmuxStatus {
-    match lilo_runtime_platform::tmux::TmuxGateway::version().await {
+    match crate::tmux::TmuxGateway::version().await {
         Ok(Some(version)) => TmuxStatus {
             available: true,
             version: Some(version),

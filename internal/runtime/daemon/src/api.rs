@@ -256,7 +256,7 @@ mod tests {
     async fn assert_kill_by_pid_parity(service: &RuntimeService) {
         let kill_by_pid_request = KillByPidRequest {
             pid: finished_child_pid(),
-            signal: lilo_runtime_platform::signal::signal_number(RuntimeSignal::Term),
+            signal: crate::signal::signal_number(RuntimeSignal::Term),
             grace_secs: 0,
         };
         let direct_kill_by_pid = service

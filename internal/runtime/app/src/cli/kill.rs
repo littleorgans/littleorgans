@@ -48,7 +48,7 @@ async fn kill_pid(args: KillArgs, pid: u32) -> Result<()> {
     let outcome = client
         .kill_by_pid(KillByPidRequest {
             pid,
-            signal: lilo_runtime_platform::signal::signal_number(args.signal),
+            signal: lilo_runtime_daemon::signal::signal_number(args.signal),
             grace_secs: args.grace_secs,
         })
         .await?;
