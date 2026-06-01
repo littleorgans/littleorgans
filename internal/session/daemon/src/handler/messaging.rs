@@ -111,12 +111,7 @@ impl DaemonState {
         let mut errors = Vec::new();
         for recipient in recipients {
             match self
-                .nudge_one(
-                    context,
-                    recipient.id,
-                    &request.content,
-                    NudgeMode::Immediate,
-                )
+                .nudge_one(context, recipient.id, &request.content, request.mode)
                 .await
             {
                 Ok(nudge) => nudges.push(nudge),

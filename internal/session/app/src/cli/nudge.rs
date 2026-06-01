@@ -1,15 +1,22 @@
 use anyhow::{Result, bail};
 
+use lilo_rm_core::NudgeMode;
 use lilo_session_core::{NudgeRequest, RpcResponse, SessionRpc};
 
 use crate::cli::cli_def::NudgeArgs;
 use crate::cli::selector_scope::required_scoped_selector;
 
 pub async fn run(args: NudgeArgs) -> Result<()> {
+    let mode = if args.wait {
+        NudgeMode::Wait
+    } else {
+        NudgeMode::Immediate
+    };
     let response = crate::cli::client::send_request(&SessionRpc::Nudge {
         request: NudgeRequest {
             to: required_scoped_selector(&args.to, &args.scope)?,
             content: args.content,
+            mode,
         },
     })
     .await?;

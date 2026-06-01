@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::TargetError;
 use crate::{MailCountView, MailIntent, MailNotifyMode, MailSendResult, MessageView, Selector};
 use chrono::{DateTime, Utc};
+use lilo_rm_core::NudgeMode;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -111,6 +112,7 @@ pub struct MailStopCheckResponse {
 pub struct NudgeRequest {
     pub to: Selector,
     pub content: String,
+    pub mode: NudgeMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

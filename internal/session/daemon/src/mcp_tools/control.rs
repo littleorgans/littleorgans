@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::Result;
+use lilo_rm_core::NudgeMode;
 use lilo_session_core::{
     DoctorRequest, LogsRequest, NudgeRequest, RpcResponse, SessionRpc, WaitCondition, WaitRequest,
     tool_success,
@@ -34,6 +35,7 @@ pub(crate) async fn nudge(
                 request: NudgeRequest {
                     to,
                     content: required_string(arguments, "content")?.to_string(),
+                    mode: NudgeMode::Immediate,
                 },
             },
         )

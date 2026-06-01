@@ -1,4 +1,4 @@
-use lilo_rm_core::{IsolationPolicy, MountSpec};
+use lilo_rm_core::{IsolationPolicy, MountSpec, NudgeMode};
 
 use super::{
     CallerContextRequest, DeleteRequest, MailReadRequest, MailSendRequest, NudgeRequest,
@@ -148,6 +148,7 @@ fn nudge_request_round_trips_as_tagged_json() {
                     .or_panic("expected value"),
             },
             content: "ping".to_string(),
+            mode: NudgeMode::Immediate,
         },
     };
 

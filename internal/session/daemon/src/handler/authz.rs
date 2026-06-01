@@ -52,6 +52,7 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
 #[cfg(test)]
 mod tests {
     use lilo_im_core::Action;
+    use lilo_rm_core::NudgeMode;
     use lilo_session_core::{
         CallerContextRequest, CaptureRequest, DeleteRequest, DoctorRequest, IsolationPolicy,
         LabelMutation, LabelRequest, ListRequest, LogsRequest, MailCheckRequest, MailIntent,
@@ -185,6 +186,7 @@ mod tests {
                 request: NudgeRequest {
                     to: Selector::All,
                     content: "ping".to_string(),
+                    mode: NudgeMode::Immediate,
                 },
             },
             SessionRpc::Label {

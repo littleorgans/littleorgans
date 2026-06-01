@@ -367,6 +367,11 @@ pub struct NudgeArgs {
     pub scope: NamespaceScopeArgs,
     #[arg(long, help = generated_help::NUDGE_CONTENT_HELP)]
     pub content: String,
+    #[arg(
+        long,
+        help = "Wait until the recipient is idle before delivering (default: deliver immediately)."
+    )]
+    pub wait: bool,
 }
 
 #[derive(Debug, Args)]

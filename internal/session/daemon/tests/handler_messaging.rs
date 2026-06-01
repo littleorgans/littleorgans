@@ -9,6 +9,7 @@ use common::{
     spawn_test_session, spawn_test_session_with_labels,
 };
 use lilo_im_core::{Action, AuditDecision, Principal};
+use lilo_rm_core::NudgeMode;
 use lilo_session_core::{
     DeleteRequest, IsolationPolicy, Label, MailDeliveryStatus, MailIntent, MailReadRequest,
     NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc, SessionState,
@@ -255,6 +256,7 @@ async fn selector_mail_and_nudge_fan_out_to_matching_sessions() {
                         name: "engineer".to_string(),
                     },
                     content: "review PRs".to_string(),
+                    mode: NudgeMode::Immediate,
                 },
             },
         )
@@ -441,6 +443,7 @@ async fn nudge_reports_runtime_headless_outcome() {
                 request: NudgeRequest {
                     to: Selector::Id { id: recipient.id },
                     content: "ping".to_string(),
+                    mode: NudgeMode::Immediate,
                 },
             },
         )
@@ -577,6 +580,7 @@ async fn send_read_nudge_delete(
             request: NudgeRequest {
                 to: Selector::Id { id: recipient_id },
                 content: "ping".to_string(),
+                mode: NudgeMode::Immediate,
             },
         },
         SessionRpc::Delete {
