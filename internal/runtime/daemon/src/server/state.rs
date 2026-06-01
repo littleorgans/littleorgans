@@ -20,6 +20,7 @@ use crate::{
     error::RuntimeFailure,
     event_log::{CursorExpired, EventLog, EventLogPage},
     runtime_kill,
+    tmux_nudge::NudgeSendOutcome,
 };
 
 use super::{
@@ -164,17 +165,28 @@ impl ServerState {
             });
         }
 
-        if !crate::tmux::TmuxGateway::nudge(
+        match crate::tmux::TmuxGateway::nudge(
             self.config.tmux_server_label.as_deref(),
             tmux_pane,
             &request.content,
+            request.mode,
+            &lifecycle.runtime,
         )
         .await?
         {
-            return Ok(NudgeResponse {
-                delivered: false,
-                outcome: NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead),
-            });
+            NudgeSendOutcome::Delivered => {}
+            NudgeSendOutcome::PaneDead => {
+                return Ok(NudgeResponse {
+                    delivered: false,
+                    outcome: NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead),
+                });
+            }
+            NudgeSendOutcome::AgentBusyTimeout => {
+                return Ok(NudgeResponse {
+                    delivered: false,
+                    outcome: NudgeOutcome::Failed(NudgeFailureReason::AgentBusyTimeout),
+                });
+            }
         }
 
         Ok(NudgeResponse {

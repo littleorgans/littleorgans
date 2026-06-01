@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail};
-use lilo_rm_core::{CaptureError, LaunchEnv, PaneSnapshot, TmuxAddress, strip_ansi_escapes};
+use lilo_rm_core::{
+    CaptureError, LaunchEnv, NudgeMode, PaneSnapshot, RuntimeKind, TmuxAddress, strip_ansi_escapes,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
@@ -20,22 +22,10 @@ impl TmuxGateway {
         server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
         content: &str,
-    ) -> Result<bool> {
-        if !Self::is_alive(server_label, tmux_pane).await? {
-            return Ok(false);
-        }
-        // A pane parked in copy-mode routes keystrokes to the copy-mode key
-        // table rather than the agent, so the submit Enter never reaches the
-        // prompt and the payload is silently dropped. Exit copy-mode first.
-        // Mirrors nancy's nudge guard. Best-effort: a benign race can drop the
-        // pane out of mode before the cancel runs, which is harmless.
-        if pane_in_mode(server_label, tmux_pane).await? {
-            let _ = send_keys(server_label, tmux_pane, &copy_mode_cancel_step()).await;
-        }
-        for trailing in build_nudge_send_keys_steps(content) {
-            send_keys(server_label, tmux_pane, &trailing).await?;
-        }
-        Ok(true)
+        mode: NudgeMode,
+        runtime: &RuntimeKind,
+    ) -> Result<crate::tmux_nudge::NudgeSendOutcome> {
+        crate::tmux_nudge::nudge(server_label, tmux_pane, content, mode, runtime).await
     }
 
     pub async fn respawn_pane(
@@ -188,7 +178,7 @@ async fn tmux_history_output(
     })
 }
 
-async fn send_keys(
+pub(crate) async fn send_keys(
     server_label: Option<&str>,
     tmux_pane: &TmuxAddress,
     trailing: &[String],
@@ -205,7 +195,10 @@ async fn send_keys(
 /// Whether the pane is currently in a tmux mode (copy-mode/view-mode). Keys
 /// sent to a pane in such a mode are consumed by the mode key table instead of
 /// reaching the running agent, so a nudge must exit the mode before typing.
-async fn pane_in_mode(server_label: Option<&str>, tmux_pane: &TmuxAddress) -> Result<bool> {
+pub(crate) async fn pane_in_mode(
+    server_label: Option<&str>,
+    tmux_pane: &TmuxAddress,
+) -> Result<bool> {
     let target = tmux_pane.to_string();
     let output = tmux_output_owned_with_label(
         server_label,
@@ -223,7 +216,7 @@ async fn pane_in_mode(server_label: Option<&str>, tmux_pane: &TmuxAddress) -> Re
 }
 
 /// The send-keys trailer that exits any active tmux mode for a pane.
-fn copy_mode_cancel_step() -> [String; 2] {
+pub(crate) fn copy_mode_cancel_step() -> [String; 2] {
     ["-X".to_owned(), "cancel".to_owned()]
 }
 
@@ -286,7 +279,7 @@ fn unix_epoch_ms() -> u64 {
 /// mode does not eat shell metacharacters, then a hex CR (`0d`) to flush any
 /// terminal paste buffer, then a real `Enter` to submit. Without the final
 /// `Enter`, agents like Claude Code see the payload typed but never submitted.
-fn build_nudge_send_keys_steps(content: &str) -> [Vec<String>; 3] {
+pub(crate) fn build_nudge_send_keys_steps(content: &str) -> [Vec<String>; 3] {
     [
         vec!["-l".to_owned(), content.to_owned()],
         vec!["-H".to_owned(), "0d".to_owned()],
