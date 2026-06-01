@@ -10,7 +10,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
     let mut mcp = daemon.spawn_mcp();
     mcp.send(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
 
-    let sender = spawn_agent(&mut mcp, 2, "pm", daemon.dir.path());
+    let _sender = spawn_agent(&mut mcp, 2, "pm", daemon.dir.path());
     let recipient = spawn_agent(&mut mcp, 3, "engineer", daemon.dir.path());
 
     let sent = call_tool(
@@ -18,14 +18,15 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
         4,
         "mail_send",
         json!({
-            "from": sender,
             "to": recipient.clone(),
-            "content": "review the spec"
+            "content": "review the spec",
+            "context_id": "review-thread",
+            "intent": "request"
         }),
     );
     assert!(sent["error"].is_null());
     assert_eq!(
-        sent["result"]["structuredContent"]["mail"][0]["content"],
+        sent["result"]["structuredContent"]["results"][0]["message"]["content"],
         "review the spec"
     );
 
@@ -54,7 +55,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
     );
     assert!(read["error"].is_null());
     assert_eq!(
-        read["result"]["structuredContent"]["mail"][0]["content"],
+        read["result"]["structuredContent"]["messages"][0]["content"],
         "review the spec"
     );
 

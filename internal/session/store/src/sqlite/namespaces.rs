@@ -82,8 +82,7 @@ impl SqliteStore {
                 .bind(id)
                 .execute(&mut *transaction)
                 .await?;
-            sqlx::query("DELETE FROM session_mail WHERE sender_id = ? OR recipient_id = ?")
-                .bind(id)
+            sqlx::query("DELETE FROM session_mail WHERE recipient_id = ?")
                 .bind(id)
                 .execute(&mut *transaction)
                 .await?;

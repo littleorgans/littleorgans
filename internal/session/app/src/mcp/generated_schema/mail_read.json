@@ -34,7 +34,7 @@
         },
         "type": "array"
       },
-      "mail": {
+      "messages": {
         "items": {
           "type": "object"
         },
@@ -42,7 +42,7 @@
       }
     },
     "required": [
-      "mail"
+      "messages"
     ],
     "type": "object"
   }

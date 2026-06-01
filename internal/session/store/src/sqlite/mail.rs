@@ -1,5 +1,7 @@
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
-use lilo_session_core::Mail;
+use lilo_session_core::{Mail, MailIntent, SenderRef, SmError};
 use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
 use thiserror::Error;
@@ -16,6 +18,10 @@ pub enum MailRowError {
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
     Uuid(#[from] uuid::Error),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    Session(#[from] SmError),
     #[error("{field} out of range: {value}")]
     IntegerOutOfRange { field: &'static str, value: i64 },
 }
@@ -23,15 +29,19 @@ pub enum MailRowError {
 impl SqliteStore {
     pub async fn insert_mail(&self, mail: &Mail) -> Result<(), MailRowError> {
         sqlx::query(
-            "INSERT INTO session_mail (id, sender_id, recipient_id, content, sent_at, read_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO session_mail
+             (id, sender_ref, recipient_id, content, sent_at, read_at, context_id, intent, idempotency_key)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(mail.id.to_string())
-        .bind(mail.sender_id.to_string())
+        .bind(serde_json::to_string(&mail.sender)?)
         .bind(mail.recipient_id.to_string())
         .bind(&mail.content)
         .bind(mail.sent_at.to_rfc3339())
         .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
+        .bind(&mail.context_id)
+        .bind(mail.intent.to_string())
+        .bind(&mail.idempotency_key)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -53,7 +63,7 @@ impl SqliteStore {
         read_at: DateTime<Utc>,
         peek: bool,
     ) -> Result<Vec<Mail>, MailRowError> {
-        let mail = self.list_unread_mail(recipient_id).await?;
+        let mut mail = self.list_unread_mail(recipient_id).await?;
         if !peek && !mail.is_empty() {
             let mut tx = self.pool.begin().await?;
             for item in &mail {
@@ -64,6 +74,9 @@ impl SqliteStore {
                     .await?;
             }
             tx.commit().await?;
+            for item in &mut mail {
+                item.read_at = Some(read_at);
+            }
         }
         Ok(mail)
     }
@@ -72,7 +85,7 @@ impl SqliteStore {
         self.query_mail(
             "SELECT * FROM session_mail
              WHERE recipient_id = ? AND read_at IS NULL
-             ORDER BY sent_at",
+             ORDER BY sent_at, id",
             [recipient_id.to_string()],
         )
         .await
@@ -95,11 +108,14 @@ impl SqliteStore {
 fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
     Ok(Mail {
         id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
-        sender_id: Uuid::parse_str(&row.try_get::<String, _>("sender_id")?)?,
+        sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
         recipient_id: Uuid::parse_str(&row.try_get::<String, _>("recipient_id")?)?,
         content: row.try_get("content")?,
         sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
         read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
+        context_id: row.try_get("context_id")?,
+        intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
+        idempotency_key: row.try_get("idempotency_key")?,
     })
 }
 
@@ -120,11 +136,14 @@ mod tests {
         let now = Utc::now();
         let mail = Mail {
             id: Uuid::now_v7(),
-            sender_id: Uuid::now_v7(),
+            sender: SenderRef::session(Uuid::now_v7()),
             recipient_id: Uuid::now_v7(),
             content: "review the spec".to_string(),
             sent_at: now,
             read_at: None,
+            context_id: "review-thread".to_string(),
+            intent: MailIntent::Request,
+            idempotency_key: None,
         };
 
         store.insert_mail(&mail).await.or_panic("mail inserts");
@@ -136,13 +155,13 @@ mod tests {
                 .or_panic("unread count"),
             1
         );
-        assert_eq!(
-            store
-                .read_unread_mail(&mail.recipient_id, Utc::now(), false)
-                .await
-                .or_panic("mail reads"),
-            vec![mail.clone()]
-        );
+        let read = store
+            .read_unread_mail(&mail.recipient_id, Utc::now(), false)
+            .await
+            .or_panic("mail reads");
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].id, mail.id);
+        assert!(read[0].read_at.is_some());
         assert_eq!(
             store
                 .count_unread_mail(&mail.recipient_id)
@@ -157,11 +176,14 @@ mod tests {
         let (_dir, store) = SqliteStore::open_temp().await;
         let mail = Mail {
             id: Uuid::now_v7(),
-            sender_id: Uuid::now_v7(),
+            sender: SenderRef::session(Uuid::now_v7()),
             recipient_id: Uuid::now_v7(),
             content: "review the spec".to_string(),
             sent_at: Utc::now(),
             read_at: None,
+            context_id: "review-thread".to_string(),
+            intent: MailIntent::Request,
+            idempotency_key: None,
         };
 
         store.insert_mail(&mail).await.or_panic("mail inserts");
@@ -188,11 +210,14 @@ mod tests {
             store
                 .insert_mail(&Mail {
                     id: Uuid::now_v7(),
-                    sender_id: Uuid::now_v7(),
+                    sender: SenderRef::session(Uuid::now_v7()),
                     recipient_id,
                     content: format!("message {index}"),
                     sent_at: Utc::now(),
                     read_at: None,
+                    context_id: "bulk-thread".to_string(),
+                    intent: MailIntent::Inform,
+                    idempotency_key: None,
                 })
                 .await
                 .or_panic("mail inserts");

@@ -38,7 +38,7 @@ expression: tool
         },
         "type": "array"
       },
-      "mail": {
+      "messages": {
         "items": {
           "type": "object"
         },
@@ -46,7 +46,7 @@ expression: tool
       }
     },
     "required": [
-      "mail"
+      "messages"
     ],
     "type": "object"
   }

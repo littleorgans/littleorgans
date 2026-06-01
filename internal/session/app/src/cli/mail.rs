@@ -2,14 +2,14 @@ use anyhow::{Result, bail};
 use std::str::FromStr;
 
 use lilo_session_core::{
-    MailCheckRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, RpcResponse,
-    Selector, SessionRpc,
+    MailCheckRequest, MailIntent, MailNotifyMode, MailReadRequest, MailSendRequest,
+    MailStopCheckRequest, RpcResponse, Selector, SessionRpc,
 };
 
 use crate::cli::cli_def::{
     MailAction, MailArgs, MailCheckArgs, MailReadArgs, MailSendArgs, MailStopCheckArgs,
 };
-use crate::cli::output::print_mail;
+use crate::cli::output::print_messages;
 use crate::cli::selector_scope::required_scoped_selector;
 
 pub async fn run(args: MailArgs) -> Result<()> {
@@ -24,17 +24,26 @@ pub async fn run(args: MailArgs) -> Result<()> {
 async fn send(args: MailSendArgs) -> Result<()> {
     let response = send_daemon_request(SessionRpc::MailSend {
         request: MailSendRequest {
-            from: args.from.or_else(env_session_id),
             to: required_scoped_selector(&args.to, &args.scope)?,
             content: args.content,
+            notify: args
+                .notify
+                .as_deref()
+                .map(MailNotifyMode::from_str)
+                .transpose()?,
+            context_id: args.context_id,
+            intent: MailIntent::from_client_send_str(&args.intent)?,
+            idempotency_key: args.idempotency_key,
         },
     })
     .await?;
 
     match response {
         RpcResponse::MailSent { response } => {
-            for item in response.mail {
-                println!("{}", item.id);
+            for result in response.results {
+                if let Some(message) = result.message {
+                    println!("{}", message.id);
+                }
             }
             for error in response.errors {
                 eprintln!("{} {}", error.target, error.message);
@@ -60,7 +69,7 @@ async fn read(args: MailReadArgs) -> Result<()> {
 
     match response {
         RpcResponse::MailRead { response } => {
-            print_mail(&response.mail);
+            print_messages(&response.messages);
             for error in response.errors {
                 eprintln!("{} {}", error.target, error.message);
             }
@@ -129,8 +138,4 @@ async fn unread_count(selector: String) -> Result<usize> {
 
 async fn send_daemon_request(request: SessionRpc) -> Result<RpcResponse> {
     crate::cli::client::send_request(&request).await
-}
-
-fn env_session_id() -> Option<String> {
-    std::env::var("HELIOY_SESSION_ID").ok()
 }

@@ -5,9 +5,9 @@ cli_about       = "Send durable mail to selected sessions."
 output_schema   = '''
 {
   "type": "object",
-  "required": ["mail"],
+  "required": ["results"],
   "properties": {
-    "mail": {"type": "array", "items": {"type": "object"}},
+    "results": {"type": "array", "items": {"type": "object"}},
     "errors": {"type": "array", "items": {"type": "object"}}
   }
 }
@@ -23,20 +23,46 @@ cli_flag        = "--to"
 selector        = true
 
 [[tools.mail_send.params]]
-name            = "from"
-type            = "string"
-required        = false
-mcp_description = "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise lilod records the controller sender."
-cli_help        = "Sender session id. Defaults to HELIOY_SESSION_ID when set."
-cli_flag        = "--from"
-
-[[tools.mail_send.params]]
 name            = "content"
 type            = "string"
 required        = true
 mcp_description = "Message content."
 cli_help        = "Message content."
 cli_flag        = "--content"
+
+[[tools.mail_send.params]]
+name            = "notify"
+type            = "string"
+required        = false
+enum_values     = ["wait", "steer"]
+mcp_description = "Optional wake mode to request after mail persistence."
+cli_help        = "Optional wake mode to request after mail persistence."
+cli_flag        = "--notify"
+
+[[tools.mail_send.params]]
+name            = "context_id"
+type            = "string"
+required        = true
+mcp_description = "Conversation correlation tag."
+cli_help        = "Conversation correlation tag."
+cli_flag        = "--context-id"
+
+[[tools.mail_send.params]]
+name            = "intent"
+type            = "string"
+required        = true
+enum_values     = ["request", "result", "inform"]
+mcp_description = "Message intent tag. Receipt is reserved for daemon system messages."
+cli_help        = "Message intent tag: request, result, or inform."
+cli_flag        = "--intent"
+
+[[tools.mail_send.params]]
+name            = "idempotency_key"
+type            = "string"
+required        = false
+mcp_description = "Optional client idempotency key scoped to the derived sender."
+cli_help        = "Optional client idempotency key scoped to the derived sender."
+cli_flag        = "--idempotency-key"
 
 [tools.mail_read]
 cli_name        = "mail read"
@@ -46,9 +72,9 @@ mcp_namespace_scope = true
 output_schema   = '''
 {
   "type": "object",
-  "required": ["mail"],
+  "required": ["messages"],
   "properties": {
-    "mail": {"type": "array", "items": {"type": "object"}},
+    "messages": {"type": "array", "items": {"type": "object"}},
     "errors": {"type": "array", "items": {"type": "object"}}
   }
 }

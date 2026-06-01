@@ -51,7 +51,7 @@ mod tests {
     use lilo_im_core::Action;
     use lilo_session_core::{
         CaptureRequest, DeleteRequest, DoctorRequest, IsolationPolicy, LabelMutation, LabelRequest,
-        ListRequest, LogsRequest, MailCheckRequest, MailReadRequest, MailSendRequest,
+        ListRequest, LogsRequest, MailCheckRequest, MailIntent, MailReadRequest, MailSendRequest,
         MailStopCheckRequest, McpBridgeRequest, Namespace, NamespaceCreateRequest,
         NamespaceDeleteRequest, NamespaceGetRequest, NamespaceListRequest, NudgeRequest,
         RuntimeKind, Selector, SessionRpc, SpawnRequest, WaitCondition, WaitRequest,
@@ -167,9 +167,12 @@ mod tests {
             },
             SessionRpc::MailSend {
                 request: MailSendRequest {
-                    from: None,
                     to: Selector::All,
                     content: "hello".to_string(),
+                    notify: None,
+                    context_id: "authz-thread".to_string(),
+                    intent: MailIntent::Inform,
+                    idempotency_key: None,
                 },
             },
             SessionRpc::MailRead {

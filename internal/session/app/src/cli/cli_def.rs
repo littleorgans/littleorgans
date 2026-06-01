@@ -281,16 +281,22 @@ pub struct MailSendArgs {
     pub to: String,
     #[command(flatten)]
     pub scope: NamespaceScopeArgs,
-    #[arg(long, help = generated_help::MAIL_SEND_FROM_HELP)]
-    pub from: Option<String>,
     #[arg(long, help = generated_help::MAIL_SEND_CONTENT_HELP)]
     pub content: String,
+    #[arg(long, help = generated_help::MAIL_SEND_NOTIFY_HELP)]
+    pub notify: Option<String>,
+    #[arg(long, help = generated_help::MAIL_SEND_CONTEXT_ID_HELP)]
+    pub context_id: String,
+    #[arg(long, help = generated_help::MAIL_SEND_INTENT_HELP)]
+    pub intent: String,
+    #[arg(long, help = generated_help::MAIL_SEND_IDEMPOTENCY_KEY_HELP)]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
 pub struct MailReadArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_READ_SELECTOR_HELP)]
+    #[arg(long, help = generated_help::MAIL_READ_SELECTOR_HELP)]
     pub selector: String,
     #[arg(long, help = generated_help::MAIL_READ_PEEK_HELP)]
     pub peek: bool,
@@ -299,14 +305,14 @@ pub struct MailReadArgs {
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
 pub struct MailCheckArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
+    #[arg(long, help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
     pub selector: String,
 }
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
 pub struct MailStopCheckArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_STOP_CHECK_SELECTOR_HELP)]
+    #[arg(long, help = generated_help::MAIL_STOP_CHECK_SELECTOR_HELP)]
     pub selector: String,
 }
 

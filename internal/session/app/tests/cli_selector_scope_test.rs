@@ -175,7 +175,18 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
     let mail_default = daemon
         .command()
         .current_dir(alpha_dir)
-        .args(["mail", "send", "--to", "all", "--content", "scoped"])
+        .args([
+            "mail",
+            "send",
+            "--to",
+            "all",
+            "--content",
+            "scoped",
+            "--context-id",
+            "scope-thread",
+            "--intent",
+            "inform",
+        ])
         .output()
         .or_panic("sm mail send executes");
     assert_success("sm mail send", &mail_default);
@@ -184,7 +195,19 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
     let mail_all = daemon
         .command()
         .current_dir(alpha_dir)
-        .args(["mail", "send", "--to", "all", "--content", "all", "-A"])
+        .args([
+            "mail",
+            "send",
+            "--to",
+            "all",
+            "--content",
+            "all",
+            "--context-id",
+            "scope-thread",
+            "--intent",
+            "inform",
+            "-A",
+        ])
         .output()
         .or_panic("sm mail send -A executes");
     assert_success("sm mail send -A", &mail_all);

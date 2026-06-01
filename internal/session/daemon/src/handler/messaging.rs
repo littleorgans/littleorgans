@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_im_core::Action;
 use lilo_session_core::{
-    Mail, MailCheckRequest, MailCheckResponse, MailReadRequest, MailReadResponse, MailSendRequest,
-    MailSendResponse, MailStopCheckRequest, MailStopCheckResponse, MailUnreadCount, NudgeDelivery,
-    NudgeRequest, NudgeResponse, RpcResponse, Selector,
+    Mail, MailCheckRequest, MailCheckResponse, MailCountView, MailDeliveryStatus, MailNotifyStatus,
+    MailReadRequest, MailReadResponse, MailSendRequest, MailSendResponse, MailSendResult,
+    MailStopCheckRequest, MailStopCheckResponse, MessageView, NudgeDelivery, NudgeRequest,
+    NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef, SenderView, Session,
 };
 use uuid::Uuid;
 
@@ -19,36 +20,45 @@ impl DaemonState {
         context: &RequestContext,
         request: MailSendRequest,
     ) -> Result<RpcResponse> {
+        request.intent.ensure_client_send_allowed()?;
         let recipients = self.resolve_selector(&request.to, "recipient").await?;
-        let sender_id = match request.from {
-            Some(from) => {
-                let id = Uuid::parse_str(&from).context("invalid sender session id")?;
-                self.require_session(&id, "sender").await?;
-                id
-            }
-            None => Uuid::nil(),
-        };
-        let mut mail = Vec::new();
+        let sender = self.effective_sender(context).await?;
+        let sender_view = self.sender_view(&sender).await?;
+        let mut results = Vec::new();
         let mut errors = Vec::new();
         for recipient in recipients {
+            let recipient_summary = RecipientSummary::from_session(&recipient);
             if !recipient.state.is_active() {
+                let message = format!("recipient is {}; mail not delivered", recipient.state);
+                results.push(failed_send_result(&recipient_summary, &message));
                 errors.push(lilo_session_core::TargetError {
                     target: recipient.id.to_string(),
-                    message: format!("recipient is {}; mail not delivered", recipient.state),
+                    message,
                 });
                 continue;
             }
             match self
-                .mail_send_one(context, sender_id, recipient.id, &request.content)
+                .mail_send_one(context, sender.clone(), recipient.id, &request)
                 .await
             {
-                Ok(item) => mail.push(item),
-                Err(error) => errors.push(target_error(&recipient.id, &error)),
+                Ok(item) => {
+                    let view = MessageView::from_mail(
+                        &item,
+                        sender_view.clone(),
+                        recipient_summary.clone(),
+                    );
+                    results.push(successful_send_result(recipient_summary, view));
+                }
+                Err(error) => {
+                    let message = format!("{error:#}");
+                    results.push(failed_send_result(&recipient_summary, &message));
+                    errors.push(target_error(&recipient.id, &error));
+                }
             }
         }
 
         Ok(RpcResponse::MailSent {
-            response: MailSendResponse { mail, errors },
+            response: MailSendResponse { results, errors },
         })
     }
 
@@ -63,17 +73,17 @@ impl DaemonState {
         let mut mail = Vec::new();
         let mut errors = Vec::new();
         for recipient in recipients {
-            match self
-                .mail_read_one(context, recipient.id, request.peek)
-                .await
-            {
+            match self.mail_read_one(context, &recipient, request.peek).await {
                 Ok(mut items) => mail.append(&mut items),
                 Err(error) => errors.push(target_error(&recipient.id, &error)),
             }
         }
 
         Ok(RpcResponse::MailRead {
-            response: MailReadResponse { mail, errors },
+            response: MailReadResponse {
+                messages: mail,
+                errors,
+            },
         })
     }
 
@@ -124,9 +134,9 @@ impl DaemonState {
     async fn mail_send_one(
         &self,
         context: &RequestContext,
-        sender_id: Uuid,
+        sender: SenderRef,
         recipient_id: Uuid,
-        body: &str,
+        request: &MailSendRequest,
     ) -> Result<Mail> {
         self.identity
             .authorize(
@@ -137,11 +147,14 @@ impl DaemonState {
             .await?;
         let mail = Mail {
             id: Uuid::now_v7(),
-            sender_id,
+            sender,
             recipient_id,
-            content: body.to_string(),
+            content: request.content.clone(),
             sent_at: Utc::now(),
             read_at: None,
+            context_id: request.context_id.clone(),
+            intent: request.intent,
+            idempotency_key: request.idempotency_key.clone(),
         };
         self.store()
             .insert_mail(&mail)
@@ -153,30 +166,32 @@ impl DaemonState {
     async fn mail_read_one(
         &self,
         context: &RequestContext,
-        recipient_id: Uuid,
+        recipient: &Session,
         peek: bool,
-    ) -> Result<Vec<Mail>> {
+    ) -> Result<Vec<MessageView>> {
         self.identity
             .authorize(
                 &context.principal,
                 Action::MailRead,
-                &session_resource(recipient_id),
+                &session_resource(recipient.id),
             )
             .await?;
-        self.store()
-            .read_unread_mail(&recipient_id, Utc::now(), peek)
+        let mail = self
+            .store()
+            .read_unread_mail(&recipient.id, Utc::now(), peek)
             .await
-            .context("failed to read mail")
+            .context("failed to read mail")?;
+        self.message_views(mail, recipient).await
     }
 
-    async fn mail_counts(&self, selector: &Selector) -> Result<Vec<MailUnreadCount>> {
+    async fn mail_counts(&self, selector: &Selector) -> Result<Vec<MailCountView>> {
         let recipients = self.resolve_selector(selector, "recipient").await?;
         let mut counts = Vec::new();
         for session in recipients {
-            counts.push(MailUnreadCount {
-                session_id: session.id.to_string(),
-                unread: self.unread_mail_count(&session.id).await?,
-            });
+            counts.push(MailCountView::from_session(
+                &session,
+                self.unread_mail_count(&session.id).await?,
+            ));
         }
         Ok(counts)
     }
@@ -217,14 +232,74 @@ impl DaemonState {
 
     async fn mail_count_response<F>(&self, selector: &Selector, response: F) -> Result<RpcResponse>
     where
-        F: FnOnce(usize, Vec<MailUnreadCount>) -> RpcResponse,
+        F: FnOnce(usize, Vec<MailCountView>) -> RpcResponse,
     {
         let counts = self.mail_counts(selector).await?;
         let unread = total_unread(&counts);
         Ok(response(unread, counts))
     }
+
+    async fn effective_sender(&self, context: &RequestContext) -> Result<SenderRef> {
+        if let Some(id) = context.mcp_caller_session_id {
+            self.require_session(&id, "sender").await?;
+            return Ok(SenderRef::session(id));
+        }
+        Ok(SenderRef::operator(serde_json::to_value(
+            &context.principal,
+        )?))
+    }
+
+    async fn sender_view(&self, sender: &SenderRef) -> Result<SenderView> {
+        match sender {
+            SenderRef::Session { session_id } => {
+                let session = self
+                    .store()
+                    .get_session(session_id)
+                    .await
+                    .context("failed to load sender session")?
+                    .ok_or_else(|| anyhow::anyhow!("unknown sender session: {session_id}"))?;
+                Ok(SenderView::session(&session))
+            }
+            SenderRef::Operator { principal } => Ok(SenderView::operator(principal.clone())),
+            SenderRef::System => Ok(SenderView::System),
+        }
+    }
+
+    async fn message_views(
+        &self,
+        mail: Vec<Mail>,
+        recipient: &Session,
+    ) -> Result<Vec<MessageView>> {
+        let recipient = RecipientSummary::from_session(recipient);
+        let mut views = Vec::new();
+        for item in mail {
+            let sender = self.sender_view(&item.sender).await?;
+            views.push(MessageView::from_mail(&item, sender, recipient.clone()));
+        }
+        Ok(views)
+    }
 }
 
-fn total_unread(counts: &[MailUnreadCount]) -> usize {
+fn total_unread(counts: &[MailCountView]) -> usize {
     counts.iter().map(|count| count.unread).sum()
+}
+
+fn failed_send_result(recipient: &RecipientSummary, error: &str) -> MailSendResult {
+    MailSendResult {
+        recipient: recipient.clone(),
+        mail: MailDeliveryStatus::Err,
+        notify: MailNotifyStatus::Skipped,
+        message: None,
+        error: Some(error.to_string()),
+    }
+}
+
+fn successful_send_result(recipient: RecipientSummary, message: MessageView) -> MailSendResult {
+    MailSendResult {
+        recipient,
+        mail: MailDeliveryStatus::Ok,
+        notify: MailNotifyStatus::Skipped,
+        message: Some(message),
+        error: None,
+    }
 }

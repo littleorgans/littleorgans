@@ -1,4 +1,4 @@
-use lilo_session_core::{Label, Mail, Session};
+use lilo_session_core::{Label, MessageView, SenderView, Session};
 
 pub fn print_session_line(session: &Session, show_labels: bool) {
     print!(
@@ -41,15 +41,25 @@ fn format_labels(labels: &[Label]) -> String {
         .join(",")
 }
 
-pub fn print_mail(mail: &[Mail]) {
-    for item in mail {
+pub fn print_messages(messages: &[MessageView]) {
+    for item in messages {
         println!(
-            "{} {} {} {} {}",
+            "{} {} {} {} {} {}",
             item.id,
-            item.sender_id,
-            item.recipient_id,
-            item.status(),
+            sender_display_label(&item.sender),
+            item.recipient.display_label,
+            item.status,
+            item.intent,
             item.content
         );
+    }
+}
+
+fn sender_display_label(sender: &SenderView) -> &str {
+    match sender {
+        SenderView::Session { display_label, .. } | SenderView::Operator { display_label, .. } => {
+            display_label
+        }
+        SenderView::System => "system",
     }
 }

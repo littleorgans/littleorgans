@@ -67,9 +67,15 @@ pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected sessions.";
 #[rustfmt::skip]
 pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
-pub const MAIL_SEND_FROM_HELP: &str = "Sender session id. Defaults to HELIOY_SESSION_ID when set.";
-#[rustfmt::skip]
 pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
+#[rustfmt::skip]
+pub const MAIL_SEND_NOTIFY_HELP: &str = "Optional wake mode to request after mail persistence.";
+#[rustfmt::skip]
+pub const MAIL_SEND_CONTEXT_ID_HELP: &str = "Conversation correlation tag.";
+#[rustfmt::skip]
+pub const MAIL_SEND_INTENT_HELP: &str = "Message intent tag: request, result, or inform.";
+#[rustfmt::skip]
+pub const MAIL_SEND_IDEMPOTENCY_KEY_HELP: &str = "Optional client idempotency key scoped to the derived sender.";
 
 #[rustfmt::skip]
 pub const MAIL_READ_ABOUT: &str = "Read unread mail for selected sessions.";

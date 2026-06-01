@@ -11,8 +11,29 @@ expression: tool
         "description": "Message content.",
         "type": "string"
       },
-      "from": {
-        "description": "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise lilod records the controller sender.",
+      "context_id": {
+        "description": "Conversation correlation tag.",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "description": "Optional client idempotency key scoped to the derived sender.",
+        "type": "string"
+      },
+      "intent": {
+        "description": "Message intent tag. Receipt is reserved for daemon system messages.",
+        "enum": [
+          "request",
+          "result",
+          "inform"
+        ],
+        "type": "string"
+      },
+      "notify": {
+        "description": "Optional wake mode to request after mail persistence.",
+        "enum": [
+          "wait",
+          "steer"
+        ],
         "type": "string"
       },
       "to": {
@@ -22,7 +43,9 @@ expression: tool
     },
     "required": [
       "to",
-      "content"
+      "content",
+      "context_id",
+      "intent"
     ],
     "type": "object"
   },
@@ -35,7 +58,7 @@ expression: tool
         },
         "type": "array"
       },
-      "mail": {
+      "results": {
         "items": {
           "type": "object"
         },
@@ -43,7 +66,7 @@ expression: tool
       }
     },
     "required": [
-      "mail"
+      "results"
     ],
     "type": "object"
   }

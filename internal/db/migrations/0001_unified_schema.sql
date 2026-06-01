@@ -49,11 +49,14 @@ VALUES ('default', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
 CREATE TABLE session_mail (
     id TEXT PRIMARY KEY NOT NULL,
-    sender_id TEXT NOT NULL,
+    sender_ref TEXT NOT NULL,
     recipient_id TEXT NOT NULL,
     content TEXT NOT NULL,
     sent_at TEXT NOT NULL,
-    read_at TEXT
+    read_at TEXT,
+    context_id TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    idempotency_key TEXT
 );
 
 CREATE INDEX idx_session_mail_recipient_unread
