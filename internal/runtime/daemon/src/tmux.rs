@@ -24,6 +24,14 @@ impl TmuxGateway {
         if !Self::is_alive(server_label, tmux_pane).await? {
             return Ok(false);
         }
+        // A pane parked in copy-mode routes keystrokes to the copy-mode key
+        // table rather than the agent, so the submit Enter never reaches the
+        // prompt and the payload is silently dropped. Exit copy-mode first.
+        // Mirrors nancy's nudge guard. Best-effort: a benign race can drop the
+        // pane out of mode before the cancel runs, which is harmless.
+        if pane_in_mode(server_label, tmux_pane).await? {
+            let _ = send_keys(server_label, tmux_pane, &copy_mode_cancel_step()).await;
+        }
         for trailing in build_nudge_send_keys_steps(content) {
             send_keys(server_label, tmux_pane, &trailing).await?;
         }
@@ -194,6 +202,31 @@ async fn send_keys(
     ensure_success(&output, "tmux send-keys").map(|_| ())
 }
 
+/// Whether the pane is currently in a tmux mode (copy-mode/view-mode). Keys
+/// sent to a pane in such a mode are consumed by the mode key table instead of
+/// reaching the running agent, so a nudge must exit the mode before typing.
+async fn pane_in_mode(server_label: Option<&str>, tmux_pane: &TmuxAddress) -> Result<bool> {
+    let target = tmux_pane.to_string();
+    let output = tmux_output_owned_with_label(
+        server_label,
+        vec![
+            "display-message".to_owned(),
+            "-t".to_owned(),
+            target,
+            "-p".to_owned(),
+            "#{pane_in_mode}".to_owned(),
+        ],
+    )
+    .await?
+    .context("tmux is not installed")?;
+    Ok(ensure_success(&output, "tmux display-message")?.trim() == "1")
+}
+
+/// The send-keys trailer that exits any active tmux mode for a pane.
+fn copy_mode_cancel_step() -> [String; 2] {
+    ["-X".to_owned(), "cancel".to_owned()]
+}
+
 async fn tmux_output_owned(args: Vec<String>) -> Result<Option<std::process::Output>> {
     tmux_output_owned_with_label(None, args).await
 }
@@ -343,6 +376,16 @@ mod tests {
         assert_eq!(steps[0], vec!["-l".to_owned(), "hello world".to_owned()]);
         assert_eq!(steps[1], vec!["-H".to_owned(), "0d".to_owned()]);
         assert_eq!(steps[2], vec!["Enter".to_owned()]);
+    }
+
+    #[test]
+    fn copy_mode_cancel_step_exits_the_mode() {
+        // Guard sent before the nudge payload when a pane is parked in
+        // copy-mode, so keystrokes reach the agent instead of the mode table.
+        assert_eq!(
+            copy_mode_cancel_step(),
+            ["-X".to_owned(), "cancel".to_owned()]
+        );
     }
 
     #[test]
