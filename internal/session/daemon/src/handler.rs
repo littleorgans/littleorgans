@@ -1,5 +1,7 @@
 mod authz;
 mod dispatch;
+mod mail_observability;
+mod message_view;
 mod messaging;
 mod sessions;
 mod spawn;

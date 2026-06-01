@@ -1,4 +1,4 @@
-use lilo_session_core::{Label, MessageView, SenderView, Session};
+use lilo_session_core::{Label, MailCountView, MailSendResult, MessageView, SenderView, Session};
 
 pub fn print_session_line(session: &Session, show_labels: bool) {
     print!(
@@ -42,16 +42,55 @@ fn format_labels(labels: &[Label]) -> String {
 }
 
 pub fn print_messages(messages: &[MessageView]) {
+    print_message_table(messages);
+}
+
+pub fn print_message_table(messages: &[MessageView]) {
+    if messages.is_empty() {
+        return;
+    }
+    println!("SENT_AT SENDER RECIPIENT STATUS INTENT CONTENT");
     for item in messages {
         println!(
             "{} {} {} {} {} {}",
-            item.id,
+            item.sent_at.to_rfc3339(),
             sender_display_label(&item.sender),
             item.recipient.display_label,
             item.status,
             item.intent,
             item.content
         );
+    }
+}
+
+pub fn print_mail_send_summary(results: &[MailSendResult]) {
+    if results.is_empty() {
+        println!("No recipients matched.");
+        return;
+    }
+    println!("RECIPIENT MAIL NOTIFY CONTEXT INTENT");
+    for result in results {
+        let message = result.message.as_ref();
+        let intent = message.map_or_else(|| "-".to_string(), |message| message.intent.to_string());
+        println!(
+            "{} {} {} {} {}",
+            result.recipient.display_label,
+            result.mail,
+            result.notify,
+            message.map_or("-", |message| message.context_id.as_str()),
+            intent,
+        );
+    }
+}
+
+pub fn print_mail_counts(total: usize, counts: &[MailCountView]) {
+    println!("{total} unread total");
+    if counts.is_empty() {
+        return;
+    }
+    println!("MAILBOX UNREAD");
+    for count in counts {
+        println!("{} {}", count.display_label, count.unread);
     }
 }
 

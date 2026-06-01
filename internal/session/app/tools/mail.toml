@@ -36,8 +36,8 @@ name            = "notify"
 type            = "string"
 required        = false
 enum_values     = ["wait", "steer"]
-mcp_description = "Optional wake mode to request after mail persistence."
-cli_help        = "Optional wake mode to request after mail persistence."
+mcp_description = "Optional wake mode to request after mail persistence: wait or steer."
+cli_help        = "Optional wake mode to request after mail persistence. Bare --notify uses wait."
 cli_flag        = "--notify"
 
 [[tools.mail_send.params]]
@@ -67,7 +67,7 @@ cli_flag        = "--idempotency-key"
 
 [tools.mail_read]
 cli_name        = "mail read"
-mcp_description = "Read unread mail for the caller session. Reads mark messages read unless peek is true."
+mcp_description = "Read unread mail for the caller session. Reads mark messages read."
 cli_about       = "Read unread mail for the caller session."
 output_schema   = '''
 {
@@ -80,13 +80,55 @@ output_schema   = '''
 }
 '''
 
-[[tools.mail_read.params]]
-name            = "peek"
+[tools.mail_peek]
+cli_name        = "mail peek"
+mcp_description = "Peek at the operator message transcript without draining mail."
+cli_about       = "Peek at the operator message transcript without draining mail."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["messages"],
+  "properties": {
+    "messages": {"type": "array", "items": {"type": "object"}},
+    "cursor": {"type": ["object", "null"]}
+  }
+}
+'''
+
+[[tools.mail_peek.params]]
+name            = "context_id"
+type            = "string"
+required        = false
+mcp_description = "Conversation correlation tag to inspect."
+cli_help        = "Conversation correlation tag to inspect."
+cli_flag        = "--context-id"
+
+[[tools.mail_peek.params]]
+name            = "selector"
+type            = "string"
+required        = false
+mcp_description = "Participant selector used for matching messages."
+cli_help        = "Participant selector used for matching messages."
+cli_flag        = "--selector"
+selector        = true
+
+[[tools.mail_peek.params]]
+name            = "recipient"
+type            = "string"
+required        = false
+mcp_description = "Recipient selector used for matching mailboxes."
+cli_help        = "Recipient selector used for matching mailboxes."
+cli_flag        = "--recipient"
+selector        = true
+
+[[tools.mail_peek.params]]
+name            = "include_system"
 type            = "boolean"
 required        = false
-mcp_description = "Return unread mail without marking it read."
-cli_help        = "Return unread mail without marking it read."
-cli_flag        = "--peek"
+mcp_description = "Include system receipt metadata in the transcript."
+cli_help        = "Include system receipt metadata in the transcript."
+cli_flag        = "--include-system"
 
 [tools.mail_check]
 cli_name        = "mail check"
@@ -112,6 +154,60 @@ mcp_description = "Inbox owner selector used for matching sessions."
 cli_help        = "Inbox owner selector used for matching sessions."
 cli_flag        = "--selector"
 selector        = true
+
+[tools.mail_tail]
+cli_name        = "mail tail"
+mcp_description = "Follow the operator message transcript via append events without draining mail."
+cli_about       = "Follow the operator message transcript without draining mail."
+mcp_namespace_scope = true
+output_schema   = '''
+{
+  "type": "object",
+  "required": ["messages"],
+  "properties": {
+    "messages": {"type": "array", "items": {"type": "object"}},
+    "cursor": {"type": ["object", "null"]}
+  }
+}
+'''
+
+[[tools.mail_tail.params]]
+name            = "context_id"
+type            = "string"
+required        = false
+mcp_description = "Conversation correlation tag to follow."
+cli_flag        = "--context-id"
+
+[[tools.mail_tail.params]]
+name            = "selector"
+type            = "string"
+required        = false
+mcp_description = "Participant selector used for matching messages."
+cli_flag        = "--selector"
+selector        = true
+
+[[tools.mail_tail.params]]
+name            = "recipient"
+type            = "string"
+required        = false
+mcp_description = "Recipient selector used for matching mailboxes."
+cli_flag        = "--recipient"
+selector        = true
+
+[[tools.mail_tail.params]]
+name            = "include_system"
+type            = "boolean"
+required        = false
+mcp_description = "Include system receipt metadata in the transcript."
+cli_flag        = "--include-system"
+
+[[tools.mail_tail.params]]
+name            = "once"
+type            = "boolean"
+required        = false
+mcp_description = "Return immediately after the current transcript batch."
+cli_help        = "Return immediately after the current transcript batch."
+cli_flag        = "--once"
 
 [tools.mail_stop_check]
 cli_name        = "mail stop-check"

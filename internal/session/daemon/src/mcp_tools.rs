@@ -15,7 +15,7 @@ pub(crate) use agent::{
     agent_capture, agent_delete, agent_get, agent_label, agent_list, agent_run,
 };
 pub(crate) use control::{doctor, logs, nudge, wait};
-pub(crate) use mail::{mail_check, mail_read, mail_send, mail_stop_check};
+pub(crate) use mail::{mail_check, mail_peek, mail_read, mail_send, mail_stop_check, mail_tail};
 pub(crate) use namespace::{namespace_get, namespace_list};
 
 pub async fn call_tool(
@@ -35,8 +35,10 @@ pub async fn call_tool(
         "agent_label" | "session_label" => agent_label(state, context, arguments).await,
         "mail_send" => mail_send(state, context, arguments).await,
         "mail_read" => mail_read(state, context, arguments).await,
+        "mail_peek" => mail_peek(state, context, arguments).await,
         "mail_check" => mail_check(state, context, arguments).await,
         "mail_stop_check" => mail_stop_check(state, context, arguments).await,
+        "mail_tail" => mail_tail(state, context, arguments).await,
         "nudge" => nudge(state, context, arguments).await,
         "logs" => logs(state, context, arguments).await,
         "wait" => wait(state, context, arguments).await,

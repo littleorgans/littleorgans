@@ -1,13 +1,8 @@
 {
-  "description": "Read unread mail for the caller session. Reads mark messages read unless peek is true.",
+  "description": "Read unread mail for the caller session. Reads mark messages read.",
   "inputSchema": {
     "additionalProperties": false,
-    "properties": {
-      "peek": {
-        "description": "Return unread mail without marking it read.",
-        "type": "boolean"
-      }
-    },
+    "properties": {},
     "type": "object"
   },
   "name": "mail_read",

@@ -65,7 +65,7 @@ async fn mail_round_trip_marks_read() {
         .handle(
             context.clone().with_mcp_caller_session_id(recipient.id),
             SessionRpc::MailRead {
-                request: MailReadRequest { peek: false },
+                request: MailReadRequest {},
             },
         )
         .await;
@@ -149,7 +149,7 @@ async fn mail_read_drains_only_caller_mailbox() {
         .handle(
             context.clone().with_mcp_caller_session_id(first.id),
             SessionRpc::MailRead {
-                request: MailReadRequest { peek: false },
+                request: MailReadRequest {},
             },
         )
         .await;
@@ -551,7 +551,7 @@ async fn send_read_nudge_delete(
         .handle(
             context.with_mcp_caller_session_id(recipient_id),
             SessionRpc::MailRead {
-                request: MailReadRequest { peek: false },
+                request: MailReadRequest {},
             },
         )
         .await

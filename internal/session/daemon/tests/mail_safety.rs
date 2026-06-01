@@ -13,9 +13,9 @@ use common::{
 use lilo_im_core::Action;
 use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, StatusFilter};
 use lilo_session_core::{
-    MailDeliveryStatus, MailIntent, MailNotifyMode, MailNotifyStatus, MailReadRequest,
-    MailSendRequest, MailSendResponse, MessageView, RpcResponse, RuntimeDoctorReport, Selector,
-    SenderView, SessionRpc,
+    MailDeliveryStatus, MailIntent, MailLogFilter, MailNotifyMode, MailNotifyStatus,
+    MailPeekRequest, MailReadRequest, MailSendRequest, MailSendResponse, MessageView, RpcResponse,
+    RuntimeDoctorReport, Selector, SenderView, SessionRpc,
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::IdentityPort;
@@ -328,12 +328,7 @@ async fn read_receipts_emit_on_drain_only_for_session_senders() {
     )
     .await;
 
-    let peeked = read_mail(
-        &daemon.state,
-        context.clone().with_mcp_caller_session_id(recipient.id),
-        true,
-    )
-    .await;
+    let peeked = peek_mail(&daemon.state, context.clone(), recipient.id).await;
     assert_eq!(peeked.messages.len(), 1);
     assert_eq!(
         mail_count(&daemon.state, context.clone(), sender.id).await,
@@ -343,7 +338,6 @@ async fn read_receipts_emit_on_drain_only_for_session_senders() {
     let read = read_mail(
         &daemon.state,
         context.clone().with_mcp_caller_session_id(recipient.id),
-        false,
     )
     .await;
     assert_eq!(message_id_from_view(&read.messages[0]), message_id(&sent));
@@ -355,7 +349,6 @@ async fn read_receipts_emit_on_drain_only_for_session_senders() {
     let receipts = read_mail(
         &daemon.state,
         context.clone().with_mcp_caller_session_id(sender.id),
-        false,
     )
     .await;
     assert_eq!(receipts.messages.len(), 1);
@@ -385,7 +378,6 @@ async fn read_receipts_emit_on_drain_only_for_session_senders() {
     let operator_message = read_mail(
         &daemon.state,
         context.clone().with_mcp_caller_session_id(recipient.id),
-        false,
     )
     .await;
     assert_eq!(operator_message.messages.len(), 1);
@@ -418,18 +410,43 @@ async fn send_mail_response(
 async fn read_mail(
     state: &DaemonState,
     context: lilo_session_daemon::identity_client::RequestContext,
-    peek: bool,
 ) -> lilo_session_core::MailReadResponse {
     let read = state
         .handle(
             context,
             SessionRpc::MailRead {
-                request: MailReadRequest { peek },
+                request: MailReadRequest {},
             },
         )
         .await;
     let RpcResponse::MailRead { response } = read.response else {
         panic!("expected mail read response");
+    };
+    response
+}
+
+async fn peek_mail(
+    state: &DaemonState,
+    context: lilo_session_daemon::identity_client::RequestContext,
+    recipient_id: uuid::Uuid,
+) -> lilo_session_core::MailPeekResponse {
+    let peek = state
+        .handle(
+            context,
+            SessionRpc::MailPeek {
+                request: MailPeekRequest {
+                    filter: MailLogFilter {
+                        context_id: None,
+                        selector: None,
+                        recipient: Some(Selector::Id { id: recipient_id }),
+                        include_system: false,
+                    },
+                },
+            },
+        )
+        .await;
+    let RpcResponse::MailPeek { response } = peek.response else {
+        panic!("expected mail peek response");
     };
     response
 }

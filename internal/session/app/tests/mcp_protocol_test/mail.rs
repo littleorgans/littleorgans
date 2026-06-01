@@ -47,9 +47,11 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
         recipient
     );
 
+    assert_operator_observes_mail(&mut mcp, &recipient);
+
     let mut recipient_mcp = daemon.spawn_mcp_for_session(&recipient, daemon.dir.path());
-    recipient_mcp.send(&json!({"jsonrpc": "2.0", "id": 6, "method": "initialize", "params": {}}));
-    let read = call_tool(&mut recipient_mcp, 7, "mail_read", json!({}));
+    recipient_mcp.send(&json!({"jsonrpc": "2.0", "id": 8, "method": "initialize", "params": {}}));
+    let read = call_tool(&mut recipient_mcp, 9, "mail_read", json!({}));
     assert!(read["error"].is_null());
     assert_eq!(
         read["result"]["structuredContent"]["messages"][0]["content"],
@@ -58,7 +60,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let checked = call_tool(
         &mut mcp,
-        8,
+        10,
         "mail_stop_check",
         json!({ "selector": format!("id:{recipient}") }),
     );
@@ -71,7 +73,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let nudged = call_tool(
         &mut mcp,
-        9,
+        11,
         "nudge",
         json!({ "to": recipient.clone(), "content": "ping" }),
     );
@@ -92,6 +94,31 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
     );
 
     assert_mail_flow_audit(&daemon.audit_rows().await);
+}
+
+fn assert_operator_observes_mail(mcp: &mut common::McpFixture, recipient: &str) {
+    let filter = json!({
+        "context_id": "review-thread",
+        "recipient": format!("id:{recipient}")
+    });
+    let peeked = call_tool(mcp, 6, "mail_peek", filter.clone());
+    assert!(peeked["error"].is_null());
+    assert_eq!(
+        peeked["result"]["structuredContent"]["messages"][0]["content"],
+        "review the spec"
+    );
+
+    let tailed = call_tool(mcp, 7, "mail_tail", with_once(filter));
+    assert!(tailed["error"].is_null());
+    assert_eq!(
+        tailed["result"]["structuredContent"]["messages"][0]["recipient"]["session_id"],
+        recipient
+    );
+}
+
+fn with_once(mut filter: serde_json::Value) -> serde_json::Value {
+    filter["once"] = json!(true);
+    filter
 }
 
 fn assert_mail_flow_audit(rows: &[AuditRow]) {

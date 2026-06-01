@@ -36,12 +36,14 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
         | SessionRpc::Delete { .. }
         | SessionRpc::MailSend { .. }
         | SessionRpc::MailRead { .. }
+        | SessionRpc::MailPeek { .. }
         | SessionRpc::Nudge { .. }
         | SessionRpc::Label { .. }
         | SessionRpc::Logs { .. }
         | SessionRpc::Capture { .. }
         | SessionRpc::Doctor { .. }
         | SessionRpc::McpBridge { .. }
+        | SessionRpc::MailTail { .. }
         | SessionRpc::Shutdown => Downstream,
     }
 }
@@ -176,7 +178,7 @@ mod tests {
                 },
             },
             SessionRpc::MailRead {
-                request: MailReadRequest { peek: false },
+                request: MailReadRequest {},
             },
             SessionRpc::Nudge {
                 request: NudgeRequest {

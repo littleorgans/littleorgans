@@ -99,13 +99,19 @@ pub enum MailNotifyMode {
     Steer,
 }
 
+impl MailNotifyMode {
+    pub const WAIT_VALUE: &'static str = "wait";
+    pub const STEER_VALUE: &'static str = "steer";
+    pub const CLIENT_VALUES: &'static [&'static str] = &[Self::WAIT_VALUE, Self::STEER_VALUE];
+}
+
 impl FromStr for MailNotifyMode {
     type Err = SmError;
 
     fn from_str(value: &str) -> SmResult<Self> {
         match value {
-            "wait" => Ok(Self::Wait),
-            "steer" => Ok(Self::Steer),
+            Self::WAIT_VALUE => Ok(Self::Wait),
+            Self::STEER_VALUE => Ok(Self::Steer),
             other => Err(SmError::Message(format!(
                 "unsupported mail notify mode: {other}"
             ))),
@@ -222,12 +228,31 @@ pub enum MailDeliveryStatus {
     Err,
 }
 
+impl fmt::Display for MailDeliveryStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ok => f.write_str("ok"),
+            Self::Err => f.write_str("err"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MailNotifyStatus {
     Ok,
     Err,
     Skipped,
+}
+
+impl fmt::Display for MailNotifyStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ok => f.write_str("ok"),
+            Self::Err => f.write_str("err"),
+            Self::Skipped => f.write_str("skipped"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

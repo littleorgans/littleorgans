@@ -76,9 +76,15 @@ impl DaemonState {
             SessionRpc::MailRead { request } => {
                 response(self.mail_read(&context, request).await, false)
             }
+            SessionRpc::MailPeek { request } => {
+                response(self.mail_peek(&context, &request).await, false)
+            }
             SessionRpc::MailCheck { request } => response(self.mail_check(&request).await, false),
             SessionRpc::MailStopCheck { request } => {
                 response(self.mail_stop_check(&request).await, false)
+            }
+            SessionRpc::MailTail { request } => {
+                response(self.mail_tail(&context, &request).await, false)
             }
             SessionRpc::Nudge { request } => response(self.nudge(&context, request).await, false),
             SessionRpc::Label { request } => response(self.label(&context, request).await, false),

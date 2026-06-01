@@ -120,9 +120,11 @@ sm mcp
 | `session_label` | `sm label` | Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
 | `agent_label` | `sm label` | Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
 | `mail_send` | `sm mail send` | Send durable mail to sessions selected by selector. |
-| `mail_read` | `sm mail read` | Read unread mail for the caller session. Reads mark messages read unless peek is true. |
+| `mail_read` | `sm mail read` | Read unread mail for the caller session. Reads mark messages read. |
+| `mail_peek` | `sm mail peek` | Peek at the operator message transcript without draining mail. |
 | `mail_check` | `sm mail check` | Return the unread mail count for sessions selected by selector without draining mail. |
 | `mail_stop_check` | `sm mail stop-check` | Return the unread mail count for stop-hook decisions without draining mail. |
+| `mail_tail` | `sm mail tail` | Follow the operator message transcript via append events without draining mail. |
 | `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages. |
 | `logs` | `sm logs` | Read the transcript linked to one selected session. |
 | `wait` | `sm wait` | Wait until a selector satisfies running, terminated, or count=N. |

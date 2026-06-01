@@ -4,7 +4,7 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use lilo_session_core::{Mail, MailIntent, SenderRef, SmError};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -171,6 +171,57 @@ impl SqliteStore {
             "sender_rate",
         )
         .await
+    }
+
+    pub async fn list_message_log(
+        &self,
+        context_id: Option<&str>,
+        participant_ids: Option<&[Uuid]>,
+        recipient_ids: Option<&[Uuid]>,
+        include_system: bool,
+        after: Option<(&DateTime<Utc>, &Uuid)>,
+    ) -> Result<Vec<Mail>, MailRowError> {
+        if participant_ids.is_some_and(<[Uuid]>::is_empty)
+            || recipient_ids.is_some_and(<[Uuid]>::is_empty)
+        {
+            return Ok(Vec::new());
+        }
+
+        let sender_refs = participant_sender_refs(participant_ids)?;
+        let mut query = QueryBuilder::<Sqlite>::new(MESSAGE_LOG_SELECT_SQL);
+        if let Some(context_id) = context_id {
+            query.push(" AND m.context_id = ");
+            query.push_bind(context_id);
+        }
+        if !include_system {
+            query.push(" AND m.intent != 'receipt'");
+        }
+        if let Some(participant_ids) = participant_ids {
+            query.push(" AND (d.recipient_session_id IN (");
+            push_uuid_binds(&mut query, participant_ids);
+            query.push(") OR m.sender_ref IN (");
+            push_string_binds(&mut query, &sender_refs);
+            query.push("))");
+        }
+        if let Some(recipient_ids) = recipient_ids {
+            query.push(" AND d.recipient_session_id IN (");
+            push_uuid_binds(&mut query, recipient_ids);
+            query.push(")");
+        }
+        if let Some((sent_at, message_id)) = after {
+            let sent_at = sent_at.to_rfc3339();
+            query.push(" AND (m.sent_at > ");
+            query.push_bind(sent_at.clone());
+            query.push(" OR (m.sent_at = ");
+            query.push_bind(sent_at);
+            query.push(" AND m.message_id > ");
+            query.push_bind(message_id.to_string());
+            query.push("))");
+        }
+        query.push(" ORDER BY m.sent_at, m.message_id, d.recipient_session_id");
+
+        let rows = query.build().fetch_all(&self.pool).await?;
+        rows.iter().map(mail_from_row).collect()
     }
 
     async fn list_unread_mail(&self, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError> {
@@ -409,6 +460,21 @@ const UNREAD_MAIL_SQL: &str = "
     ORDER BY m.sent_at, m.message_id
 ";
 
+const MESSAGE_LOG_SELECT_SQL: &str = "
+    SELECT m.message_id AS id,
+           m.sender_ref,
+           d.recipient_session_id AS recipient_id,
+           m.content,
+           m.sent_at,
+           d.read_at,
+           m.context_id,
+           m.intent,
+           m.idempotency_key
+    FROM messages m
+    JOIN message_deliveries d ON d.message_id = m.message_id
+    WHERE 1 = 1
+";
+
 fn stored_message_from_row(row: &SqliteRow) -> Result<StoredMessage, MailRowError> {
     Ok(StoredMessage {
         id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
@@ -437,4 +503,26 @@ async fn count_query<const N: usize>(
 
 fn integer_out_of_range(field: &'static str, value: i64) -> MailRowError {
     MailRowError::IntegerOutOfRange { field, value }
+}
+
+fn participant_sender_refs(participant_ids: Option<&[Uuid]>) -> Result<Vec<String>, MailRowError> {
+    participant_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|id| serde_json::to_string(&SenderRef::session(*id)).map_err(Into::into))
+        .collect()
+}
+
+fn push_uuid_binds(query: &mut QueryBuilder<'_, Sqlite>, ids: &[Uuid]) {
+    let mut separated = query.separated(", ");
+    for id in ids {
+        separated.push_bind(id.to_string());
+    }
+}
+
+fn push_string_binds<'q>(query: &mut QueryBuilder<'q, Sqlite>, values: &'q [String]) {
+    let mut separated = query.separated(", ");
+    for value in values {
+        separated.push_bind(value);
+    }
 }

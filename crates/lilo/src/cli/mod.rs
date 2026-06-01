@@ -387,24 +387,6 @@ mod tests {
             (
                 &[
                     "lilo",
-                    "mail",
-                    "send",
-                    "--to",
-                    "abc",
-                    "--content",
-                    "hello",
-                    "--context-id",
-                    "thread",
-                    "--intent",
-                    "inform",
-                    "--output",
-                    "json",
-                ],
-                "mail",
-            ),
-            (
-                &[
-                    "lilo",
                     "nudge",
                     "--to",
                     "abc",

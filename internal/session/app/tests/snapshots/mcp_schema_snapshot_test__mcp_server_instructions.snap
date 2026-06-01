@@ -22,9 +22,11 @@ Tools:
 - session_label: Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove.
 - agent_label: Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove.
 - mail_send: Send durable mail to sessions selected by selector.
-- mail_read: Read unread mail for the caller session. Reads mark messages read unless peek is true.
+- mail_read: Read unread mail for the caller session. Reads mark messages read.
+- mail_peek: Peek at the operator message transcript without draining mail.
 - mail_check: Return the unread mail count for sessions selected by selector without draining mail.
 - mail_stop_check: Return the unread mail count for stop-hook decisions without draining mail.
+- mail_tail: Follow the operator message transcript via append events without draining mail.
 - nudge: Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages.
 - logs: Read the transcript linked to one selected session.
 - wait: Wait until a selector satisfies running, terminated, or count=N.

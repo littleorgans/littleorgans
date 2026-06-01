@@ -37,7 +37,7 @@ expression: tool
         "type": "string"
       },
       "notify": {
-        "description": "Optional wake mode to request after mail persistence.",
+        "description": "Optional wake mode to request after mail persistence: wait or steer.",
         "enum": [
           "wait",
           "steer"

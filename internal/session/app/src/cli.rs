@@ -43,7 +43,7 @@ pub async fn dispatch(command: Command, json_output: bool) -> Result<()> {
         Command::Get(args) => get::run(args, json_output).await,
         Command::Delete(args) => delete::run(args).await,
         Command::Doctor(args) => doctor::run(args).await,
-        Command::Mail(args) => mail::run(args).await,
+        Command::Mail(args) => mail::run(args, json_output).await,
         Command::Label(args) => label::run(args).await,
         Command::Logs(args) => logs::run(args).await,
         Command::Capture(args) => capture::run(args, json_output).await,
@@ -72,13 +72,12 @@ impl JsonOutputSupport {
 impl Command {
     pub fn json_output_support(&self) -> JsonOutputSupport {
         match self {
-            Self::Get(_) | Self::Capture(_) => JsonOutputSupport::Supported,
+            Self::Get(_) | Self::Capture(_) | Self::Mail(_) => JsonOutputSupport::Supported,
             Self::Run(_) => JsonOutputSupport::Unsupported("run"),
             Self::Create(_) => JsonOutputSupport::Unsupported("create"),
             Self::Config(_) => JsonOutputSupport::Unsupported("config"),
             Self::Delete(_) => JsonOutputSupport::Unsupported("delete"),
             Self::Doctor(_) => JsonOutputSupport::Unsupported("doctor"),
-            Self::Mail(_) => JsonOutputSupport::Unsupported("mail"),
             Self::Label(_) => JsonOutputSupport::Unsupported("label"),
             Self::Logs(_) => JsonOutputSupport::Unsupported("logs"),
             Self::Wait(_) => JsonOutputSupport::Unsupported("wait"),

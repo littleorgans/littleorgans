@@ -190,7 +190,7 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm mail send executes");
     assert_success("sm mail send", &mail_default);
-    assert_stdout_line_count("sm mail send", &mail_default, 1);
+    assert_stdout_line_count("sm mail send", &mail_default, 2);
 
     let mail_all = daemon
         .command()
@@ -211,7 +211,7 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm mail send -A executes");
     assert_success("sm mail send -A", &mail_all);
-    assert_stdout_line_count("sm mail send -A", &mail_all, 2);
+    assert_stdout_line_count("sm mail send -A", &mail_all, 3);
 
     let nudge_default = daemon
         .command()
