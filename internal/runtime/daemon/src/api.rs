@@ -256,7 +256,7 @@ mod tests {
     async fn assert_kill_by_pid_parity(service: &RuntimeService) {
         let kill_by_pid_request = KillByPidRequest {
             pid: finished_child_pid(),
-            signal: lilo_runtime_platform::signal::signal_number(RuntimeSignal::Term),
+            signal: crate::signal::signal_number(RuntimeSignal::Term),
             grace_secs: 0,
         };
         let direct_kill_by_pid = service
@@ -347,7 +347,7 @@ mod tests {
     }
 
     fn local_principal() -> Principal {
-        Principal::local(nix::unistd::getuid().as_raw())
+        Principal::local(lilo_sys::creds::current_uid())
     }
 
     #[tokio::test]
@@ -398,7 +398,7 @@ mod tests {
             .expect("direct conflict response");
         let wire_conflict = service
             .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
+                local_principal(),
                 RuntimeRpc::Spawn {
                     request: wire_request,
                 },
@@ -432,10 +432,7 @@ mod tests {
         let request = EventsRequest::default();
         let direct = service.poll_events(request).await;
         let wire = service
-            .handle_rpc(
-                Principal::local(nix::unistd::getuid().as_raw()),
-                RuntimeRpc::Events { request },
-            )
+            .handle_rpc(local_principal(), RuntimeRpc::Events { request })
             .await;
 
         match (direct, wire) {
@@ -470,10 +467,7 @@ mod tests {
     ) -> RuntimeResponse {
         let ready =
             complete_ready_after_wait(Arc::clone(service.state()), request.session_id, runtime_pid);
-        let response = service.handle_rpc(
-            Principal::local(nix::unistd::getuid().as_raw()),
-            RuntimeRpc::Spawn { request },
-        );
+        let response = service.handle_rpc(local_principal(), RuntimeRpc::Spawn { request });
         let (response, ready) = tokio::join!(response, ready);
         ready.expect("shim ready accepted");
         response

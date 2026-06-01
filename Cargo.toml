@@ -7,12 +7,12 @@ members = [
     "crates/lilo-im-stub",
     "crates/lilo-common",
     "crates/lilo-paths",
+    "crates/lilo-sys",
     "crates/lilo-rm-core",
     "crates/lilo-rm-client",
     "internal/db",
     "internal/wire",
     "internal/identity/service",
-    "internal/runtime/platform",
     "internal/runtime/launchers",
     "internal/runtime/store",
     "internal/runtime/daemon",
@@ -61,7 +61,7 @@ lilo-rm-core = { path = "crates/lilo-rm-core", version = "0.8.0" }
 lilo-runtime-app = { path = "internal/runtime/app" }
 lilo-runtime-daemon = { path = "internal/runtime/daemon" }
 lilo-runtime-launchers = { path = "internal/runtime/launchers" }
-lilo-runtime-platform = { path = "internal/runtime/platform" }
+lilo-sys = { path = "crates/lilo-sys", version = "0.8.0" }
 lilo-runtime-store = { path = "internal/runtime/store" }
 lilo-session-app = { path = "internal/session/app" }
 lilo-session-core = { path = "internal/session/core" }
@@ -93,6 +93,9 @@ tracing = "0.1.41"
 # crates/lilo-common/src/logging.rs builds a JSON formatter via `.json()`.
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
+
+[workspace.lints.rust]
+unexpected_cfgs = "deny"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

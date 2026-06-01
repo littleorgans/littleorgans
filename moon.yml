@@ -49,6 +49,7 @@ tasks:
       - "fmt-check"
       - "check-loc"
       - "check-provenance"
+      - "check-seam"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
@@ -90,11 +91,21 @@ tasks:
     options:
       runInCI: "always"
 
+  check-seam:
+    command: "./scripts/check-seam.sh"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+      - "scripts/check-seam.sh"
+    options:
+      runInCI: "always"
+
   check:
     deps:
       - "fmt-check"
       - "clippy"
       - "check-loc"
       - "check-provenance"
+      - "check-seam"
     options:
       runInCI: false

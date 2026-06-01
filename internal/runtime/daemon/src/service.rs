@@ -19,7 +19,7 @@ pub struct RuntimeServiceContext {
 
 impl RuntimeServiceContext {
     pub fn new(config: DaemonConfig, db: LiloDb) -> Self {
-        Self::new_with_local_uid(config, db, nix::unistd::getuid().as_raw())
+        Self::new_with_local_uid(config, db, lilo_sys::creds::current_uid())
     }
 
     pub fn new_with_local_uid(config: DaemonConfig, db: LiloDb, local_uid: u32) -> Self {

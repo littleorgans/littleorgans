@@ -11,7 +11,6 @@ use lilo_session_core::RpcResponse;
 use lilo_session_daemon::{SessionService, SessionServiceContext};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
-use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{Notify, mpsc};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -95,21 +94,21 @@ pub async fn run_with_shutdown_observer(
         .context("failed to reconcile pending session spawn intents")?;
 
     let socket_path = paths.socket_path();
-    lilo_runtime_daemon::socket::prepare_socket(&socket_path)?;
-    let listener = UnixListener::bind(&socket_path)
+    let listener = lilo_sys::ipc::bind(&socket_path)
         .with_context(|| format!("failed to bind {}", socket_path.display()))?;
     fs::write(paths.pid_path(), std::process::id().to_string())
         .context("failed to write pidfile")?;
 
     let cancellation = CancellationToken::new();
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    let shutdown_signal = lilo_sys::signal::on_shutdown()?;
+    tokio::pin!(shutdown_signal);
     let mut runtime_shutdown = runtime.subscribe_shutdown();
     let mut connections = JoinSet::new();
 
     loop {
         tokio::select! {
             accepted = listener.accept() => {
-                let (stream, _) = accepted.context("failed to accept daemon connection")?;
+                let stream = accepted.context("failed to accept daemon connection")?;
                 let runtime = Arc::clone(&runtime);
                 let session = Arc::clone(&session);
                 let token = cancellation.clone();
@@ -120,8 +119,10 @@ pub async fn run_with_shutdown_observer(
                 });
             }
             _ = runtime_shutdown.recv() => cancellation.cancel(),
-            _ = tokio::signal::ctrl_c() => cancellation.cancel(),
-            _ = terminate.recv() => cancellation.cancel(),
+            () = &mut shutdown_signal => {
+                cancellation.cancel();
+                break;
+            },
             () = cancellation.cancelled() => break,
         }
     }
@@ -142,7 +143,7 @@ pub async fn run_with_shutdown_observer(
         .await
         .context("failed to shut down runtime service")?;
     shutdown.mark(ShutdownStage::RuntimeShutdown).await;
-    lilo_runtime_daemon::socket::remove_socket_file(&socket_path)?;
+    lilo_sys::ipc::remove_socket_file(&socket_path)?;
     shutdown.mark(ShutdownStage::SocketRemoved).await;
     let _ = fs::remove_file(paths.pid_path());
     shutdown.mark(ShutdownStage::BeforeDbClose).await;
@@ -152,7 +153,7 @@ pub async fn run_with_shutdown_observer(
 }
 
 async fn handle_connection(
-    stream: UnixStream,
+    stream: lilo_sys::ipc::IpcStream,
     runtime: Arc<RuntimeService>,
     session: Arc<SessionService>,
     cancellation: CancellationToken,

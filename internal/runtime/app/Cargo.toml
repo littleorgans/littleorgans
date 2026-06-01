@@ -31,7 +31,7 @@ lilo-paths.workspace = true
 lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
 lilo-runtime-daemon.workspace = true
-lilo-runtime-platform.workspace = true
+lilo-sys.workspace = true
 lilo-runtime-store.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -47,7 +47,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
-lilo-runtime-platform = { workspace = true, features = ["test-support"] }
+lilo-runtime-daemon = { workspace = true, features = ["test-support"] }
 lilo-wire.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true

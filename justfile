@@ -109,6 +109,9 @@ check-loc:
 check-provenance:
     bash scripts/check-provenance.sh
 
+check-seam:
+    bash scripts/check-seam.sh
+
 # Scope clippy to changed crates + reverse-dep closure. Run read-only clippy
 # first because `cargo clippy --fix` uses a different fingerprint mode from
 # read-only clippy and triggers a full workspace recompile on every invocation
@@ -139,10 +142,10 @@ _clippy-incremental:
     cargo clippy "${scope_flags[@]}" --all-targets -- -D warnings
 
 # Pre-commit gate. Incremental by default; scopes clippy + clippy --fix
-# to changed crates + reverse deps. fmt / loc / provenance always run
+# to changed crates + reverse deps. fmt / loc / provenance / seam always run
 # workspace-wide because they are cheap and operate on raw files, not the
 # Rust compile graph.
-check: fmt _clippy-incremental fmt-check check-loc check-provenance
+check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam
 
 # Full-workspace gate. Use before merging to main, in CI, or any time the
 # scoping heuristic in scripts/changed-crates.sh might miss a regression
@@ -153,5 +156,6 @@ regression:
     cargo fmt --all -- --check
     bash scripts/check-loc-limit.sh
     bash scripts/check-provenance.sh
+    bash scripts/check-seam.sh
     cargo clippy --workspace --all-targets -- -D warnings
     cargo nextest run --workspace

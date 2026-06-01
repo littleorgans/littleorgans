@@ -26,10 +26,10 @@ lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
 lilo-runtime-daemon.workspace = true
 lilo-runtime-store.workspace = true
+lilo-sys.workspace = true
 lilo-session-core.workspace = true
 lilo-session-driver.workspace = true
 lilo-session-store.workspace = true
-nix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
@@ -41,6 +41,7 @@ uuid.workspace = true
 [dev-dependencies]
 assert_cmd.workspace = true
 lilo-runtime-launchers.workspace = true
+nix.workspace = true
 tempfile.workspace = true
 
 [lints]

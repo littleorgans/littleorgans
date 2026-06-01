@@ -47,9 +47,22 @@ intent reconciliation, mail, nudge, delete, and the user verbs that compose
 runtime work into a session.
 
 Schedule is reserved only. It has no crate, daemon, or command namespace in
-v0.8.0. Transport remains external and out of scope for this monorepo phase;
-do not pull transport source, observability, or wire ownership into `lilo`
-while implementing identity, runtime, or session work.
+v0.8.0.
+
+Transport is migrating into the monorepo as the wire-observation and capture
+context. It owns the wire between an agent and its model provider, together
+with the harness transcript. It proxies agent traffic, captures turns, and
+surfaces the fidelity diff between what the harness believed it sent and what
+actually reached the provider. Two consumers drive it: agents inspecting and
+sharing captured sessions, and the littleorgans human UI. It stays an
+independent axis, observing the wire regardless of which path spawned the
+process, so it provides observability and sits outside the identity, session,
+and runtime control flow. The user verb `lilo capture` already anchors its
+surface. Its crate names, daemon composition, state path, and migration phase
+are not yet fixed, so do not invent them ahead of its migration phase. Captured
+sessions must correlate to the control-plane UUIDv7 spawn id, the platform join
+key, so agents and the UI can share a session by that id rather than by a
+provider-minted conversation id.
 
 ## K8s mental model post-monorepo
 
@@ -57,10 +70,11 @@ while implementing identity, runtime, or session work.
 server boundary. `internal/runtime` is the kubelet-shaped host executor.
 Identity is the local equivalent of ServiceAccount, RBAC, and audit.
 
-`transport-matters` is external observability and not part of the local
-control plane. After Phase 7, `lilod` is the composed daemon process behind
-the local socket, with composition rooted in the session app layer and runtime
-remaining a substrate behind that boundary.
+`transport-matters` is the wire-observation axis migrating into the monorepo.
+It provides observability and sits outside the local control plane: it watches
+the wire and does not authorize, spawn, or reconcile. After Phase 7, `lilod` is
+the composed daemon process behind the local socket, with composition rooted in
+the session app layer and runtime remaining a substrate behind that boundary.
 
 This vocabulary is a design contract, not a topology claim. v1 is local-first;
 v2 mapping is linked from the strategy note and stays out of v0.8.0 scope.

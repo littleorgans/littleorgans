@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Result, bail};
 use lilo_rm_core::{RuntimeExit, TerminationEvidence};
-use lilo_runtime_platform::process_exit::{ProcessExitWatcher, watch_process_exit};
+use lilo_sys::process_exit::{ProcessExitWatcher, watch_process_exit};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 

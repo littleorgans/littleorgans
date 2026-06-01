@@ -10,7 +10,6 @@ use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SqliteStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{UnixListener, UnixStream};
 
 use crate::handler::DaemonState;
 use crate::identity_client::{IdentityClient, RequestContext};
@@ -30,10 +29,9 @@ pub async fn run_daemon_with_db(
     let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
     let endpoint = DaemonEndpoint::from_paths(&paths);
-    remove_stale_socket(&endpoint)?;
 
     let listener =
-        UnixListener::bind(endpoint.as_path()).context("failed to bind daemon socket")?;
+        lilo_sys::ipc::bind(endpoint.as_path()).context("failed to bind daemon socket")?;
     fs::write(paths.pid_path(), std::process::id().to_string())
         .context("failed to write pidfile")?;
 
@@ -49,7 +47,7 @@ pub async fn run_daemon_with_db(
     let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
     let identity = IdentityClient::new(
         SqliteAuditSink::with_pool(db.identity_pool().clone()),
-        nix::unistd::getuid().as_raw(),
+        lilo_sys::creds::current_uid(),
     );
     let state = Arc::new(DaemonState::new(
         store,
@@ -72,16 +70,19 @@ pub async fn run_daemon_with_db(
     result
 }
 
-async fn serve(listener: UnixListener, state: &DaemonState) -> Result<()> {
+async fn serve(listener: lilo_sys::ipc::IpcListener, state: &DaemonState) -> Result<()> {
     loop {
-        let (stream, _) = listener.accept().await.context("failed to accept client")?;
+        let stream = listener.accept().await.context("failed to accept client")?;
         if handle_connection(stream, state).await? {
             return Ok(());
         }
     }
 }
 
-async fn handle_connection(mut stream: UnixStream, state: &DaemonState) -> Result<bool> {
+async fn handle_connection(
+    mut stream: lilo_sys::ipc::IpcStream,
+    state: &DaemonState,
+) -> Result<bool> {
     let principal = match lilo_im_core::peer_creds::extract(&stream).await {
         Ok(principal) => principal,
         Err(error) => {
@@ -118,7 +119,7 @@ async fn handle_connection(mut stream: UnixStream, state: &DaemonState) -> Resul
 }
 
 async fn write_response(
-    mut stream: UnixStream,
+    mut stream: lilo_sys::ipc::IpcStream,
     result: crate::handler::HandlerResult,
 ) -> Result<bool> {
     let response = serde_json::to_vec(&result.response).context("failed to encode response")?;
@@ -134,14 +135,7 @@ async fn write_response(
     Ok(result.shutdown)
 }
 
-fn remove_stale_socket(endpoint: &DaemonEndpoint) -> Result<()> {
-    if endpoint.as_path().exists() {
-        fs::remove_file(endpoint.as_path()).context("failed to remove stale socket")?;
-    }
-    Ok(())
-}
-
 fn cleanup_paths(paths: &LiloPaths, endpoint: &DaemonEndpoint) {
-    let _ = fs::remove_file(endpoint.as_path());
+    let _ = lilo_sys::ipc::remove_socket_file(endpoint.as_path());
     let _ = fs::remove_file(paths.pid_path());
 }

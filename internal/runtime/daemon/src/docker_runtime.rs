@@ -109,7 +109,7 @@ pub(crate) async fn kill_container(session_id: Uuid, signal: RuntimeSignal) -> R
 }
 
 fn signal_number_arg(signal: RuntimeSignal) -> String {
-    lilo_runtime_platform::signal::signal_number(signal).to_string()
+    crate::signal::signal_number(signal).to_string()
 }
 
 fn command_stderr(stderr: &[u8]) -> String {

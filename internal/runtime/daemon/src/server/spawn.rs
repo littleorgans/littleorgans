@@ -107,7 +107,7 @@ impl SpawnCoordinator {
         target: &lilo_rm_core::SpawnTarget,
     ) -> Result<ValidateTargetResponse> {
         if let Some(address) = target.tmux_address()
-            && !lilo_runtime_platform::tmux::TmuxGateway::is_alive(
+            && !crate::tmux::TmuxGateway::is_alive(
                 state.config().tmux_server_label.as_deref(),
                 address,
             )

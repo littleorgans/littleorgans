@@ -80,15 +80,15 @@ struct HostKillTarget {
 
 impl KillTarget for HostKillTarget {
     async fn send_signal(&self, signal: RuntimeSignal) -> Result<KillOutcome> {
-        lilo_runtime_platform::signal::send_signal_for_kill(self.runtime_pid, signal)
+        crate::signal::send_signal_for_kill(self.runtime_pid, signal)
     }
 
     async fn send_kill(&self) -> Result<()> {
-        lilo_runtime_platform::signal::send_signal(self.runtime_pid, RuntimeSignal::Kill)
+        crate::signal::send_signal(self.runtime_pid, RuntimeSignal::Kill)
     }
 
     async fn is_alive(&self) -> Result<bool> {
-        Ok(lilo_runtime_platform::process::pid_alive(self.runtime_pid))
+        Ok(lilo_sys::process::pid_alive(self.runtime_pid))
     }
 }
 

@@ -5,42 +5,52 @@ use std::path::{Path, PathBuf};
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use lilo_im_core::AuthzError;
 use lilo_im_core::{Principal, peer_creds};
-use tokio::net::{UnixListener, UnixStream};
 
 #[tokio::test]
 async fn extracts_local_principal_from_accepted_unix_socket() {
     let socket = SocketFile::new();
-    let listener = UnixListener::bind(socket.path()).expect("bind peer credential test socket");
+    let listener = lilo_sys::ipc::bind(socket.path()).expect("bind peer credential test socket");
     let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.expect("accept client socket");
+        let stream = listener.accept().await.expect("accept client socket");
 
         peer_creds::extract(&stream)
             .await
             .expect("extract peer credentials")
     });
 
-    let client = UnixStream::connect(socket.path())
+    let client = lilo_sys::ipc::connect(socket.path())
         .await
         .expect("connect client socket");
     let principal = server.await.expect("server task should finish");
 
-    assert_eq!(principal, Principal::Local(nix::unistd::getuid().as_raw()));
+    assert_eq!(principal, Principal::local(lilo_sys::creds::current_uid()));
     drop(client);
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 #[tokio::test]
 async fn unsupported_platform_returns_internal_error() {
-    let (stream, _peer) = UnixStream::pair().expect("create unix stream pair");
-    let error = peer_creds::extract(&stream)
+    let socket = SocketFile::new();
+    let listener = lilo_sys::ipc::bind(socket.path()).expect("bind peer credential test socket");
+    let server = tokio::spawn(async move {
+        let stream = listener.accept().await.expect("accept client socket");
+
+        peer_creds::extract(&stream)
+            .await
+            .expect_err("unsupported platform should return an error")
+    });
+
+    let client = lilo_sys::ipc::connect(socket.path())
         .await
-        .expect_err("unsupported platform should return an error");
+        .expect("connect client socket");
+    let error = server.await.expect("server task should finish");
 
     assert!(matches!(
         error,
         AuthzError::Internal { message }
             if message.contains("unsupported on this platform")
     ));
+    drop(client);
 }
 
 struct SocketFile {

@@ -1,1 +1,1 @@
-pub type TmuxSession = lilo_runtime_platform::test_support::TmuxSession;
+pub type TmuxSession = lilo_runtime_daemon::tmux_test_support::TmuxSession;

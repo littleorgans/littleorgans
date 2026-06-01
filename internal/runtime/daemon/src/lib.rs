@@ -25,10 +25,13 @@ mod runtime_kill;
 pub mod server;
 mod service;
 pub mod shim_socket;
-pub mod socket;
+pub mod signal;
 mod spawn_preflight;
 #[cfg(test)]
 mod test_support;
+mod tmux;
+#[cfg(any(test, feature = "test-support"))]
+pub mod tmux_test_support;
 pub(crate) mod version;
 
 pub use api::SpawnOutcome;

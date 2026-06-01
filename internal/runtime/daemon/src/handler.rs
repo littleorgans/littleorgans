@@ -10,7 +10,6 @@ use lilo_rm_core::{
 };
 use lilo_wire::LilodRpc;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 
 use crate::{
@@ -25,7 +24,7 @@ use crate::{
 };
 
 pub(crate) async fn handle_connection(
-    stream: UnixStream,
+    stream: lilo_sys::ipc::IpcStream,
     state: Arc<ServerState>,
     shutdown_tx: broadcast::Sender<()>,
 ) -> Result<()> {
