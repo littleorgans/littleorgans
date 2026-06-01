@@ -116,11 +116,11 @@ impl SqliteStore {
         peek: bool,
     ) -> Result<Vec<Mail>, MailRowError> {
         if peek {
-            return self.list_unread_mail(recipient_id).await;
+            return fetch_unread(&self.pool, recipient_id).await;
         }
 
         let mut transaction = self.pool.begin().await?;
-        let mut mail = list_unread_mail_in(&mut transaction, recipient_id).await?;
+        let mut mail = fetch_unread(&mut *transaction, recipient_id).await?;
         for item in &mail {
             sqlx::query(
                 "UPDATE message_deliveries
@@ -221,14 +221,6 @@ impl SqliteStore {
         query.push(" ORDER BY m.sent_at, m.message_id, d.recipient_session_id");
 
         let rows = query.build().fetch_all(&self.pool).await?;
-        rows.iter().map(mail_from_row).collect()
-    }
-
-    async fn list_unread_mail(&self, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError> {
-        let rows = sqlx::query(UNREAD_MAIL_SQL)
-            .bind(recipient_id.to_string())
-            .fetch_all(&self.pool)
-            .await?;
         rows.iter().map(mail_from_row).collect()
     }
 }
@@ -432,13 +424,13 @@ fn mail_for_recipients(mail: &Mail, recipient_ids: &[Uuid]) -> Vec<Mail> {
         .collect()
 }
 
-async fn list_unread_mail_in(
-    transaction: &mut Transaction<'_, Sqlite>,
-    recipient_id: &Uuid,
-) -> Result<Vec<Mail>, MailRowError> {
+async fn fetch_unread<'e, E>(executor: E, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
     let rows = sqlx::query(UNREAD_MAIL_SQL)
         .bind(recipient_id.to_string())
-        .fetch_all(&mut **transaction)
+        .fetch_all(executor)
         .await?;
     rows.iter().map(mail_from_row).collect()
 }
