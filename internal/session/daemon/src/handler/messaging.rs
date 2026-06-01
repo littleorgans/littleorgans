@@ -6,9 +6,9 @@ use lilo_im_core::Action;
 use lilo_session_core::{
     Mail, MailCheckRequest, MailCheckResponse, MailCountView, MailDeliveryStatus, MailIntent,
     MailNotifyStatus, MailReadRequest, MailReadResponse, MailSendRequest, MailSendResponse,
-    MailSendResult, MailStopCheckRequest, MailStopCheckResponse, MessageView, NudgeDelivery,
-    NudgeRequest, NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef, Session,
-    SessionState, TargetError,
+    MailSendResult, MailStatus, MailStopCheckRequest, MailStopCheckResponse, MessageView,
+    NudgeDelivery, NudgeRequest, NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef,
+    Session, SessionState, TargetError,
 };
 use uuid::Uuid;
 
@@ -384,6 +384,7 @@ impl DaemonState {
                 content: read_receipt_content(reader, item, read_at),
                 sent_at: Utc::now(),
                 read_at: None,
+                status: MailStatus::Unread,
                 context_id: item.context_id.clone(),
                 intent: MailIntent::Receipt,
                 idempotency_key: None,
@@ -462,6 +463,7 @@ fn mail_from_request(request: &MailSendRequest, sender: SenderRef, recipient_id:
         content: request.content.clone(),
         sent_at: Utc::now(),
         read_at: None,
+        status: MailStatus::Unread,
         context_id: request.context_id.clone(),
         intent: request.intent,
         idempotency_key: request.idempotency_key.clone(),

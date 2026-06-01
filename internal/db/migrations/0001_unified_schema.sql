@@ -70,7 +70,7 @@ CREATE INDEX idx_messages_sender_sent
 CREATE TABLE message_deliveries (
     message_id TEXT NOT NULL,
     recipient_session_id TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('unread', 'read')),
+    status TEXT NOT NULL CHECK (status IN ('unread', 'read', 'undeliverable')),
     read_at TEXT,
     PRIMARY KEY (message_id, recipient_session_id)
 );

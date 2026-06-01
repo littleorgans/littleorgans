@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
-use lilo_session_core::{Mail, MailIntent, SenderRef, SmError};
+use lilo_session_core::{Mail, MailIntent, MailStatus, SenderRef, SmError};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use thiserror::Error;
@@ -265,7 +265,7 @@ async fn insert_deliveries(
         )
         .bind(mail.id.to_string())
         .bind(recipient_id.to_string())
-        .bind(mail.status().to_string())
+        .bind(mail.status.to_string())
         .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
         .execute(&mut **transaction)
         .await?;
@@ -281,6 +281,7 @@ fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
         content: row.try_get("content")?,
         sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
         read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
+        status: MailStatus::from_str(&row.try_get::<String, _>("status")?)?,
         context_id: row.try_get("context_id")?,
         intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
         idempotency_key: row.try_get("idempotency_key")?,
@@ -299,7 +300,12 @@ struct StoredMessage {
 }
 
 impl StoredMessage {
-    fn to_mail(&self, recipient_id: Uuid, read_at: Option<DateTime<Utc>>) -> Mail {
+    fn to_mail(
+        &self,
+        recipient_id: Uuid,
+        read_at: Option<DateTime<Utc>>,
+        status: MailStatus,
+    ) -> Mail {
         Mail {
             id: self.id,
             sender: self.sender.clone(),
@@ -307,6 +313,7 @@ impl StoredMessage {
             content: self.content.clone(),
             sent_at: self.sent_at,
             read_at,
+            status,
             context_id: self.context_id.clone(),
             intent: self.intent,
             idempotency_key: self.idempotency_key.clone(),
@@ -399,8 +406,8 @@ async fn load_message_deliveries(
 ) -> Result<Vec<Mail>, MailRowError> {
     let mut mail = Vec::new();
     for recipient_id in recipient_ids {
-        let read_at = sqlx::query_scalar::<_, Option<String>>(
-            "SELECT read_at
+        let row = sqlx::query(
+            "SELECT read_at, status
              FROM message_deliveries
              WHERE message_id = ?
                AND recipient_session_id = ?",
@@ -409,7 +416,9 @@ async fn load_message_deliveries(
         .bind(recipient_id.to_string())
         .fetch_one(&mut **transaction)
         .await?;
-        mail.push(message.to_mail(*recipient_id, parse_optional_timestamp(read_at)?));
+        let read_at = parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?;
+        let status = MailStatus::from_str(&row.try_get::<String, _>("status")?)?;
+        mail.push(message.to_mail(*recipient_id, read_at, status));
     }
     Ok(mail)
 }
@@ -422,6 +431,30 @@ fn mail_for_recipients(mail: &Mail, recipient_ids: &[Uuid]) -> Vec<Mail> {
             ..mail.clone()
         })
         .collect()
+}
+
+/// Mark every unread delivery addressed to `recipient_id` as undeliverable.
+/// Called when a recipient session reaches a terminal state (terminated or
+/// lost) and can no longer read its mail, so the unread count stays honest
+/// while the transcript still shows the dropped delivery. Read deliveries are
+/// left untouched.
+pub(super) async fn mark_unread_undeliverable<'e, E>(
+    executor: E,
+    recipient_id: &Uuid,
+) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    sqlx::query(
+        "UPDATE message_deliveries
+         SET status = 'undeliverable'
+         WHERE recipient_session_id = ?
+           AND status = 'unread'",
+    )
+    .bind(recipient_id.to_string())
+    .execute(executor)
+    .await?;
+    Ok(())
 }
 
 async fn fetch_unread<'e, E>(executor: E, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError>
@@ -442,6 +475,7 @@ const UNREAD_MAIL_SQL: &str = "
            m.content,
            m.sent_at,
            d.read_at,
+           d.status,
            m.context_id,
            m.intent,
            m.idempotency_key
@@ -459,6 +493,7 @@ const MESSAGE_LOG_SELECT_SQL: &str = "
            m.content,
            m.sent_at,
            d.read_at,
+           d.status,
            m.context_id,
            m.intent,
            m.idempotency_key

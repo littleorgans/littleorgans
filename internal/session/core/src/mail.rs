@@ -16,6 +16,9 @@ use crate::{SmError, SmResult};
 pub enum MailStatus {
     Unread,
     Read,
+    /// Recipient session terminated before the mail was read; it can no longer
+    /// be delivered.
+    Undeliverable,
 }
 
 impl fmt::Display for MailStatus {
@@ -23,6 +26,7 @@ impl fmt::Display for MailStatus {
         match self {
             Self::Unread => f.write_str("unread"),
             Self::Read => f.write_str("read"),
+            Self::Undeliverable => f.write_str("undeliverable"),
         }
     }
 }
@@ -34,6 +38,7 @@ impl FromStr for MailStatus {
         match value {
             "unread" => Ok(Self::Unread),
             "read" => Ok(Self::Read),
+            "undeliverable" => Ok(Self::Undeliverable),
             other => Err(SmError::Message(format!(
                 "unsupported mail status: {other}"
             ))),
@@ -212,7 +217,7 @@ impl MessageView {
             content: mail.content.clone(),
             sent_at: mail.sent_at,
             read_at: mail.read_at,
-            status: mail.status(),
+            status: mail.status,
             sender,
             recipient,
             context_id: mail.context_id.clone(),
@@ -293,19 +298,12 @@ pub struct Mail {
     pub content: String,
     pub sent_at: DateTime<Utc>,
     pub read_at: Option<DateTime<Utc>>,
+    /// Authoritative delivery state. Persisted in `message_deliveries.status`;
+    /// not derived from `read_at`, so it can carry `Undeliverable`.
+    pub status: MailStatus,
     pub context_id: String,
     pub intent: MailIntent,
     pub idempotency_key: Option<String>,
-}
-
-impl Mail {
-    pub fn status(&self) -> MailStatus {
-        if self.read_at.is_some() {
-            MailStatus::Read
-        } else {
-            MailStatus::Unread
-        }
-    }
 }
 
 fn session_display_label(session: &Session) -> String {

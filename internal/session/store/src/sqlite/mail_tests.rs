@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use lilo_session_core::{Mail, MailIntent, SenderRef};
+use lilo_session_core::{LostEvidence, Mail, MailIntent, MailStatus, SenderRef};
 use uuid::Uuid;
 
 use super::{MailRowError, SqliteStore};
@@ -265,6 +265,126 @@ async fn breaker_counts_exclude_receipts() {
     );
 }
 
+#[tokio::test]
+async fn terminating_recipient_marks_unread_mail_undeliverable() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let recipient = Uuid::now_v7();
+    let other = Uuid::now_v7();
+
+    let pending = test_mail(
+        SenderRef::session(Uuid::now_v7()),
+        recipient,
+        "what are we working on?",
+        "testing",
+        None,
+    );
+    store
+        .insert_mail(&pending)
+        .await
+        .or_panic("pending inserts");
+    let live = test_mail(
+        SenderRef::session(Uuid::now_v7()),
+        other,
+        "still here",
+        "testing",
+        None,
+    );
+    store.insert_mail(&live).await.or_panic("live inserts");
+
+    store
+        .mark_session_terminated(&recipient, Some(0), Utc::now())
+        .await
+        .or_panic("recipient terminates");
+
+    // The orphaned mail is no longer counted as unread...
+    assert_eq!(
+        store
+            .count_unread_mail(&recipient)
+            .await
+            .or_panic("unread count"),
+        0
+    );
+    // ...but stays visible in the transcript as undeliverable.
+    let log = store
+        .list_message_log(Some("testing"), None, Some(&[recipient]), true, None)
+        .await
+        .or_panic("message log");
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].status, MailStatus::Undeliverable);
+
+    // A live recipient's mail is untouched.
+    assert_eq!(
+        store
+            .count_unread_mail(&other)
+            .await
+            .or_panic("other unread count"),
+        1
+    );
+}
+
+#[tokio::test]
+async fn terminating_recipient_leaves_read_mail_read() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let recipient = Uuid::now_v7();
+    let mail = test_mail(
+        SenderRef::session(Uuid::now_v7()),
+        recipient,
+        "seen it",
+        "testing",
+        None,
+    );
+    store.insert_mail(&mail).await.or_panic("mail inserts");
+    store
+        .read_unread_mail(&recipient, Utc::now(), false)
+        .await
+        .or_panic("mail reads");
+
+    store
+        .mark_session_terminated(&recipient, Some(0), Utc::now())
+        .await
+        .or_panic("recipient terminates");
+
+    let log = store
+        .list_message_log(Some("testing"), None, Some(&[recipient]), true, None)
+        .await
+        .or_panic("message log");
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].status, MailStatus::Read);
+}
+
+#[tokio::test]
+async fn losing_recipient_marks_unread_mail_undeliverable() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let recipient = Uuid::now_v7();
+    let mail = test_mail(
+        SenderRef::session(Uuid::now_v7()),
+        recipient,
+        "are you there?",
+        "testing",
+        None,
+    );
+    store.insert_mail(&mail).await.or_panic("mail inserts");
+
+    store
+        .mark_session_lost(&recipient, LostEvidence::PidNotAlive, Utc::now())
+        .await
+        .or_panic("recipient lost");
+
+    assert_eq!(
+        store
+            .count_unread_mail(&recipient)
+            .await
+            .or_panic("unread count"),
+        0
+    );
+    let log = store
+        .list_message_log(Some("testing"), None, Some(&[recipient]), true, None)
+        .await
+        .or_panic("message log");
+    assert_eq!(log.len(), 1);
+    assert_eq!(log[0].status, MailStatus::Undeliverable);
+}
+
 fn test_mail(
     sender: SenderRef,
     recipient_id: Uuid,
@@ -279,6 +399,7 @@ fn test_mail(
         content: content.to_string(),
         sent_at: Utc::now(),
         read_at: None,
+        status: MailStatus::Unread,
         context_id: context_id.to_string(),
         intent: MailIntent::Request,
         idempotency_key: idempotency_key.map(ToString::to_string),

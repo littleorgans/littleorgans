@@ -214,6 +214,7 @@ impl SqliteStore {
         exit_code: Option<i32>,
         terminated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
              SET state = ?, exit_code = ?, terminated_at = ?, updated_at = ?
@@ -224,8 +225,10 @@ impl SqliteStore {
         .bind(terminated_at.to_rfc3339())
         .bind(terminated_at.to_rfc3339())
         .bind(id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        super::mail::mark_unread_undeliverable(&mut *transaction, id).await?;
+        transaction.commit().await?;
         self.get_session(id).await
     }
 
@@ -235,6 +238,7 @@ impl SqliteStore {
         evidence: LostEvidence,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
              SET state = ?, lost_evidence = ?, updated_at = ?
@@ -244,8 +248,10 @@ impl SqliteStore {
         .bind(lost_evidence_to_sql(evidence))
         .bind(updated_at.to_rfc3339())
         .bind(id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        super::mail::mark_unread_undeliverable(&mut *transaction, id).await?;
+        transaction.commit().await?;
         self.get_session(id).await
     }
 

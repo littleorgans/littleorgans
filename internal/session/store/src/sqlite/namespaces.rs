@@ -188,7 +188,7 @@ mod tests {
     use super::super::test_support::running_session;
     use super::*;
     use crate::test_support::OrPanic as _;
-    use lilo_session_core::{DEFAULT_NAMESPACE, Mail, MailIntent};
+    use lilo_session_core::{DEFAULT_NAMESPACE, Mail, MailIntent, MailStatus};
     use serde_json::json;
 
     #[tokio::test]
@@ -332,6 +332,7 @@ mod tests {
             content: content.to_string(),
             sent_at: Utc::now(),
             read_at: None,
+            status: MailStatus::Unread,
             context_id: "namespace-thread".to_string(),
             intent: MailIntent::Inform,
             idempotency_key: None,
