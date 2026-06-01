@@ -121,7 +121,7 @@ impl DaemonState {
     }
 
     fn ensure_operator_observer(context: &RequestContext) -> Result<()> {
-        if context.mcp_caller_session_id.is_some() {
+        if context.caller_session_id.is_some() {
             bail!("mail observation is operator-only");
         }
         Ok(())

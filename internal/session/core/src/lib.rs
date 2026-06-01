@@ -28,16 +28,17 @@ pub use mcp::{
 };
 pub use paths::{DaemonEndpoint, LiloPathError, LiloPaths};
 pub use proto::{
-    CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest, DeleteResponse, DoctorFinding,
-    DoctorRequest, DoctorResponse, LabelRequest, LabelResponse, ListRequest, ListResponse,
-    LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse, MailLogCursor, MailLogFilter,
-    MailPeekRequest, MailPeekResponse, MailReadRequest, MailReadResponse, MailSendRequest,
-    MailSendResponse, MailStopCheckRequest, MailStopCheckResponse, MailTailRequest,
-    MailTailResponse, McpBridgeRequest, McpBridgeResponse, NamespaceCreateRequest,
-    NamespaceCreateResponse, NamespaceDeleteRequest, NamespaceDeleteResponse, NamespaceGetRequest,
-    NamespaceGetResponse, NamespaceListRequest, NamespaceListResponse, NudgeDelivery, NudgeRequest,
-    NudgeResponse, RpcResponse, RuntimeDoctorReport, SessionRpc, ShutdownResponse, SpawnRequest,
-    SpawnResponse, TargetError, WaitCondition, WaitRequest, WaitResponse,
+    CallerContextRequest, CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest,
+    DeleteResponse, DoctorFinding, DoctorRequest, DoctorResponse, LabelRequest, LabelResponse,
+    ListRequest, ListResponse, LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse,
+    MailLogCursor, MailLogFilter, MailPeekRequest, MailPeekResponse, MailReadRequest,
+    MailReadResponse, MailSendRequest, MailSendResponse, MailStopCheckRequest,
+    MailStopCheckResponse, MailTailRequest, MailTailResponse, McpBridgeRequest, McpBridgeResponse,
+    NamespaceCreateRequest, NamespaceCreateResponse, NamespaceDeleteRequest,
+    NamespaceDeleteResponse, NamespaceGetRequest, NamespaceGetResponse, NamespaceListRequest,
+    NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcResponse,
+    RuntimeDoctorReport, SessionRpc, ShutdownResponse, SpawnRequest, SpawnResponse, TargetError,
+    WaitCondition, WaitRequest, WaitResponse,
 };
 pub use types::{
     Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailCountView,

@@ -2,17 +2,21 @@ use anyhow::{Result, bail};
 use std::str::FromStr;
 
 use lilo_session_core::{
-    MailCheckRequest, MailIntent, MailLogCursor, MailLogFilter, MailNotifyMode, MailPeekRequest,
-    MailReadRequest, MailSendRequest, MailStopCheckRequest, MailTailRequest, RpcResponse,
-    SessionRpc,
+    CallerContextRequest, MailCheckRequest, MailIntent, MailLogCursor, MailLogFilter,
+    MailNotifyMode, MailPeekRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest,
+    MailTailRequest, RpcResponse, SessionRpc,
 };
 
 use crate::cli::cli_def::{
     MailAction, MailArgs, MailCheckArgs, MailObservationArgs, MailReadArgs, MailSendArgs,
     MailStopCheckArgs, MailTailArgs,
 };
-use crate::cli::output::{print_mail_counts, print_mail_send_summary, print_messages};
+use crate::cli::output::{
+    print_conversation_overview, print_mail_counts, print_mail_send_summary, print_messages,
+};
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
+
+const HELIOY_SESSION_ID_ENV: &str = "HELIOY_SESSION_ID";
 
 pub async fn run(args: MailArgs, json_output: bool) -> Result<()> {
     match args.action {
@@ -97,6 +101,8 @@ async fn peek(args: MailObservationArgs, json_output: bool) -> Result<()> {
         RpcResponse::MailPeek { response } => {
             if json_output {
                 print_json(&RpcResponse::MailPeek { response })?;
+            } else if should_print_conversation_overview(&args) {
+                print_conversation_overview(&response.messages);
             } else {
                 print_messages(&response.messages);
             }
@@ -228,6 +234,13 @@ fn observation_filter(args: &MailObservationArgs) -> Result<MailLogFilter> {
     })
 }
 
+fn should_print_conversation_overview(args: &MailObservationArgs) -> bool {
+    args.context_id.is_none()
+        && args.selector.is_none()
+        && args.recipient.is_none()
+        && !args.include_system
+}
+
 fn print_json(response: &RpcResponse) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(response)?);
     Ok(())
@@ -240,5 +253,21 @@ fn print_errors(errors: &[lilo_session_core::TargetError]) {
 }
 
 async fn send_daemon_request(request: SessionRpc) -> Result<RpcResponse> {
+    let request = request_with_caller_session(request)?;
     crate::cli::client::send_request(&request).await
+}
+
+fn request_with_caller_session(request: SessionRpc) -> Result<SessionRpc> {
+    let Some(raw) = std::env::var_os(HELIOY_SESSION_ID_ENV) else {
+        return Ok(request);
+    };
+    let Ok(caller_session_id) = raw.into_string() else {
+        bail!("{HELIOY_SESSION_ID_ENV} is not valid UTF-8");
+    };
+    Ok(SessionRpc::CallerContext {
+        request: CallerContextRequest {
+            caller_session_id,
+            request: Box::new(request),
+        },
+    })
 }

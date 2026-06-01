@@ -66,21 +66,26 @@ impl IdentityPort for IdentityClient {
 #[derive(Debug, Clone)]
 pub struct RequestContext {
     pub principal: Principal,
-    pub mcp_caller_session_id: Option<Uuid>,
+    pub caller_session_id: Option<Uuid>,
 }
 
 impl RequestContext {
     pub fn new(principal: Principal) -> Self {
         Self {
             principal,
-            mcp_caller_session_id: None,
+            caller_session_id: None,
         }
     }
 
     #[must_use]
-    pub fn with_mcp_caller_session_id(mut self, id: Uuid) -> Self {
-        self.mcp_caller_session_id = Some(id);
+    pub fn with_caller_session_id(mut self, id: Uuid) -> Self {
+        self.caller_session_id = Some(id);
         self
+    }
+
+    #[must_use]
+    pub fn with_mcp_caller_session_id(self, id: Uuid) -> Self {
+        self.with_caller_session_id(id)
     }
 }
 

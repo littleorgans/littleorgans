@@ -83,7 +83,7 @@ output_schema   = '''
 [tools.mail_peek]
 cli_name        = "mail peek"
 mcp_description = "Peek at the operator message transcript without draining mail."
-cli_about       = "Peek at the operator message transcript without draining mail."
+cli_about       = "List conversation context IDs, or peek at a filtered transcript without draining mail."
 mcp_namespace_scope = true
 output_schema   = '''
 {
@@ -101,7 +101,7 @@ name            = "context_id"
 type            = "string"
 required        = false
 mcp_description = "Conversation correlation tag to inspect."
-cli_help        = "Conversation correlation tag to inspect."
+cli_help        = "Conversation context ID to inspect."
 cli_flag        = "--context-id"
 
 [[tools.mail_peek.params]]
@@ -109,7 +109,7 @@ name            = "selector"
 type            = "string"
 required        = false
 mcp_description = "Participant selector used for matching messages."
-cli_help        = "Participant selector used for matching messages."
+cli_help        = "Participant selector used for matching conversations or transcript messages."
 cli_flag        = "--selector"
 selector        = true
 
@@ -118,7 +118,7 @@ name            = "recipient"
 type            = "string"
 required        = false
 mcp_description = "Recipient selector used for matching mailboxes."
-cli_help        = "Recipient selector used for matching mailboxes."
+cli_help        = "Recipient selector used for matching conversation mailboxes."
 cli_flag        = "--recipient"
 selector        = true
 

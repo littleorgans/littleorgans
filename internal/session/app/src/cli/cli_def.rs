@@ -307,7 +307,6 @@ pub struct MailSendArgs {
 pub struct MailReadArgs {}
 
 #[derive(Debug, Args)]
-#[command(arg_required_else_help = true)]
 pub struct MailObservationArgs {
     #[arg(long, help = generated_help::MAIL_PEEK_CONTEXT_ID_HELP)]
     pub context_id: Option<String>,

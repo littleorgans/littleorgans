@@ -81,13 +81,13 @@ pub const MAIL_SEND_IDEMPOTENCY_KEY_HELP: &str = "Optional client idempotency ke
 pub const MAIL_READ_ABOUT: &str = "Read unread mail for the caller session.";
 
 #[rustfmt::skip]
-pub const MAIL_PEEK_ABOUT: &str = "Peek at the operator message transcript without draining mail.";
+pub const MAIL_PEEK_ABOUT: &str = "List conversation context IDs, or peek at a filtered transcript without draining mail.";
 #[rustfmt::skip]
-pub const MAIL_PEEK_CONTEXT_ID_HELP: &str = "Conversation correlation tag to inspect.";
+pub const MAIL_PEEK_CONTEXT_ID_HELP: &str = "Conversation context ID to inspect.";
 #[rustfmt::skip]
-pub const MAIL_PEEK_SELECTOR_HELP: &str = "Participant selector used for matching messages.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+pub const MAIL_PEEK_SELECTOR_HELP: &str = "Participant selector used for matching conversations or transcript messages.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
-pub const MAIL_PEEK_RECIPIENT_HELP: &str = "Recipient selector used for matching mailboxes.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+pub const MAIL_PEEK_RECIPIENT_HELP: &str = "Recipient selector used for matching conversation mailboxes.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
 pub const MAIL_PEEK_INCLUDE_SYSTEM_HELP: &str = "Include system receipt metadata in the transcript.";
 

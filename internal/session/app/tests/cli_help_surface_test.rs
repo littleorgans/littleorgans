@@ -88,7 +88,6 @@ fn retained_leaf_commands_print_help_on_bare_invocation() {
         ["delete", "session"].as_slice(),
         ["delete", "namespace"].as_slice(),
         ["mail", "send"].as_slice(),
-        ["mail", "peek"].as_slice(),
         ["mail", "check"].as_slice(),
         ["mail", "stop-check"].as_slice(),
         ["mail", "tail"].as_slice(),

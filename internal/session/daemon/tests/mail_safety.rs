@@ -270,7 +270,7 @@ async fn notify_runtime_failure_is_warning_not_mail_failure() {
     assert_eq!(mail_count(&state, context, recipient.id).await, 1);
     assert_eq!(
         runtime.nudges(),
-        vec![(recipient.id.to_string(), "wake and review".to_string())]
+        vec![(recipient.id.to_string(), "you have mail".to_string())]
     );
 }
 

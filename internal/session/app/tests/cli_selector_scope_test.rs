@@ -1,8 +1,6 @@
 mod common;
 use common::OrPanic as _;
-use common::{
-    assert_success, create_namespace, first_table_field as first_field, set_context, stderr, stdout,
-};
+use common::{assert_success, create_namespace, run_session, set_context, stderr, stdout};
 
 use std::path::{Path, PathBuf};
 
@@ -286,25 +284,6 @@ fn legacy_workspace_selector_is_rejected_by_cli() {
 
     assert!(!selected.status.success());
     assert!(stderr(&selected).contains("unsupported selector"));
-}
-
-fn run_session(daemon: &common::DaemonFixture, namespace: &str, dir: &Path) -> String {
-    let output = daemon
-        .command()
-        .args([
-            "run",
-            "claude",
-            "--role",
-            "engineer",
-            "--dir",
-            &dir.display().to_string(),
-            "--namespace",
-            namespace,
-        ])
-        .output()
-        .or_panic("sm run executes");
-    assert_success("sm run", &output);
-    first_field(&output.stdout)
 }
 
 fn assert_contains_only(output: &std::process::Output, present: &str, absent: &str) {

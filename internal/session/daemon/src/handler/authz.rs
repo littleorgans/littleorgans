@@ -42,6 +42,7 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
         | SessionRpc::Logs { .. }
         | SessionRpc::Capture { .. }
         | SessionRpc::Doctor { .. }
+        | SessionRpc::CallerContext { .. }
         | SessionRpc::McpBridge { .. }
         | SessionRpc::MailTail { .. }
         | SessionRpc::Shutdown => Downstream,
@@ -52,11 +53,11 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
 mod tests {
     use lilo_im_core::Action;
     use lilo_session_core::{
-        CaptureRequest, DeleteRequest, DoctorRequest, IsolationPolicy, LabelMutation, LabelRequest,
-        ListRequest, LogsRequest, MailCheckRequest, MailIntent, MailReadRequest, MailSendRequest,
-        MailStopCheckRequest, McpBridgeRequest, Namespace, NamespaceCreateRequest,
-        NamespaceDeleteRequest, NamespaceGetRequest, NamespaceListRequest, NudgeRequest,
-        RuntimeKind, Selector, SessionRpc, SpawnRequest, WaitCondition, WaitRequest,
+        CallerContextRequest, CaptureRequest, DeleteRequest, DoctorRequest, IsolationPolicy,
+        LabelMutation, LabelRequest, ListRequest, LogsRequest, MailCheckRequest, MailIntent,
+        MailReadRequest, MailSendRequest, MailStopCheckRequest, McpBridgeRequest, Namespace,
+        NamespaceCreateRequest, NamespaceDeleteRequest, NamespaceGetRequest, NamespaceListRequest,
+        NudgeRequest, RuntimeKind, Selector, SessionRpc, SpawnRequest, WaitCondition, WaitRequest,
     };
     use uuid::Uuid;
 
@@ -208,6 +209,14 @@ mod tests {
             },
             SessionRpc::Doctor {
                 request: DoctorRequest::default(),
+            },
+            SessionRpc::CallerContext {
+                request: CallerContextRequest {
+                    caller_session_id: Uuid::nil().to_string(),
+                    request: Box::new(SessionRpc::MailRead {
+                        request: MailReadRequest {},
+                    }),
+                },
             },
             SessionRpc::McpBridge {
                 request: McpBridgeRequest {

@@ -13,6 +13,12 @@ use super::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CallerContextRequest {
+    pub caller_session_id: String,
+    pub request: Box<SessionRpc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SessionRpc {
     Spawn { request: Box<SpawnRequest> },
@@ -34,6 +40,7 @@ pub enum SessionRpc {
     Capture { request: CaptureRequest },
     Doctor { request: DoctorRequest },
     Wait { request: WaitRequest },
+    CallerContext { request: CallerContextRequest },
     McpBridge { request: McpBridgeRequest },
     Shutdown,
 }

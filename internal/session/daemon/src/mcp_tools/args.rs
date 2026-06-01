@@ -45,12 +45,12 @@ async fn read_namespace_scope(
     if let Some(raw) = optional_string(arguments, "namespace") {
         return Ok(Some((Namespace::from_str(raw)?, NamespaceScope::Explicit)));
     }
-    if let Some(id) = context.mcp_caller_session_id {
+    if let Some(id) = context.caller_session_id {
         let session = state
             .store()
             .get_session(&id)
             .await
-            .context("failed to load MCP caller session")?;
+            .context("failed to load caller session")?;
         if let Some(session) = session {
             return Ok(Some((session.namespace, NamespaceScope::Default)));
         }

@@ -8,3 +8,5 @@
 - In pre-release littleorgans protocol work, do not add legacy fallback constants, aliases, or compatibility vocabulary. Breaking changes are expected when they simplify the design.
 - For selector driven mail send, treat only `RUNNING` sessions as actionable recipients before authz, persistence, or notify. Stale terminated matches are not delivery attempts.
 - Default human session lists should stay compact for operator scanning. Keep deep fields like directory, pid, and timestamps in JSON unless the user asks for them in the table.
+- Operator mail observability needs a discovery path for `context_id` values. A transcript filter is not enough if the operator cannot first list conversations and counts.
+- Mail `--notify` nudges must be wake cues, not copies of the durable mail body. The recipient should see a small mail notification and read the actual content from the mailbox.

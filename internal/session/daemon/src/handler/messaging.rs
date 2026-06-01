@@ -18,6 +18,8 @@ use super::DaemonState;
 use super::message_view;
 use super::target::target_error;
 
+const MAIL_NOTIFY_NUDGE_CONTENT: &str = "you have mail";
+
 impl DaemonState {
     pub(super) async fn mail_send(
         &self,
@@ -355,7 +357,7 @@ impl DaemonState {
             "mail notify forwarding wake mode"
         );
         match self
-            .nudge_one(context, recipient_id, &request.content)
+            .nudge_one(context, recipient_id, MAIL_NOTIFY_NUDGE_CONTENT)
             .await
         {
             Ok(nudge) if nudge.delivered => NotifyResult::ok(),
@@ -421,7 +423,7 @@ impl DaemonState {
     }
 
     async fn effective_sender(&self, context: &RequestContext) -> Result<SenderRef> {
-        if let Some(id) = context.mcp_caller_session_id {
+        if let Some(id) = context.caller_session_id {
             self.require_session(&id, "sender").await?;
             return Ok(SenderRef::session(id));
         }
@@ -431,7 +433,7 @@ impl DaemonState {
     }
 
     async fn caller_mailbox(&self, context: &RequestContext) -> Result<Session> {
-        let Some(id) = context.mcp_caller_session_id else {
+        let Some(id) = context.caller_session_id else {
             bail!("mail read requires a caller session; operator has no mailbox");
         };
         let mut sessions = self
