@@ -44,7 +44,7 @@ pub(crate) fn peer_cred(fd: libc::c_int) -> Result<PeerCred> {
             libc::SOL_SOCKET,
             libc::SO_PEERCRED,
             std::ptr::addr_of_mut!(credentials).cast::<libc::c_void>(),
-            &mut length,
+            &raw mut length,
         )
     };
     if result != 0 {
@@ -146,6 +146,10 @@ fn start_time_from_ticks(boot_time: i64, start_ticks: u64) -> Result<Option<chro
         .ok_or_else(|| Error::invalid_data("invalid Linux process start time"))
 }
 
+// Returns Result for signature symmetry with the macOS (kqueue can fail) and
+// unsupported (always Err) impls that sys/unix/mod.rs re-exports uniformly; the
+// Linux pidfd path falls back to liveness polling and never errors itself.
+#[allow(clippy::unnecessary_wraps)]
 pub(crate) fn watch_process_exit(pid: u32) -> Result<(ProcessExitWatcher, oneshot::Receiver<()>)> {
     let cancel = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = oneshot::channel();
