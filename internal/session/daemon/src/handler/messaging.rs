@@ -9,7 +9,7 @@ use lilo_session_core::{
 };
 use uuid::Uuid;
 
-use crate::identity_client::{RequestContext, session_resource};
+use crate::identity_client::RequestContext;
 
 use super::DaemonState;
 use super::target::target_error;
@@ -40,11 +40,7 @@ impl DaemonState {
             }
             match self
                 .identity
-                .authorize(
-                    &context.principal,
-                    Action::MailSend,
-                    &session_resource(recipient.id),
-                )
+                .authorize_session(&context.principal, Action::MailSend, recipient.id)
                 .await
             {
                 Ok(()) => deliverable.push((recipient.id, recipient_summary)),
@@ -178,11 +174,7 @@ impl DaemonState {
         peek: bool,
     ) -> Result<Vec<MessageView>> {
         self.identity
-            .authorize(
-                &context.principal,
-                Action::MailRead,
-                &session_resource(recipient.id),
-            )
+            .authorize_session(&context.principal, Action::MailRead, recipient.id)
             .await?;
         let mail = self
             .store()
@@ -211,11 +203,7 @@ impl DaemonState {
         message: &str,
     ) -> Result<NudgeDelivery> {
         self.identity
-            .authorize(
-                &context.principal,
-                Action::Nudge,
-                &session_resource(recipient_id),
-            )
+            .authorize_session(&context.principal, Action::Nudge, recipient_id)
             .await?;
         let to = recipient_id.to_string();
         let result = self

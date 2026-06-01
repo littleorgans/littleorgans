@@ -5,14 +5,14 @@ use lilo_session_core::RpcResponse;
 use lilo_session_driver::RuntimePort;
 use lilo_session_store::SqliteStore;
 
-use crate::identity_client::IdentityClient;
+use crate::identity_client::IdentityPort;
 
 pub struct DaemonState {
     pub store: SqliteStore,
     pub(crate) daemon_version: String,
     pub(crate) runtime: Arc<dyn RuntimePort>,
     pub(crate) runtime_service: Arc<RuntimeService>,
-    pub(crate) identity: Arc<IdentityClient>,
+    pub(crate) identity: Arc<dyn IdentityPort>,
 }
 
 pub struct HandlerResult {
@@ -25,7 +25,7 @@ impl DaemonState {
         store: SqliteStore,
         daemon_version: impl Into<String>,
         runtime: Arc<dyn RuntimePort>,
-        identity: Arc<IdentityClient>,
+        identity: Arc<dyn IdentityPort>,
         runtime_service: Arc<RuntimeService>,
     ) -> Self {
         Self {

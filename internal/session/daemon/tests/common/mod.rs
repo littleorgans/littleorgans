@@ -13,7 +13,7 @@ use lilo_session_core::{
     Session, SessionRpc, SpawnRequest,
 };
 use lilo_session_daemon::handler::{DaemonState, HandlerResult};
-use lilo_session_daemon::identity_client::{IdentityClient, RequestContext};
+use lilo_session_daemon::identity_client::{IdentityClient, IdentityPort, RequestContext};
 use lilo_session_driver::{InProcessRuntime, LaunchEnv, RtmdDriver, RuntimePort};
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
@@ -101,6 +101,16 @@ impl TestDaemon {
             TEST_DAEMON_VERSION,
             runtime_port,
             Arc::new(identity),
+            Arc::clone(&self.runtime),
+        )
+    }
+
+    pub fn state_with_identity_port(&self, identity: Arc<dyn IdentityPort>) -> DaemonState {
+        DaemonState::new(
+            self.state.store.clone(),
+            TEST_DAEMON_VERSION,
+            Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))),
+            identity,
             Arc::clone(&self.runtime),
         )
     }

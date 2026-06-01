@@ -1,18 +1,22 @@
 mod common;
 use common::OrPanic as _;
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use common::shared_test_support::assert_ordered_subsequence;
 use common::{
     LOCAL_UID, TestDaemon, local_context, mail_count, spawn_test_session,
     spawn_test_session_with_labels,
 };
-use lilo_im_core::{Action, AuditDecision, Principal};
+use lilo_im_core::{Action, AuditDecision, Principal, ResourceSpec};
 use lilo_session_core::{
-    DeleteRequest, IsolationPolicy, Label, MailIntent, MailReadRequest, MailSendRequest,
-    NudgeRequest, RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest,
+    DeleteRequest, IsolationPolicy, Label, MailDeliveryStatus, MailIntent, MailReadRequest,
+    MailSendRequest, NudgeRequest, RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
-use lilo_session_daemon::identity_client::RequestContext;
+use lilo_session_daemon::identity_client::{IdentityPort, IdentityPortFuture, RequestContext};
+use sqlx::SqliteConnection;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -208,6 +212,56 @@ async fn mail_send_rejects_client_receipt_intent() {
         panic!("expected error response");
     };
     assert!(message.contains("receipt is reserved"));
+}
+
+#[tokio::test]
+async fn mail_send_uses_injected_identity_port() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let context = local_context();
+    let sender = spawn_test_session(&daemon, &context, "pm").await;
+    let recipient = spawn_test_session(&daemon, &context, "engineer").await;
+    let identity = Arc::new(RecordingIdentityPort::denying(
+        "mail denied by test identity",
+    ));
+    let state = daemon.state_with_identity_port(Arc::clone(&identity) as Arc<dyn IdentityPort>);
+
+    let sent = state
+        .handle(
+            context.with_mcp_caller_session_id(sender.id),
+            SessionRpc::MailSend {
+                request: mail_request(
+                    Selector::Id { id: recipient.id },
+                    "review the spec",
+                    "review-thread",
+                    MailIntent::Request,
+                ),
+            },
+        )
+        .await;
+
+    let RpcResponse::MailSent { response } = sent.response else {
+        panic!("expected mail sent response");
+    };
+    assert_eq!(response.results.len(), 1);
+    assert_eq!(response.results[0].mail, MailDeliveryStatus::Err);
+    assert_eq!(
+        response.results[0].error.as_deref(),
+        Some("mail denied by test identity")
+    );
+    assert_eq!(
+        state
+            .store
+            .count_unread_mail(&recipient.id)
+            .await
+            .or_panic("unread mail count succeeds"),
+        0
+    );
+
+    let calls = identity.calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].principal, Principal::Local(LOCAL_UID));
+    assert_eq!(calls[0].action, Action::MailSend);
+    assert_eq!(calls[0].resource.session_id, Some(recipient.id));
 }
 
 #[tokio::test]
@@ -425,5 +479,64 @@ fn mail_request(
         context_id: context_id.to_string(),
         intent,
         idempotency_key: None,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AuthorizationCall {
+    principal: Principal,
+    action: Action,
+    resource: ResourceSpec,
+}
+
+struct RecordingIdentityPort {
+    calls: Mutex<Vec<AuthorizationCall>>,
+    decisions: Mutex<VecDeque<Result<(), String>>>,
+}
+
+impl RecordingIdentityPort {
+    fn denying(message: &str) -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+            decisions: Mutex::new(VecDeque::from([Err(message.to_string())])),
+        }
+    }
+
+    fn calls(&self) -> Vec<AuthorizationCall> {
+        self.calls.lock().or_panic("calls lock").clone()
+    }
+}
+
+impl IdentityPort for RecordingIdentityPort {
+    fn authorize<'a>(
+        &'a self,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        Box::pin(async move {
+            self.calls
+                .lock()
+                .or_panic("calls lock")
+                .push(AuthorizationCall {
+                    principal: principal.clone(),
+                    action,
+                    resource: resource.clone(),
+                });
+            match self.decisions.lock().or_panic("decisions lock").pop_front() {
+                Some(Err(message)) => Err(anyhow::anyhow!(message)),
+                _ => Ok(()),
+            }
+        })
+    }
+
+    fn authorize_in_tx<'a>(
+        &'a self,
+        _conn: &'a mut SqliteConnection,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        self.authorize(principal, action, resource)
     }
 }

@@ -1,8 +1,67 @@
 pub use lilo_identity_service::IdentityClient;
 
-use lilo_im_core::{Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
+use std::future::Future;
+use std::pin::Pin;
+
+use anyhow::Result;
+use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_session_core::{RuntimeKind, SpawnRequest};
+use sqlx::SqliteConnection;
 use uuid::Uuid;
+
+pub type IdentityPortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+pub trait IdentityPort: Send + Sync {
+    fn authorize<'a>(
+        &'a self,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()>;
+
+    fn authorize_in_tx<'a>(
+        &'a self,
+        conn: &'a mut SqliteConnection,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()>;
+
+    fn authorize_session<'a>(
+        &'a self,
+        principal: &'a Principal,
+        action: Action,
+        session_id: Uuid,
+    ) -> IdentityPortFuture<'a, ()> {
+        Box::pin(async move {
+            let resource = session_resource(session_id);
+            self.authorize(principal, action, &resource).await
+        })
+    }
+}
+
+impl IdentityPort for IdentityClient {
+    fn authorize<'a>(
+        &'a self,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        Box::pin(IdentityClient::authorize(self, principal, action, resource))
+    }
+
+    fn authorize_in_tx<'a>(
+        &'a self,
+        conn: &'a mut SqliteConnection,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        Box::pin(IdentityClient::authorize_in_tx(
+            self, conn, principal, action, resource,
+        ))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct RequestContext {
