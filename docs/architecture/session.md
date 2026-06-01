@@ -129,8 +129,8 @@ evidence, respond.
 `lilo-session-store` owns SQLite persistence during Phase 4. Phase 7 moves
 session store access to the shared `LiloDb` pool, but Phase 4 keeps the imported
 rusqlite boundary. The durable table family uses session scoped names such as
-`session_sessions`, `session_namespaces`, and `session_mail` when it joins the
-shared database contract.
+`session_sessions` and `session_namespaces`, plus the mail log tables
+`messages` and `message_deliveries`, when it joins the shared database contract.
 
 Path policy lives in `lilo-paths`. It carries the current session path adapter
 and the monorepo `~/.lilo/` policy while Phase 5 finishes the cutover.

@@ -26,6 +26,7 @@ impl DaemonState {
         let sender_view = self.sender_view(&sender).await?;
         let mut results = Vec::new();
         let mut errors = Vec::new();
+        let mut deliverable = Vec::new();
         for recipient in recipients {
             let recipient_summary = RecipientSummary::from_session(&recipient);
             if !recipient.state.is_active() {
@@ -38,21 +39,60 @@ impl DaemonState {
                 continue;
             }
             match self
-                .mail_send_one(context, sender.clone(), recipient.id, &request)
+                .identity
+                .authorize(
+                    &context.principal,
+                    Action::MailSend,
+                    &session_resource(recipient.id),
+                )
                 .await
             {
-                Ok(item) => {
-                    let view = MessageView::from_mail(
-                        &item,
-                        sender_view.clone(),
-                        recipient_summary.clone(),
-                    );
-                    results.push(successful_send_result(recipient_summary, view));
-                }
+                Ok(()) => deliverable.push((recipient.id, recipient_summary)),
                 Err(error) => {
                     let message = format!("{error:#}");
                     results.push(failed_send_result(&recipient_summary, &message));
                     errors.push(target_error(&recipient.id, &error));
+                }
+            }
+        }
+        if !deliverable.is_empty() {
+            let recipient_ids = deliverable
+                .iter()
+                .map(|(recipient_id, _)| *recipient_id)
+                .collect::<Vec<_>>();
+            let mail = Mail {
+                id: Uuid::now_v7(),
+                sender,
+                recipient_id: recipient_ids[0],
+                content: request.content.clone(),
+                sent_at: Utc::now(),
+                read_at: None,
+                context_id: request.context_id.clone(),
+                intent: request.intent,
+                idempotency_key: request.idempotency_key.clone(),
+            };
+            match self
+                .store()
+                .insert_mail_for_recipients(&mail, &recipient_ids)
+                .await
+                .context("failed to persist mail")
+            {
+                Ok(mail) => {
+                    for (item, (_, recipient_summary)) in mail.into_iter().zip(deliverable) {
+                        let view = MessageView::from_mail(
+                            &item,
+                            sender_view.clone(),
+                            recipient_summary.clone(),
+                        );
+                        results.push(successful_send_result(recipient_summary, view));
+                    }
+                }
+                Err(error) => {
+                    let message = format!("{error:#}");
+                    for (recipient_id, recipient_summary) in deliverable {
+                        results.push(failed_send_result(&recipient_summary, &message));
+                        errors.push(target_error(&recipient_id, &error));
+                    }
                 }
             }
         }
@@ -129,38 +169,6 @@ impl DaemonState {
         Ok(RpcResponse::Nudged {
             response: NudgeResponse { nudges, errors },
         })
-    }
-
-    async fn mail_send_one(
-        &self,
-        context: &RequestContext,
-        sender: SenderRef,
-        recipient_id: Uuid,
-        request: &MailSendRequest,
-    ) -> Result<Mail> {
-        self.identity
-            .authorize(
-                &context.principal,
-                Action::MailSend,
-                &session_resource(recipient_id),
-            )
-            .await?;
-        let mail = Mail {
-            id: Uuid::now_v7(),
-            sender,
-            recipient_id,
-            content: request.content.clone(),
-            sent_at: Utc::now(),
-            read_at: None,
-            context_id: request.context_id.clone(),
-            intent: request.intent,
-            idempotency_key: request.idempotency_key.clone(),
-        };
-        self.store()
-            .insert_mail(&mail)
-            .await
-            .context("failed to persist mail")?;
-        Ok(mail)
     }
 
     async fn mail_read_one(
