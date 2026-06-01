@@ -2,7 +2,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, StatusFilter};
+use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
 use lilo_session_core::RuntimeDoctorReport;
 use tokio::time::{Instant, sleep};
 use uuid::Uuid;
@@ -41,6 +41,7 @@ pub trait RuntimePort: Send + Sync {
         &'a self,
         session_id: &'a str,
         content: &'a str,
+        mode: NudgeMode,
     ) -> RuntimePortFuture<'a, NudgeResult>;
 
     fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>>;

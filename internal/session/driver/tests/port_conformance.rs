@@ -12,10 +12,10 @@ use lilo_port::ParityProof;
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureRequest, CaptureResponse, CursorExpiredPayload,
     DoctorPayload, EventBatch, EventsPayload, EventsRequest, HeadlessSpawnTarget, IsolationPolicy,
-    Lifecycle, LifecycleState, MountSpec, NudgeFailureReason, NudgeOutcome, NudgePayload,
-    NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeKind, RuntimeResponse, RuntimeRpc,
-    RuntimeSignal, ShellResume, ShimReady, SpawnConflictKind, SpawnConflictPayload, SpawnRequest,
-    SpawnTarget, StatusFilter, StatusPayload, read_json_line, write_json_line,
+    Lifecycle, LifecycleState, MountSpec, NudgeFailureReason, NudgeMode, NudgeOutcome,
+    NudgePayload, NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeKind, RuntimeResponse,
+    RuntimeRpc, RuntimeSignal, ShellResume, ShimReady, SpawnConflictKind, SpawnConflictPayload,
+    SpawnRequest, SpawnTarget, StatusFilter, StatusPayload, read_json_line, write_json_line,
 };
 use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig, RuntimeService, RuntimeServiceContext};
 use lilo_runtime_store::LifecycleStore;
@@ -35,12 +35,22 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
         NudgeOutcome::Unsupported(NudgeFailureReason::HeadlessLifecycle),
     );
 
-    let direct = RuntimePort::nudge(&in_process.port, &session_id.to_string(), "hello")
-        .await
-        .or_panic("in-process nudge maps");
-    let via_socket = RuntimePort::nudge(&socket.driver, &session_id.to_string(), "hello")
-        .await
-        .or_panic("socket nudge maps");
+    let direct = RuntimePort::nudge(
+        &in_process.port,
+        &session_id.to_string(),
+        "hello",
+        NudgeMode::Immediate,
+    )
+    .await
+    .or_panic("in-process nudge maps");
+    let via_socket = RuntimePort::nudge(
+        &socket.driver,
+        &session_id.to_string(),
+        "hello",
+        NudgeMode::Immediate,
+    )
+    .await
+    .or_panic("socket nudge maps");
 
     assert_eq!(direct.delivered, via_socket.delivered);
     assert_eq!(direct.message, via_socket.message);
@@ -172,10 +182,15 @@ async fn runtime_ports_invalid_session_id_fault_matches() {
     let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
     let socket = unconnected_rtmd_driver(&socket_dir);
 
-    let direct = RuntimePort::nudge(&in_process.port, "not-a-uuid", "hello")
-        .await
-        .expect_err("in-process invalid session id faults");
-    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello")
+    let direct = RuntimePort::nudge(
+        &in_process.port,
+        "not-a-uuid",
+        "hello",
+        NudgeMode::Immediate,
+    )
+    .await
+    .expect_err("in-process invalid session id faults");
+    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello", NudgeMode::Immediate)
         .await
         .expect_err("socket invalid session id faults");
 
@@ -329,6 +344,7 @@ fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> SocketFixture {
             request: NudgeRequest {
                 session_id,
                 content: "hello".to_string(),
+                mode: NudgeMode::Immediate,
             },
         },
         RuntimeResponse::Nudge(NudgePayload {

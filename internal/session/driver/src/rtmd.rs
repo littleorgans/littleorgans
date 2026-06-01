@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
-    CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeRequest,
-    StatusFilter,
+    CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeMode,
+    NudgeRequest, StatusFilter,
 };
 use lilo_session_core::RuntimeDoctorReport;
 use uuid::Uuid;
@@ -129,6 +129,7 @@ impl RtmdDriver {
         &self,
         session_id: &str,
         content: &str,
+        mode: NudgeMode,
     ) -> Result<NudgeResult, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         let response = self
@@ -136,6 +137,7 @@ impl RtmdDriver {
             .nudge(NudgeRequest {
                 session_id,
                 content: content.to_string(),
+                mode,
             })
             .await
             .map_err(RuntimeError::wire)?;
@@ -220,8 +222,9 @@ impl RuntimePort for RtmdDriver {
         &'a self,
         session_id: &'a str,
         content: &'a str,
+        mode: NudgeMode,
     ) -> RuntimePortFuture<'a, NudgeResult> {
-        Box::pin(async move { RtmdDriver::nudge(self, session_id, content).await })
+        Box::pin(async move { RtmdDriver::nudge(self, session_id, content, mode).await })
     }
 
     fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>> {

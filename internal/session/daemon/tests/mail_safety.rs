@@ -11,7 +11,7 @@ use common::{
     spawn_test_session,
 };
 use lilo_im_core::Action;
-use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, StatusFilter};
+use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
 use lilo_session_core::{
     MailDeliveryStatus, MailIntent, MailLogFilter, MailNotifyMode, MailNotifyStatus,
     MailPeekRequest, MailReadRequest, MailSendRequest, MailSendResponse, MessageView, RpcResponse,
@@ -517,6 +517,7 @@ impl RuntimePort for RecordingRuntimePort {
         &'a self,
         session_id: &'a str,
         content: &'a str,
+        _mode: NudgeMode,
     ) -> TestRuntimeFuture<'a, NudgeResult> {
         Box::pin(async move {
             self.nudges

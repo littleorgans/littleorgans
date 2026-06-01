@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use lilo_rm_core::{
-    EventBatch, EventsRequest, IsolationPolicy, Lifecycle, RuntimeKind as RuntimeRuntimeKind,
-    ShimReady, StatusFilter,
+    EventBatch, EventsRequest, IsolationPolicy, Lifecycle, NudgeMode,
+    RuntimeKind as RuntimeRuntimeKind, ShimReady, StatusFilter,
 };
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, RuntimeDoctorReport, RuntimeKind, SessionRpc};
@@ -213,7 +213,12 @@ impl RuntimePort for FaultingRuntimePort {
         })
     }
 
-    fn nudge<'a>(&'a self, _session_id: &'a str, _content: &'a str) -> PortFuture<'a, NudgeResult> {
+    fn nudge<'a>(
+        &'a self,
+        _session_id: &'a str,
+        _content: &'a str,
+        _mode: NudgeMode,
+    ) -> PortFuture<'a, NudgeResult> {
         unsupported("nudge")
     }
 

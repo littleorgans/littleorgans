@@ -74,7 +74,7 @@ pub use spawn_context::{
 };
 pub use types::{
     HeadlessSpawnTarget, KillRequest, Lifecycle, LifecycleState, LostEvidence, MountSpec,
-    MountSpecParseError, NudgeFailureReason, NudgeOutcome, NudgeRequest, NudgeResponse,
+    MountSpecParseError, NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, NudgeResponse,
     RuntimeEvent, RuntimeExit, RuntimeKind, RuntimeSignal, RuntimeSignalParseError, ShimExit,
     ShimLaunchRequest, ShimReady, SpawnRequest, SpawnTarget, SpawnTargetParseError,
     TerminationEvidence, TmuxAddress, TmuxAddressParseError, TmuxSpawnTarget,

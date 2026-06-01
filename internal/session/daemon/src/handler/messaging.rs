@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use lilo_im_core::Action;
+use lilo_rm_core::NudgeMode;
 use lilo_session_core::{
     Mail, MailCheckRequest, MailCheckResponse, MailCountView, MailDeliveryStatus, MailIntent,
     MailNotifyStatus, MailReadRequest, MailReadResponse, MailSendRequest, MailSendResponse,
@@ -110,7 +111,12 @@ impl DaemonState {
         let mut errors = Vec::new();
         for recipient in recipients {
             match self
-                .nudge_one(context, recipient.id, &request.content)
+                .nudge_one(
+                    context,
+                    recipient.id,
+                    &request.content,
+                    NudgeMode::Immediate,
+                )
                 .await
             {
                 Ok(nudge) => nudges.push(nudge),
@@ -160,6 +166,7 @@ impl DaemonState {
         context: &RequestContext,
         recipient_id: Uuid,
         message: &str,
+        mode: NudgeMode,
     ) -> Result<NudgeDelivery> {
         self.identity
             .authorize_session(&context.principal, Action::Nudge, recipient_id)
@@ -167,7 +174,7 @@ impl DaemonState {
         let to = recipient_id.to_string();
         let result = self
             .runtime
-            .nudge(&to, message)
+            .nudge(&to, message, mode)
             .await
             .context("nudge runtime port failed")?;
         Ok(NudgeDelivery {
@@ -357,7 +364,12 @@ impl DaemonState {
             "mail notify forwarding wake mode"
         );
         match self
-            .nudge_one(context, recipient_id, MAIL_NOTIFY_NUDGE_CONTENT)
+            .nudge_one(
+                context,
+                recipient_id,
+                MAIL_NOTIFY_NUDGE_CONTENT,
+                NudgeMode::from(mode),
+            )
             .await
         {
             Ok(nudge) if nudge.delivered => NotifyResult::ok(),

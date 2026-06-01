@@ -2,6 +2,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use lilo_rm_core::NudgeMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -120,6 +121,15 @@ impl FromStr for MailNotifyMode {
             other => Err(SmError::Message(format!(
                 "unsupported mail notify mode: {other}"
             ))),
+        }
+    }
+}
+
+impl From<MailNotifyMode> for NudgeMode {
+    fn from(mode: MailNotifyMode) -> Self {
+        match mode {
+            MailNotifyMode::Wait => NudgeMode::Wait,
+            MailNotifyMode::Steer => NudgeMode::Steer,
         }
     }
 }

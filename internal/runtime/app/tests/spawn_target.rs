@@ -15,8 +15,8 @@ use common::{
 };
 use lilo_rm_core::{
     ErrorCode, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec, NudgeFailureReason,
-    NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse, RuntimeRpc,
-    SpawnRequest, ValidateTargetOutcome, ValidateTargetPayload, ValidateTargetRequest,
+    NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse,
+    RuntimeRpc, SpawnRequest, ValidateTargetOutcome, ValidateTargetPayload, ValidateTargetRequest,
     ValidateTargetResponse, read_json_line_blocking, write_json_line_blocking,
 };
 use lilo_wire::LilodRpc;
@@ -40,6 +40,7 @@ fn explicit_headless_spawn_records_no_tmux_pane_and_rejects_nudge() {
             request: NudgeRequest {
                 session_id: session_id.parse().expect("session id"),
                 content: "headless".to_owned(),
+                mode: NudgeMode::Immediate,
             },
         },
     );
@@ -75,6 +76,7 @@ fn missing_session_nudge_uses_structured_error_code() {
             request: NudgeRequest {
                 session_id,
                 content: "missing".to_owned(),
+                mode: NudgeMode::Immediate,
             },
         },
     );

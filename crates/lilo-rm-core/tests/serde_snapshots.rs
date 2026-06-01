@@ -5,7 +5,7 @@ use lilo_rm_core::{
     DoctorPayload, ErrorCode, ErrorPayload, EventsPayload, EventsRequest, IsolationPolicy,
     IsolationProfile, KillByPidRequest, KillRequest, Lifecycle, LogAvailability,
     LogsUnavailableReason, LostEvidence, McpBridgeRequest, MountSpec, NudgeFailureReason,
-    NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeExit,
+    NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeExit,
     RuntimeKind, RuntimeResponse, RuntimeRpc, RuntimeSignal, ShimExit, ShimLaunchPayload,
     ShimLaunchRequest, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     SpawnedPayload, StatusRequest, TerminationEvidence, TmuxSpawnTarget, ValidateTargetOutcome,
@@ -61,6 +61,7 @@ fn runtime_rpc_json_shapes_are_stable() {
             request: NudgeRequest {
                 session_id,
                 content: "wake up".to_owned(),
+                mode: NudgeMode::Immediate,
             },
         },
         RuntimeRpc::Capture {

@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use clap::Args;
-use lilo_rm_core::{NudgeFailureReason, NudgeOutcome, NudgeRequest, RuntimeResponse, RuntimeRpc};
+use lilo_rm_core::{
+    NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, RuntimeResponse, RuntimeRpc,
+};
 use uuid::Uuid;
 
 use crate::cli::output;
@@ -23,6 +25,7 @@ pub async fn run(args: NudgeArgs) -> Result<()> {
             request: NudgeRequest {
                 session_id: args.session_id,
                 content: args.content,
+                mode: NudgeMode::Immediate,
             },
         },
     )

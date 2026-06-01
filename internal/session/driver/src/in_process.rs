@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use lilo_rm_core::{
-    CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeRequest,
-    StatusFilter,
+    CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeMode,
+    NudgeRequest, StatusFilter,
 };
 use lilo_runtime_daemon::RuntimeService;
 use lilo_session_core::RuntimeDoctorReport;
@@ -140,6 +140,7 @@ impl RuntimePort for InProcessRuntime {
         &'a self,
         session_id: &'a str,
         content: &'a str,
+        mode: NudgeMode,
     ) -> RuntimePortFuture<'a, NudgeResult> {
         Box::pin(async move {
             let session_id = parse_session_id(session_id)?;
@@ -148,6 +149,7 @@ impl RuntimePort for InProcessRuntime {
                 .nudge_runtime(NudgeRequest {
                     session_id,
                     content: content.to_string(),
+                    mode,
                 })
                 .await
                 .map_err(Self::domain_error)?;
