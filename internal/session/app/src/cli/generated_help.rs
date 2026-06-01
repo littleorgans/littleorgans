@@ -63,9 +63,9 @@ pub const SESSION_LABEL_SELECTOR_HELP: &str = "Session selector used for matchin
 pub const SESSION_LABEL_MUTATION_HELP: &str = "Label mutation as key=value or key-.";
 
 #[rustfmt::skip]
-pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected sessions.";
+pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected running sessions.";
 #[rustfmt::skip]
-pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching running sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
 pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
 #[rustfmt::skip]

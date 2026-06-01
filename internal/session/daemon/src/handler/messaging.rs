@@ -8,7 +8,7 @@ use lilo_session_core::{
     MailNotifyStatus, MailReadRequest, MailReadResponse, MailSendRequest, MailSendResponse,
     MailSendResult, MailStopCheckRequest, MailStopCheckResponse, MessageView, NudgeDelivery,
     NudgeRequest, NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef, Session,
-    TargetError,
+    SessionState, TargetError,
 };
 use uuid::Uuid;
 
@@ -183,18 +183,10 @@ impl DaemonState {
     ) -> Vec<(Uuid, RecipientSummary)> {
         let mut deliverable = Vec::new();
         for recipient in recipients {
-            let recipient_summary = RecipientSummary::from_session(&recipient);
-            if !recipient.state.is_active() {
-                let message = format!("recipient is {}; mail not delivered", recipient.state);
-                response
-                    .results
-                    .push(failed_send_result(&recipient_summary, &message));
-                response.errors.push(TargetError {
-                    target: recipient.id.to_string(),
-                    message,
-                });
+            if recipient.state != SessionState::Running {
                 continue;
             }
+            let recipient_summary = RecipientSummary::from_session(&recipient);
 
             match self
                 .identity

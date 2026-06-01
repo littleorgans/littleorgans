@@ -119,7 +119,7 @@ sm mcp
 | `agent_delete` | `sm delete session` | Deprecated compatibility alias for session_delete. Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period. |
 | `session_label` | `sm label` | Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
 | `agent_label` | `sm label` | Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
-| `mail_send` | `sm mail send` | Send durable mail to sessions selected by selector. |
+| `mail_send` | `sm mail send` | Send durable mail to running sessions selected by selector. |
 | `mail_read` | `sm mail read` | Read unread mail for the caller session. Reads mark messages read. |
 | `mail_peek` | `sm mail peek` | Peek at the operator message transcript without draining mail. |
 | `mail_check` | `sm mail check` | Return the unread mail count for sessions selected by selector without draining mail. |

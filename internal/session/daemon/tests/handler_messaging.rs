@@ -11,7 +11,8 @@ use common::{
 use lilo_im_core::{Action, AuditDecision, Principal};
 use lilo_session_core::{
     DeleteRequest, IsolationPolicy, Label, MailDeliveryStatus, MailIntent, MailReadRequest,
-    NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc, SpawnRequest,
+    NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc, SessionState,
+    SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityPort, RequestContext};
@@ -365,11 +366,20 @@ async fn mail_send_uses_injected_identity_port() {
 }
 
 #[tokio::test]
-async fn mail_send_skips_terminated_recipients() {
+async fn mail_send_targets_only_running_recipients() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let live = spawn_test_session(&daemon, &context, "engineer").await;
     let dead = spawn_test_session(&daemon, &context, "engineer").await;
+    let mut spawning = live.clone();
+    spawning.id = Uuid::now_v7();
+    spawning.state = SessionState::Spawning;
+    daemon
+        .state
+        .store
+        .insert_session(&spawning)
+        .await
+        .or_panic("spawning session inserts");
     let _ = daemon
         .state
         .handle(
@@ -408,10 +418,14 @@ async fn mail_send_skips_terminated_recipients() {
         .map(|message| message.recipient.session_id)
         .collect();
     assert_eq!(delivered, vec![live.id]);
+    assert_eq!(response.results.len(), 1);
+    assert!(response.errors.is_empty());
     assert_eq!(mail_count(&daemon.state, local_context(), live.id).await, 1);
-    let skipped: Vec<_> = response.errors.iter().map(|e| e.target.as_str()).collect();
-    assert_eq!(skipped, vec![dead.id.to_string().as_str()]);
-    assert!(response.errors[0].message.contains("TERMINATED"));
+    assert_eq!(mail_count(&daemon.state, local_context(), dead.id).await, 0);
+    assert_eq!(
+        mail_count(&daemon.state, local_context(), spawning.id).await,
+        0
+    );
 }
 
 #[tokio::test]

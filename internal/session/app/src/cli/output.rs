@@ -1,32 +1,39 @@
+use std::time::{Duration, SystemTime};
+
 use lilo_session_core::{Label, MailCountView, MailSendResult, MessageView, SenderView, Session};
 
 pub fn print_session_line(session: &Session, show_labels: bool) {
-    print!(
-        "{} {} {} {} {} {} {} {}",
-        session.id,
-        session.runtime,
-        session.role,
-        session.namespace,
-        session.dir.display(),
-        session.state,
-        session.runtime_pid,
-        session.tmux_pane.as_deref().unwrap_or("-"),
-    );
-    if show_labels {
-        print!(" {}", format_labels(&session.labels));
-    }
-    println!();
+    println!("{}", session_cells(session, show_labels).join(" "));
 }
 
 pub fn print_session_table(sessions: &[Session], show_labels: bool) {
-    if show_labels {
-        println!("ID RUNTIME ROLE NAMESPACE DIR STATE PID TMUX LABELS");
+    let headers = if show_labels {
+        vec![
+            "ID",
+            "RUNTIME",
+            "NAMESPACE",
+            "ROLE",
+            "TMUX",
+            "STATUS",
+            "AGE",
+            "LABELS",
+        ]
     } else {
-        println!("ID RUNTIME ROLE NAMESPACE DIR STATE PID TMUX");
-    }
-    for session in sessions {
-        print_session_line(session, show_labels);
-    }
+        vec![
+            "ID",
+            "RUNTIME",
+            "NAMESPACE",
+            "ROLE",
+            "TMUX",
+            "STATUS",
+            "AGE",
+        ]
+    };
+    let rows = sessions
+        .iter()
+        .map(|session| session_cells(session, show_labels))
+        .collect::<Vec<_>>();
+    print_table(&headers, &rows);
 }
 
 fn format_labels(labels: &[Label]) -> String {
@@ -49,18 +56,18 @@ pub fn print_message_table(messages: &[MessageView]) {
     if messages.is_empty() {
         return;
     }
-    println!("SENT_AT SENDER RECIPIENT STATUS INTENT CONTENT");
-    for item in messages {
-        println!(
-            "{} {} {} {} {} {}",
-            item.sent_at.to_rfc3339(),
-            sender_display_label(&item.sender),
-            item.recipient.display_label,
-            item.status,
-            item.intent,
-            item.content
-        );
-    }
+    let rows = messages.iter().map(message_cells).collect::<Vec<_>>();
+    print_table(
+        &[
+            "SENT_AT",
+            "SENDER",
+            "RECIPIENT",
+            "STATUS",
+            "INTENT",
+            "CONTENT",
+        ],
+        &rows,
+    );
 }
 
 pub fn print_mail_send_summary(results: &[MailSendResult]) {
@@ -68,19 +75,17 @@ pub fn print_mail_send_summary(results: &[MailSendResult]) {
         println!("No recipients matched.");
         return;
     }
-    println!("RECIPIENT MAIL NOTIFY CONTEXT INTENT");
-    for result in results {
-        let message = result.message.as_ref();
-        let intent = message.map_or_else(|| "-".to_string(), |message| message.intent.to_string());
-        println!(
-            "{} {} {} {} {}",
-            result.recipient.display_label,
-            result.mail,
-            result.notify,
-            message.map_or("-", |message| message.context_id.as_str()),
-            intent,
-        );
-    }
+    let include_error = results.iter().any(|result| result.error.is_some());
+    let headers = if include_error {
+        vec!["RECIPIENT", "MAIL", "NOTIFY", "CONTEXT", "INTENT", "ERROR"]
+    } else {
+        vec!["RECIPIENT", "MAIL", "NOTIFY", "CONTEXT", "INTENT"]
+    };
+    let rows = results
+        .iter()
+        .map(|result| mail_send_cells(result, include_error))
+        .collect::<Vec<_>>();
+    print_table(&headers, &rows);
 }
 
 pub fn print_mail_counts(total: usize, counts: &[MailCountView]) {
@@ -88,10 +93,8 @@ pub fn print_mail_counts(total: usize, counts: &[MailCountView]) {
     if counts.is_empty() {
         return;
     }
-    println!("MAILBOX UNREAD");
-    for count in counts {
-        println!("{} {}", count.display_label, count.unread);
-    }
+    let rows = counts.iter().map(mail_count_cells).collect::<Vec<_>>();
+    print_table(&["MAILBOX", "UNREAD"], &rows);
 }
 
 fn sender_display_label(sender: &SenderView) -> &str {
@@ -100,5 +103,167 @@ fn sender_display_label(sender: &SenderView) -> &str {
             display_label
         }
         SenderView::System => "system",
+    }
+}
+
+fn session_cells(session: &Session, show_labels: bool) -> Vec<String> {
+    let mut cells = vec![
+        session.id.to_string(),
+        session.runtime.to_string(),
+        session.namespace.to_string(),
+        session.role.clone(),
+        session.tmux_pane.as_deref().unwrap_or("-").to_string(),
+        session.state.to_string(),
+        format_age(session.created_at.into()),
+    ];
+    if show_labels {
+        cells.push(format_labels(&session.labels));
+    }
+    cells
+}
+
+fn message_cells(item: &MessageView) -> Vec<String> {
+    vec![
+        item.sent_at.to_rfc3339(),
+        sender_display_label(&item.sender).to_string(),
+        item.recipient.display_label.clone(),
+        item.status.to_string(),
+        item.intent.to_string(),
+        item.content.clone(),
+    ]
+}
+
+fn mail_send_cells(result: &MailSendResult, include_error: bool) -> Vec<String> {
+    let message = result.message.as_ref();
+    let mut cells = vec![
+        result.recipient.display_label.clone(),
+        result.mail.to_string(),
+        result.notify.to_string(),
+        message
+            .map_or("-", |message| message.context_id.as_str())
+            .to_string(),
+        message.map_or_else(|| "-".to_string(), |message| message.intent.to_string()),
+    ];
+    if include_error {
+        cells.push(result.error.as_deref().unwrap_or("-").to_string());
+    }
+    cells
+}
+
+fn mail_count_cells(count: &MailCountView) -> Vec<String> {
+    vec![count.display_label.clone(), count.unread.to_string()]
+}
+
+fn print_table(headers: &[&str], rows: &[Vec<String>]) {
+    print!("{}", render_table(headers, rows));
+}
+
+fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let widths = column_widths(headers, rows);
+    let mut output = String::new();
+    append_table_row(
+        &mut output,
+        &headers
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>(),
+        &widths,
+    );
+    for row in rows {
+        append_table_row(&mut output, row, &widths);
+    }
+    output
+}
+
+fn column_widths(headers: &[&str], rows: &[Vec<String>]) -> Vec<usize> {
+    let mut widths = headers
+        .iter()
+        .map(|header| display_width(header))
+        .collect::<Vec<_>>();
+    for row in rows {
+        for (index, cell) in row.iter().enumerate() {
+            widths[index] = widths[index].max(display_width(cell));
+        }
+    }
+    widths
+}
+
+fn append_table_row(output: &mut String, cells: &[String], widths: &[usize]) {
+    for (index, width) in widths.iter().enumerate() {
+        if index > 0 {
+            output.push_str("  ");
+        }
+        let cell = cells.get(index).map_or("", String::as_str);
+        output.push_str(cell);
+        if index + 1 < widths.len() {
+            for _ in display_width(cell)..*width {
+                output.push(' ');
+            }
+        }
+    }
+    output.push('\n');
+}
+
+fn display_width(value: &str) -> usize {
+    value.chars().count()
+}
+
+fn format_age(created_at: SystemTime) -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(created_at)
+        .unwrap_or_else(|_| Duration::from_secs(0));
+    format_duration_age(elapsed)
+}
+
+fn format_duration_age(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    match seconds {
+        0..=59 => format!("{seconds}s"),
+        60..=3_599 => format!("{}m", seconds / 60),
+        3_600..=86_399 => format!("{}h", seconds / 3_600),
+        _ => format!("{}d", seconds / 86_400),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::{format_duration_age, render_table};
+
+    #[test]
+    fn render_table_aligns_columns_and_preserves_last_column_text() {
+        let rows = vec![
+            vec![
+                "pm".to_string(),
+                "ok".to_string(),
+                "skipped".to_string(),
+                "what are you saying?".to_string(),
+            ],
+            vec![
+                "reviewer".to_string(),
+                "err".to_string(),
+                "skipped".to_string(),
+                "mail denied".to_string(),
+            ],
+        ];
+
+        assert_eq!(
+            render_table(&["RECIPIENT", "MAIL", "NOTIFY", "CONTENT"], &rows),
+            concat!(
+                "RECIPIENT  MAIL  NOTIFY   CONTENT\n",
+                "pm         ok    skipped  what are you saying?\n",
+                "reviewer   err   skipped  mail denied\n",
+            )
+        );
+    }
+
+    #[test]
+    fn format_duration_age_uses_compact_resource_units() {
+        assert_eq!(format_duration_age(Duration::from_secs(0)), "0s");
+        assert_eq!(format_duration_age(Duration::from_secs(59)), "59s");
+        assert_eq!(format_duration_age(Duration::from_mins(1)), "1m");
+        assert_eq!(format_duration_age(Duration::from_hours(1)), "1h");
+        assert_eq!(format_duration_age(Duration::from_hours(24)), "1d");
     }
 }

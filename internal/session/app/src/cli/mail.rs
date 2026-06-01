@@ -50,7 +50,6 @@ async fn send(args: MailSendArgs, json_output: bool) -> Result<()> {
                 })?;
             } else {
                 print_mail_send_summary(&response.results);
-                print_errors(&response.errors);
             }
             Ok(())
         }

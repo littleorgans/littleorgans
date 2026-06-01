@@ -1,7 +1,7 @@
 [tools.mail_send]
 cli_name        = "mail send"
-mcp_description = "Send durable mail to sessions selected by selector."
-cli_about       = "Send durable mail to selected sessions."
+mcp_description = "Send durable mail to running sessions selected by selector."
+cli_about       = "Send durable mail to selected running sessions."
 mcp_namespace_scope = true
 output_schema   = '''
 {
@@ -18,8 +18,8 @@ output_schema   = '''
 name            = "to"
 type            = "string"
 required        = true
-mcp_description = "Recipient selector used for matching sessions."
-cli_help        = "Recipient selector used for matching sessions."
+mcp_description = "Recipient selector used for matching running sessions."
+cli_help        = "Recipient selector used for matching running sessions."
 cli_flag        = "--to"
 selector        = true
 
