@@ -36,8 +36,8 @@ name            = "notify"
 type            = "string"
 required        = false
 enum_values     = ["wait", "steer"]
-mcp_description = "Optional wake mode to request after mail persistence: wait or steer."
-cli_help        = "Optional wake mode to request after mail persistence. Bare --notify uses wait."
+mcp_description = "Notify after mail is persisted. Bare --notify uses wait. wait waits up to about 120s for no busy marker, then delivers the nudge; timeout leaves mail persisted and delivers no nudge. steer sends one ESC if a busy marker is present, waits up to about 5s for idle, then delivers; if already idle, delivers immediately; if still busy, delivers no nudge. Limitation: idle means no busy marker, not a safe prompt; wait and steer do not detect approval prompts."
+cli_help        = "Notify after mail is persisted. Bare --notify uses wait. wait waits up to about 120s for no busy marker, then delivers the nudge; timeout leaves mail persisted and delivers no nudge. steer sends one ESC if a busy marker is present, waits up to about 5s for idle, then delivers; if already idle, delivers immediately; if still busy, delivers no nudge. Limitation: idle means no busy marker, not a safe prompt; wait and steer do not detect approval prompts."
 cli_flag        = "--notify"
 
 [[tools.mail_send.params]]
