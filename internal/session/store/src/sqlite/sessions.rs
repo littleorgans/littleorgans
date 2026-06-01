@@ -58,6 +58,23 @@ impl SqliteStore {
             .next())
     }
 
+    pub async fn list_sessions_by_ids(
+        &self,
+        ids: &[Uuid],
+    ) -> Result<Vec<Session>, SessionRowError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT * FROM session_sessions
+             WHERE id IN ({placeholders})
+             ORDER BY created_at"
+        );
+        let params = ids.iter().map(Uuid::to_string);
+        self.query_sessions(&sql, params).await
+    }
+
     pub async fn list_sessions(&self, id: Option<&str>) -> Result<Vec<Session>, SessionRowError> {
         match id {
             Some(id) => {

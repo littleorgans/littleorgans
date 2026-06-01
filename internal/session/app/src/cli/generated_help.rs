@@ -78,9 +78,7 @@ pub const MAIL_SEND_INTENT_HELP: &str = "Message intent tag: request, result, or
 pub const MAIL_SEND_IDEMPOTENCY_KEY_HELP: &str = "Optional client idempotency key scoped to the derived sender.";
 
 #[rustfmt::skip]
-pub const MAIL_READ_ABOUT: &str = "Read unread mail for selected sessions.";
-#[rustfmt::skip]
-pub const MAIL_READ_SELECTOR_HELP: &str = "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+pub const MAIL_READ_ABOUT: &str = "Read unread mail for the caller session.";
 #[rustfmt::skip]
 pub const MAIL_READ_PEEK_HELP: &str = "Return unread mail without marking it read.";
 

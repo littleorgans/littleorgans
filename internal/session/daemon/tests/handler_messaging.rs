@@ -12,7 +12,8 @@ use common::{
 use lilo_im_core::{Action, AuditDecision, Principal, ResourceSpec};
 use lilo_session_core::{
     DeleteRequest, IsolationPolicy, Label, MailDeliveryStatus, MailIntent, MailReadRequest,
-    MailSendRequest, NudgeRequest, RpcResponse, RuntimeKind, Selector, SessionRpc, SpawnRequest,
+    MailSendRequest, NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc,
+    SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityPort, IdentityPortFuture, RequestContext};
@@ -40,7 +41,23 @@ async fn mail_round_trip_marks_read() {
             },
         )
         .await;
-    assert!(matches!(sent.response, RpcResponse::MailSent { .. }));
+    let RpcResponse::MailSent { response } = sent.response else {
+        panic!("expected mail sent response");
+    };
+    let message = response.results[0]
+        .message
+        .as_ref()
+        .or_panic("send result includes message");
+    assert_eq!(
+        message.sender,
+        SenderView::Session {
+            session_id: sender.id,
+            role: "pm".to_string(),
+            display_label: "pm".to_string(),
+            labels: Vec::new(),
+            namespace: sender.namespace.clone(),
+        }
+    );
     assert_eq!(
         mail_count(&daemon.state, context.clone(), recipient.id).await,
         1
@@ -49,12 +66,9 @@ async fn mail_round_trip_marks_read() {
     let read = daemon
         .state
         .handle(
-            context.clone(),
+            context.clone().with_mcp_caller_session_id(recipient.id),
             SessionRpc::MailRead {
-                request: MailReadRequest {
-                    selector: Selector::Id { id: recipient.id },
-                    peek: false,
-                },
+                request: MailReadRequest { peek: false },
             },
         )
         .await;
@@ -64,6 +78,95 @@ async fn mail_round_trip_marks_read() {
     assert_eq!(response.messages.len(), 1);
     assert_eq!(response.messages[0].content, "review the spec");
     assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 0);
+}
+
+#[tokio::test]
+async fn operator_send_uses_operator_sender_view() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let context = local_context();
+    let recipient = spawn_test_session(&daemon, &context, "engineer").await;
+
+    let sent = daemon
+        .state
+        .handle(
+            context,
+            SessionRpc::MailSend {
+                request: mail_request(
+                    Selector::Id { id: recipient.id },
+                    "review the spec",
+                    "review-thread",
+                    MailIntent::Request,
+                ),
+            },
+        )
+        .await;
+    let RpcResponse::MailSent { response } = sent.response else {
+        panic!("expected mail sent response");
+    };
+    let message = response.results[0]
+        .message
+        .as_ref()
+        .or_panic("send result includes message");
+    let SenderView::Operator {
+        principal,
+        display_label,
+    } = &message.sender
+    else {
+        panic!("expected operator sender");
+    };
+    assert_eq!(*display_label, "operator");
+    assert_eq!(
+        *principal,
+        serde_json::to_value(Principal::Local(LOCAL_UID)).or_panic("principal serializes")
+    );
+}
+
+#[tokio::test]
+async fn mail_read_drains_only_caller_mailbox() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let context = local_context();
+    let sender = spawn_test_session(&daemon, &context, "pm").await;
+    let first = spawn_test_session(&daemon, &context, "engineer").await;
+    let second = spawn_test_session(&daemon, &context, "reviewer").await;
+
+    for (recipient, content) in [(first.id, "first"), (second.id, "second")] {
+        let sent = daemon
+            .state
+            .handle(
+                context.clone().with_mcp_caller_session_id(sender.id),
+                SessionRpc::MailSend {
+                    request: mail_request(
+                        Selector::Id { id: recipient },
+                        content,
+                        "review-thread",
+                        MailIntent::Request,
+                    ),
+                },
+            )
+            .await;
+        assert!(matches!(sent.response, RpcResponse::MailSent { .. }));
+    }
+
+    let read = daemon
+        .state
+        .handle(
+            context.clone().with_mcp_caller_session_id(first.id),
+            SessionRpc::MailRead {
+                request: MailReadRequest { peek: false },
+            },
+        )
+        .await;
+    let RpcResponse::MailRead { response } = read.response else {
+        panic!("expected mail read response");
+    };
+    assert_eq!(response.messages.len(), 1);
+    assert_eq!(response.messages[0].recipient.session_id, first.id);
+    assert_eq!(response.messages[0].content, "first");
+    assert_eq!(
+        mail_count(&daemon.state, context.clone(), first.id).await,
+        0
+    );
+    assert_eq!(mail_count(&daemon.state, context, second.id).await, 1);
 }
 
 #[tokio::test]
@@ -308,6 +411,7 @@ async fn mail_send_skips_terminated_recipients() {
         .map(|message| message.recipient.session_id)
         .collect();
     assert_eq!(delivered, vec![live.id]);
+    assert_eq!(mail_count(&daemon.state, local_context(), live.id).await, 1);
     let skipped: Vec<_> = response.errors.iter().map(|e| e.target.as_str()).collect();
     assert_eq!(skipped, vec![dead.id.to_string().as_str()]);
     assert!(response.errors[0].message.contains("TERMINATED"));
@@ -430,21 +534,34 @@ async fn send_read_nudge_delete(
     recipient_id: Uuid,
 ) {
     let context = context.with_mcp_caller_session_id(sender_id);
-    let requests = [
-        SessionRpc::MailSend {
-            request: mail_request(
-                Selector::Id { id: recipient_id },
-                "review the spec",
-                "review-thread",
-                MailIntent::Request,
-            ),
-        },
-        SessionRpc::MailRead {
-            request: MailReadRequest {
-                selector: Selector::Id { id: recipient_id },
-                peek: false,
+    let response = state
+        .handle(
+            context.clone(),
+            SessionRpc::MailSend {
+                request: mail_request(
+                    Selector::Id { id: recipient_id },
+                    "review the spec",
+                    "review-thread",
+                    MailIntent::Request,
+                ),
             },
-        },
+        )
+        .await
+        .response;
+    assert!(!matches!(response, RpcResponse::Error { .. }));
+
+    let response = state
+        .handle(
+            context.with_mcp_caller_session_id(recipient_id),
+            SessionRpc::MailRead {
+                request: MailReadRequest { peek: false },
+            },
+        )
+        .await
+        .response;
+    assert!(!matches!(response, RpcResponse::Error { .. }));
+
+    for request in [
         SessionRpc::Nudge {
             request: NudgeRequest {
                 to: Selector::Id { id: recipient_id },
@@ -458,10 +575,8 @@ async fn send_read_nudge_delete(
                 grace_secs: 5,
             },
         },
-    ];
-
-    for request in requests {
-        let response = state.handle(context.clone(), request).await.response;
+    ] {
+        let response = state.handle(local_context(), request).await.response;
         assert!(!matches!(response, RpcResponse::Error { .. }));
     }
 }

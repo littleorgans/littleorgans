@@ -22,7 +22,6 @@ pub struct MailSendResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailReadRequest {
-    pub selector: Selector,
     pub peek: bool,
 }
 

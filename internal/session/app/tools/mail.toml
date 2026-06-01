@@ -2,6 +2,7 @@
 cli_name        = "mail send"
 mcp_description = "Send durable mail to sessions selected by selector."
 cli_about       = "Send durable mail to selected sessions."
+mcp_namespace_scope = true
 output_schema   = '''
 {
   "type": "object",
@@ -66,9 +67,8 @@ cli_flag        = "--idempotency-key"
 
 [tools.mail_read]
 cli_name        = "mail read"
-mcp_description = "Read unread mail for sessions selected by selector. Reads mark messages read unless peek is true."
-cli_about       = "Read unread mail for selected sessions."
-mcp_namespace_scope = true
+mcp_description = "Read unread mail for the caller session. Reads mark messages read unless peek is true."
+cli_about       = "Read unread mail for the caller session."
 output_schema   = '''
 {
   "type": "object",
@@ -79,15 +79,6 @@ output_schema   = '''
   }
 }
 '''
-
-[[tools.mail_read.params]]
-name            = "selector"
-type            = "string"
-required        = true
-mcp_description = "Inbox owner selector used for matching sessions."
-cli_help        = "Inbox owner selector used for matching sessions."
-cli_flag        = "--selector"
-selector        = true
 
 [[tools.mail_read.params]]
 name            = "peek"

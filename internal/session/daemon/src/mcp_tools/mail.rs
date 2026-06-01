@@ -19,12 +19,14 @@ pub(crate) async fn mail_send(
     context: &RequestContext,
     arguments: &Value,
 ) -> Result<Value> {
+    let to = required_selector(arguments, "to")?;
+    let to = scoped_required_selector(state, context, arguments, to).await?;
     let response = state
         .handle_direct(
             context.clone(),
             SessionRpc::MailSend {
                 request: MailSendRequest {
-                    to: required_selector(arguments, "to")?,
+                    to,
                     content: required_string(arguments, "content")?.to_string(),
                     notify: optional_notify(arguments)?,
                     context_id: required_string(arguments, "context_id")?.to_string(),
@@ -49,14 +51,11 @@ pub(crate) async fn mail_read(
     context: &RequestContext,
     arguments: &Value,
 ) -> Result<Value> {
-    let selector = required_selector(arguments, "selector")?;
-    let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state
         .handle_direct(
             context.clone(),
             SessionRpc::MailRead {
                 request: MailReadRequest {
-                    selector,
                     peek: optional_bool(arguments, "peek").unwrap_or(false),
                 },
             },

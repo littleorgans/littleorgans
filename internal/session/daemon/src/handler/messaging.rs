@@ -1,4 +1,6 @@
-use anyhow::{Context, Result};
+use std::collections::{BTreeSet, HashMap};
+
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use lilo_im_core::Action;
 use lilo_session_core::{
@@ -23,7 +25,6 @@ impl DaemonState {
         request.intent.ensure_client_send_allowed()?;
         let recipients = self.resolve_selector(&request.to, "recipient").await?;
         let sender = self.effective_sender(context).await?;
-        let sender_view = self.sender_view(&sender).await?;
         let mut results = Vec::new();
         let mut errors = Vec::new();
         let mut deliverable = Vec::new();
@@ -74,13 +75,9 @@ impl DaemonState {
                 .context("failed to persist mail")
             {
                 Ok(mail) => {
-                    for (item, (_, recipient_summary)) in mail.into_iter().zip(deliverable) {
-                        let view = MessageView::from_mail(
-                            &item,
-                            sender_view.clone(),
-                            recipient_summary.clone(),
-                        );
-                        results.push(successful_send_result(recipient_summary, view));
+                    let views = self.message_views(mail).await?;
+                    for view in views {
+                        results.push(successful_send_result(view.recipient.clone(), view));
                     }
                 }
                 Err(error) => {
@@ -103,22 +100,15 @@ impl DaemonState {
         context: &RequestContext,
         request: MailReadRequest,
     ) -> Result<RpcResponse> {
-        let recipients = self
-            .resolve_selector(&request.selector, "recipient")
+        let recipient = self.caller_mailbox(context).await?;
+        let mail = self
+            .mail_read_one(context, &recipient, request.peek)
             .await?;
-        let mut mail = Vec::new();
-        let mut errors = Vec::new();
-        for recipient in recipients {
-            match self.mail_read_one(context, &recipient, request.peek).await {
-                Ok(mut items) => mail.append(&mut items),
-                Err(error) => errors.push(target_error(&recipient.id, &error)),
-            }
-        }
 
         Ok(RpcResponse::MailRead {
             response: MailReadResponse {
                 messages: mail,
-                errors,
+                errors: Vec::new(),
             },
         })
     }
@@ -181,7 +171,7 @@ impl DaemonState {
             .read_unread_mail(&recipient.id, Utc::now(), peek)
             .await
             .context("failed to read mail")?;
-        self.message_views(mail, recipient).await
+        self.message_views(mail).await
     }
 
     async fn mail_counts(&self, selector: &Selector) -> Result<Vec<MailCountView>> {
@@ -245,34 +235,45 @@ impl DaemonState {
         )?))
     }
 
-    async fn sender_view(&self, sender: &SenderRef) -> Result<SenderView> {
-        match sender {
-            SenderRef::Session { session_id } => {
-                let session = self
-                    .store()
-                    .get_session(session_id)
-                    .await
-                    .context("failed to load sender session")?
-                    .ok_or_else(|| anyhow::anyhow!("unknown sender session: {session_id}"))?;
-                Ok(SenderView::session(&session))
-            }
-            SenderRef::Operator { principal } => Ok(SenderView::operator(principal.clone())),
-            SenderRef::System => Ok(SenderView::System),
-        }
+    async fn caller_mailbox(&self, context: &RequestContext) -> Result<Session> {
+        let Some(id) = context.mcp_caller_session_id else {
+            bail!("mail read requires a caller session; operator has no mailbox");
+        };
+        let mut sessions = self
+            .resolve_selector(&Selector::Id { id }, "recipient")
+            .await?;
+        Ok(sessions.remove(0))
     }
 
-    async fn message_views(
-        &self,
-        mail: Vec<Mail>,
-        recipient: &Session,
-    ) -> Result<Vec<MessageView>> {
-        let recipient = RecipientSummary::from_session(recipient);
-        let mut views = Vec::new();
+    async fn message_views(&self, mail: Vec<Mail>) -> Result<Vec<MessageView>> {
+        let sessions = self.message_sessions(&mail).await?;
+        mail.iter()
+            .map(|item| {
+                let sender = sender_view(&item.sender, &sessions)?;
+                let recipient = recipient_summary(item.recipient_id, &sessions)?;
+                Ok(MessageView::from_mail(item, sender, recipient))
+            })
+            .collect()
+    }
+
+    async fn message_sessions(&self, mail: &[Mail]) -> Result<HashMap<Uuid, Session>> {
+        let mut ids = BTreeSet::new();
         for item in mail {
-            let sender = self.sender_view(&item.sender).await?;
-            views.push(MessageView::from_mail(&item, sender, recipient.clone()));
+            ids.insert(item.recipient_id);
+            if let SenderRef::Session { session_id } = &item.sender {
+                ids.insert(*session_id);
+            }
         }
-        Ok(views)
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        let sessions = self
+            .store()
+            .list_sessions_by_ids(&ids)
+            .await
+            .context("failed to load message session summaries")?;
+        Ok(sessions
+            .into_iter()
+            .map(|session| (session.id, session))
+            .collect())
     }
 }
 
@@ -298,4 +299,27 @@ fn successful_send_result(recipient: RecipientSummary, message: MessageView) -> 
         message: Some(message),
         error: None,
     }
+}
+
+fn sender_view(sender: &SenderRef, sessions: &HashMap<Uuid, Session>) -> Result<SenderView> {
+    match sender {
+        SenderRef::Session { session_id } => {
+            let session = sessions
+                .get(session_id)
+                .ok_or_else(|| anyhow::anyhow!("unknown sender session: {session_id}"))?;
+            Ok(SenderView::session(session))
+        }
+        SenderRef::Operator { principal } => Ok(SenderView::operator(principal.clone())),
+        SenderRef::System => Ok(SenderView::System),
+    }
+}
+
+fn recipient_summary(
+    recipient_id: Uuid,
+    sessions: &HashMap<Uuid, Session>,
+) -> Result<RecipientSummary> {
+    let session = sessions
+        .get(&recipient_id)
+        .ok_or_else(|| anyhow::anyhow!("unknown recipient session: {recipient_id}"))?;
+    Ok(RecipientSummary::from_session(session))
 }

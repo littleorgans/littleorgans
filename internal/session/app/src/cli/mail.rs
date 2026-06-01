@@ -60,10 +60,7 @@ async fn send(args: MailSendArgs) -> Result<()> {
 
 async fn read(args: MailReadArgs) -> Result<()> {
     let response = send_daemon_request(SessionRpc::MailRead {
-        request: MailReadRequest {
-            selector: Selector::from_str(&args.selector)?,
-            peek: args.peek,
-        },
+        request: MailReadRequest { peek: args.peek },
     })
     .await?;
 

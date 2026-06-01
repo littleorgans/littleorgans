@@ -294,10 +294,7 @@ pub struct MailSendArgs {
 }
 
 #[derive(Debug, Args)]
-#[command(arg_required_else_help = true)]
 pub struct MailReadArgs {
-    #[arg(long, help = generated_help::MAIL_READ_SELECTOR_HELP)]
-    pub selector: String,
     #[arg(long, help = generated_help::MAIL_READ_PEEK_HELP)]
     pub peek: bool,
 }

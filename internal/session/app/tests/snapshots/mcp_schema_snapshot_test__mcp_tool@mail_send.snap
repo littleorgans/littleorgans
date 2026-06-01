@@ -7,6 +7,10 @@ expression: tool
   "inputSchema": {
     "additionalProperties": false,
     "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and match across all namespaces.",
+        "type": "boolean"
+      },
       "content": {
         "description": "Message content.",
         "type": "string"
@@ -26,6 +30,10 @@ expression: tool
           "result",
           "inform"
         ],
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
         "type": "string"
       },
       "notify": {

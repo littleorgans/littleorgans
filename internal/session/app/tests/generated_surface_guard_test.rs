@@ -71,11 +71,6 @@ fn selector_help_sources_match_cli_shape_matrix() {
         ),
         (
             "tools/mail.toml",
-            "[tools.mail_read]",
-            "cli_flag        = \"--selector\"",
-        ),
-        (
-            "tools/mail.toml",
             "[tools.mail_check]",
             "cli_flag        = \"--selector\"",
         ),

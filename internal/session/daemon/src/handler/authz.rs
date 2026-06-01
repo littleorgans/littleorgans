@@ -176,10 +176,7 @@ mod tests {
                 },
             },
             SessionRpc::MailRead {
-                request: MailReadRequest {
-                    selector: Selector::All,
-                    peek: false,
-                },
+                request: MailReadRequest { peek: false },
             },
             SessionRpc::Nudge {
                 request: NudgeRequest {

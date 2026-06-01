@@ -47,12 +47,9 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
         recipient
     );
 
-    let read = call_tool(
-        &mut mcp,
-        6,
-        "mail_read",
-        json!({ "selector": format!("id:{recipient}") }),
-    );
+    let mut recipient_mcp = daemon.spawn_mcp_for_session(&recipient, daemon.dir.path());
+    recipient_mcp.send(&json!({"jsonrpc": "2.0", "id": 6, "method": "initialize", "params": {}}));
+    let read = call_tool(&mut recipient_mcp, 7, "mail_read", json!({}));
     assert!(read["error"].is_null());
     assert_eq!(
         read["result"]["structuredContent"]["messages"][0]["content"],
@@ -61,7 +58,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let checked = call_tool(
         &mut mcp,
-        7,
+        8,
         "mail_stop_check",
         json!({ "selector": format!("id:{recipient}") }),
     );
@@ -74,7 +71,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let nudged = call_tool(
         &mut mcp,
-        8,
+        9,
         "nudge",
         json!({ "to": recipient.clone(), "content": "ping" }),
     );
