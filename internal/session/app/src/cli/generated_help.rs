@@ -69,7 +69,7 @@ pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching runnin
 #[rustfmt::skip]
 pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
 #[rustfmt::skip]
-pub const MAIL_SEND_NOTIFY_HELP: &str = "Notify after mail is persisted. Bare --notify uses wait. wait waits up to about 120s for no busy marker, then delivers the nudge; timeout leaves mail persisted and delivers no nudge. steer sends one ESC if a busy marker is present, waits up to about 5s for idle, then delivers; if already idle, delivers immediately; if still busy, delivers no nudge. Limitation: idle means no busy marker, not a safe prompt; wait and steer do not detect approval prompts.";
+pub const MAIL_SEND_NOTIFY_HELP: &str = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.";
 #[rustfmt::skip]
 pub const MAIL_SEND_CONTEXT_ID_HELP: &str = "Conversation correlation tag.";
 #[rustfmt::skip]
