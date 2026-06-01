@@ -6,4 +6,4 @@ mod spawn;
 mod state;
 mod target;
 
-pub use state::{DaemonState, HandlerResult};
+pub use state::{DaemonState, HandlerResult, MailAppendEvent};

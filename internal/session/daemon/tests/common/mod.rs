@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use lilo_db::LiloDb;
-use lilo_im_core::{AuditRow, Principal};
+use lilo_im_core::{Action, AuditRow, Principal, ResourceSpec};
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     DoctorPayload, LifecycleCounts, MigrationState, RuntimeResponse, RuntimeRpc, TmuxStatus,
@@ -9,14 +9,18 @@ use lilo_rm_core::{
 };
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{
-    IsolationPolicy, Label, MailCheckRequest, Namespace, RpcResponse, RuntimeKind, Selector,
-    Session, SessionRpc, SpawnRequest,
+    IsolationPolicy, Label, MailCheckRequest, MailIntent, MailSendRequest, Namespace, RpcResponse,
+    RuntimeKind, Selector, Session, SessionRpc, SpawnRequest,
 };
 use lilo_session_daemon::handler::{DaemonState, HandlerResult};
-use lilo_session_daemon::identity_client::{IdentityClient, IdentityPort, RequestContext};
+use lilo_session_daemon::identity_client::{
+    IdentityClient, IdentityPort, IdentityPortFuture, RequestContext,
+};
 use lilo_session_driver::{InProcessRuntime, LaunchEnv, RtmdDriver, RuntimePort};
 use lilo_session_store::SqliteStore;
 use lilo_wire::LilodRpc;
+use sqlx::SqliteConnection;
+use std::collections::VecDeque;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -312,6 +316,88 @@ pub async fn mail_count(state: &DaemonState, context: RequestContext, session_id
         panic!("expected mail check response");
     };
     response.unread
+}
+
+pub fn mail_request(
+    to: Selector,
+    content: &str,
+    context_id: &str,
+    intent: MailIntent,
+) -> MailSendRequest {
+    MailSendRequest {
+        to,
+        content: content.to_string(),
+        notify: None,
+        context_id: context_id.to_string(),
+        intent,
+        idempotency_key: None,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthorizationCall {
+    pub principal: Principal,
+    pub action: Action,
+    pub resource: ResourceSpec,
+}
+
+pub struct RecordingIdentityPort {
+    calls: Mutex<Vec<AuthorizationCall>>,
+    decisions: Mutex<VecDeque<Result<(), String>>>,
+}
+
+impl RecordingIdentityPort {
+    pub fn denying(message: &str) -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+            decisions: Mutex::new(VecDeque::from([Err(message.to_string())])),
+        }
+    }
+
+    pub fn with_decisions(decisions: impl IntoIterator<Item = Result<(), String>>) -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+            decisions: Mutex::new(VecDeque::from_iter(decisions)),
+        }
+    }
+
+    pub fn calls(&self) -> Vec<AuthorizationCall> {
+        self.calls.lock().or_panic("calls lock").clone()
+    }
+}
+
+impl IdentityPort for RecordingIdentityPort {
+    fn authorize<'a>(
+        &'a self,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        Box::pin(async move {
+            self.calls
+                .lock()
+                .or_panic("calls lock")
+                .push(AuthorizationCall {
+                    principal: principal.clone(),
+                    action,
+                    resource: resource.clone(),
+                });
+            match self.decisions.lock().or_panic("decisions lock").pop_front() {
+                Some(Err(message)) => Err(anyhow::anyhow!(message)),
+                _ => Ok(()),
+            }
+        })
+    }
+
+    fn authorize_in_tx<'a>(
+        &'a self,
+        _conn: &'a mut SqliteConnection,
+        principal: &'a Principal,
+        action: Action,
+        resource: &'a ResourceSpec,
+    ) -> IdentityPortFuture<'a, ()> {
+        self.authorize(principal, action, resource)
+    }
 }
 
 pub fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> (PathBuf, JoinHandle<()>) {

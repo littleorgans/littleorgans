@@ -1,23 +1,20 @@
 mod common;
 use common::OrPanic as _;
 
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use common::shared_test_support::assert_ordered_subsequence;
 use common::{
-    LOCAL_UID, TestDaemon, local_context, mail_count, spawn_test_session,
-    spawn_test_session_with_labels,
+    LOCAL_UID, RecordingIdentityPort, TestDaemon, local_context, mail_count, mail_request,
+    spawn_test_session, spawn_test_session_with_labels,
 };
-use lilo_im_core::{Action, AuditDecision, Principal, ResourceSpec};
+use lilo_im_core::{Action, AuditDecision, Principal};
 use lilo_session_core::{
     DeleteRequest, IsolationPolicy, Label, MailDeliveryStatus, MailIntent, MailReadRequest,
-    MailSendRequest, NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc,
-    SpawnRequest,
+    NudgeRequest, RpcResponse, RuntimeKind, Selector, SenderView, SessionRpc, SpawnRequest,
 };
 use lilo_session_daemon::handler::DaemonState;
-use lilo_session_daemon::identity_client::{IdentityPort, IdentityPortFuture, RequestContext};
-use sqlx::SqliteConnection;
+use lilo_session_daemon::identity_client::{IdentityPort, RequestContext};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -578,80 +575,5 @@ async fn send_read_nudge_delete(
     ] {
         let response = state.handle(local_context(), request).await.response;
         assert!(!matches!(response, RpcResponse::Error { .. }));
-    }
-}
-
-fn mail_request(
-    to: Selector,
-    content: &str,
-    context_id: &str,
-    intent: MailIntent,
-) -> MailSendRequest {
-    MailSendRequest {
-        to,
-        content: content.to_string(),
-        notify: None,
-        context_id: context_id.to_string(),
-        intent,
-        idempotency_key: None,
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct AuthorizationCall {
-    principal: Principal,
-    action: Action,
-    resource: ResourceSpec,
-}
-
-struct RecordingIdentityPort {
-    calls: Mutex<Vec<AuthorizationCall>>,
-    decisions: Mutex<VecDeque<Result<(), String>>>,
-}
-
-impl RecordingIdentityPort {
-    fn denying(message: &str) -> Self {
-        Self {
-            calls: Mutex::new(Vec::new()),
-            decisions: Mutex::new(VecDeque::from([Err(message.to_string())])),
-        }
-    }
-
-    fn calls(&self) -> Vec<AuthorizationCall> {
-        self.calls.lock().or_panic("calls lock").clone()
-    }
-}
-
-impl IdentityPort for RecordingIdentityPort {
-    fn authorize<'a>(
-        &'a self,
-        principal: &'a Principal,
-        action: Action,
-        resource: &'a ResourceSpec,
-    ) -> IdentityPortFuture<'a, ()> {
-        Box::pin(async move {
-            self.calls
-                .lock()
-                .or_panic("calls lock")
-                .push(AuthorizationCall {
-                    principal: principal.clone(),
-                    action,
-                    resource: resource.clone(),
-                });
-            match self.decisions.lock().or_panic("decisions lock").pop_front() {
-                Some(Err(message)) => Err(anyhow::anyhow!(message)),
-                _ => Ok(()),
-            }
-        })
-    }
-
-    fn authorize_in_tx<'a>(
-        &'a self,
-        _conn: &'a mut SqliteConnection,
-        principal: &'a Principal,
-        action: Action,
-        resource: &'a ResourceSpec,
-    ) -> IdentityPortFuture<'a, ()> {
-        self.authorize(principal, action, resource)
     }
 }
