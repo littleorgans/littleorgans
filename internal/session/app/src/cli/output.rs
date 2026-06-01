@@ -85,7 +85,15 @@ pub fn print_message_table(messages: &[MessageView]) {
     }
     let rows = messages.iter().map(message_row).collect::<Vec<_>>();
     print_table_with_details(
-        &["SENDER", "RECIPIENT", "CONTEXT", "INTENT", "STATUS", "AGE"],
+        &[
+            "SENDER",
+            "RECIPIENT",
+            "RECIPIENT-ID",
+            "CONTEXT",
+            "INTENT",
+            "STATUS",
+            "AGE",
+        ],
         &rows,
     );
 }
@@ -146,6 +154,7 @@ fn message_row(item: &MessageView) -> (Vec<String>, String) {
     let cells = vec![
         sender_display_label(&item.sender).to_string(),
         item.recipient.display_label.clone(),
+        item.recipient.session_id.to_string(),
         item.context_id.clone(),
         item.intent.to_string(),
         item.status.to_string(),
@@ -390,6 +399,44 @@ mod tests {
                 "reviewer   err   skipped  mail denied\n",
             )
         );
+    }
+
+    #[test]
+    fn message_row_places_recipient_session_id_after_recipient() {
+        use chrono::Utc;
+        use lilo_session_core::{
+            MailIntent, MailStatus, MessageView, Namespace, RecipientSummary, SenderView,
+        };
+        use uuid::Uuid;
+
+        let recipient_id = Uuid::from_u128(1);
+        let view = MessageView {
+            id: Uuid::from_u128(2),
+            content: "what are we working on?".to_string(),
+            sent_at: Utc::now(),
+            read_at: None,
+            status: MailStatus::Unread,
+            sender: SenderView::System,
+            recipient: RecipientSummary {
+                session_id: recipient_id,
+                role: "pm".to_string(),
+                display_label: "pm".to_string(),
+                namespace: Namespace::default(),
+            },
+            context_id: "testing".to_string(),
+            intent: MailIntent::Inform,
+        };
+
+        let (cells, _detail) = super::message_row(&view);
+
+        // Columns: SENDER, RECIPIENT, RECIPIENT-ID, CONTEXT, INTENT, STATUS, AGE
+        assert_eq!(cells[0], "system");
+        assert_eq!(cells[1], "pm");
+        assert_eq!(cells[2], recipient_id.to_string());
+        assert_eq!(cells[3], "testing");
+        assert_eq!(cells[4], "inform");
+        assert_eq!(cells[5], "unread");
+        assert_eq!(cells.len(), 7);
     }
 
     #[test]
