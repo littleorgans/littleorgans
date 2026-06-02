@@ -417,6 +417,44 @@ mod tests {
     }
 
     #[test]
+    fn runtime_operator_help_lists_raw_process_toolkit() {
+        let mut command = Cli::command();
+        let runtime = command
+            .find_subcommand_mut("runtime")
+            .expect("runtime subcommand exists");
+        let help = runtime.render_long_help().to_string();
+        let visible: Vec<_> = runtime
+            .get_subcommands()
+            .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
+            .map(clap::Command::get_name)
+            .collect();
+
+        assert_eq!(
+            visible,
+            [
+                "spawn",
+                "kill",
+                "nudge",
+                "capture",
+                "validate-target",
+                "status",
+                "events",
+            ]
+        );
+        for expected in [
+            "nudge            Deliver a nudge message to a running runtime session.",
+            "capture          Capture the pane snapshot for a runtime session.",
+            "validate-target  Validate a spawn target without starting a runtime.",
+            "events           Stream runtime lifecycle events.",
+        ] {
+            assert!(
+                help.contains(expected),
+                "missing runtime help: {expected}\n{help}"
+            );
+        }
+    }
+
+    #[test]
     fn output_flag_is_global_after_subcommands() {
         let cli = Cli::try_parse_from(["lilo", "doctor", "--output", "json"])
             .expect("parse doctor json output");

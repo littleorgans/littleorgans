@@ -17,6 +17,15 @@ pub mod status;
 pub mod validate_target;
 pub mod version;
 
+const SPAWN_ABOUT: &str = "Spawn a runtime process for a session.";
+const KILL_ABOUT: &str = "Signal a runtime session by id, or a process by pid.";
+const NUDGE_ABOUT: &str = "Deliver a nudge message to a running runtime session.";
+const NUDGE_AFTER_HELP: &str =
+    "Failure reasons: headless_lifecycle, session_ended, tmux_pane_dead.";
+const CAPTURE_ABOUT: &str = "Capture the pane snapshot for a runtime session.";
+const VALIDATE_TARGET_ABOUT: &str = "Validate a spawn target without starting a runtime.";
+const EVENTS_ABOUT: &str = "Stream runtime lifecycle events.";
+
 #[derive(Debug, Parser)]
 #[command(name = "rtm")]
 #[command(about = "runtime-matters host runtime control")]
@@ -28,18 +37,15 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    #[command(about = "Spawn a runtime process for a session.")]
+    #[command(about = SPAWN_ABOUT)]
     Spawn(spawn::SpawnArgs),
-    #[command(about = "Signal a runtime session by id, or a process by pid.")]
+    #[command(about = KILL_ABOUT)]
     Kill(kill::KillArgs),
-    #[command(
-        about = "Deliver a nudge message to a running runtime session.",
-        after_help = "Failure reasons: headless_lifecycle, session_ended, tmux_pane_dead."
-    )]
+    #[command(about = NUDGE_ABOUT, after_help = NUDGE_AFTER_HELP)]
     Nudge(nudge::NudgeArgs),
-    #[command(about = "Capture the pane snapshot for a runtime session.")]
+    #[command(about = CAPTURE_ABOUT)]
     Capture(capture::CaptureArgs),
-    #[command(about = "Validate a spawn target without starting a runtime.")]
+    #[command(about = VALIDATE_TARGET_ABOUT)]
     ValidateTarget(validate_target::ValidateTargetArgs),
     #[command(about = cli_help::STATUS_ABOUT)]
     Status(status::StatusArgs),
@@ -49,6 +55,7 @@ enum Command {
     Version(VersionArgs),
     #[command(about = "Print rtmd substrate health diagnostics.")]
     Doctor(DoctorArgs),
+    #[command(about = EVENTS_ABOUT)]
     Events(events::EventsArgs),
     Initdb,
     #[command(name = "__shim", hide = true)]
@@ -63,12 +70,19 @@ pub struct OperatorArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum OperatorCommand {
-    #[command(about = "Spawn a runtime process for a session.")]
+    #[command(about = SPAWN_ABOUT)]
     Spawn(spawn::SpawnArgs),
-    #[command(about = "Signal a runtime session by id, or a process by pid.")]
+    #[command(about = KILL_ABOUT)]
     Kill(kill::KillArgs),
+    #[command(about = NUDGE_ABOUT, after_help = NUDGE_AFTER_HELP)]
+    Nudge(nudge::NudgeArgs),
+    #[command(about = CAPTURE_ABOUT)]
+    Capture(capture::CaptureArgs),
+    #[command(about = VALIDATE_TARGET_ABOUT)]
+    ValidateTarget(validate_target::ValidateTargetArgs),
     #[command(about = cli_help::STATUS_ABOUT)]
     Status(status::StatusArgs),
+    #[command(about = EVENTS_ABOUT)]
     Events(events::EventsArgs),
 }
 
@@ -94,6 +108,9 @@ pub async fn run_operator(args: OperatorArgs) -> Result<()> {
     match args.command {
         OperatorCommand::Spawn(args) => spawn::run(args).await,
         OperatorCommand::Kill(args) => kill::run(args).await,
+        OperatorCommand::Nudge(args) => nudge::run(args).await,
+        OperatorCommand::Capture(args) => capture::run(args).await,
+        OperatorCommand::ValidateTarget(args) => validate_target::run(args).await,
         OperatorCommand::Status(args) => status::run(args).await,
         OperatorCommand::Events(args) => events::run(args).await,
     }
