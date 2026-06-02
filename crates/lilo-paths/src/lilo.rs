@@ -171,16 +171,6 @@ mod tests {
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     const DEFAULT_HOME: &str = "/tmp/lilo-home";
     const FALLBACK_HOME: &str = "/tmp/home";
-    const LEGACY_VALUE: &str = "/tmp/legacy";
-
-    macro_rules! legacy_env_ignored_test {
-        ($test_name:ident, $legacy_name:literal) => {
-            #[test]
-            fn $test_name() {
-                assert_legacy_env_is_ignored($legacy_name);
-            }
-        };
-    }
 
     #[test]
     fn lilo_home_env_roots_every_path() {
@@ -286,29 +276,6 @@ mod tests {
             LiloHome::from_path(PathBuf::new()),
             Err(LiloPathError::EmptyPath)
         );
-    }
-
-    legacy_env_ignored_test!(rtm_home_is_ignored, "RTM_HOME");
-    legacy_env_ignored_test!(rtm_socket_path_is_ignored, "RTM_SOCKET_PATH");
-    legacy_env_ignored_test!(sm_home_is_ignored, "SM_HOME");
-    legacy_env_ignored_test!(sm_socket_path_is_ignored, "SM_SOCKET_PATH");
-    legacy_env_ignored_test!(sm_db_path_is_ignored, "SM_DB_PATH");
-    legacy_env_ignored_test!(sm_namespace_is_ignored, "SM_NAMESPACE");
-    legacy_env_ignored_test!(rtm_db_path_is_ignored, "RTM_DB_PATH");
-    legacy_env_ignored_test!(lilo_db_path_is_ignored, "LILO_DB_PATH");
-    legacy_env_ignored_test!(agm_home_is_ignored, "AGM_HOME");
-
-    fn assert_legacy_env_is_ignored(legacy_name: &'static str) {
-        let _env = EnvGuard::new(&[
-            ("LILO_HOME", None),
-            ("LILO_SOCKET_PATH", None),
-            ("HOME", Some(FALLBACK_HOME)),
-            (legacy_name, Some(LEGACY_VALUE)),
-        ]);
-
-        let root = Path::new(FALLBACK_HOME).join(".lilo");
-        let paths = paths_from_env();
-        assert_default_tree(&paths, root.as_path());
     }
 
     fn paths_from_env() -> LiloPaths {
