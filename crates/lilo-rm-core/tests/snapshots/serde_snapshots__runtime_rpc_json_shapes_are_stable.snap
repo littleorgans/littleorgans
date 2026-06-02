@@ -1,6 +1,6 @@
 ---
-source: crates/rtm-core/tests/serde_snapshots.rs
-assertion_line: 106
+source: crates/lilo-rm-core/tests/serde_snapshots.rs
+assertion_line: 109
 expression: rpcs
 ---
 [
@@ -58,7 +58,8 @@ expression: rpcs
     "payload": {
       "request": {
         "session_id": "018f6e28-0000-7000-8000-000000000001",
-        "content": "wake up"
+        "content": "wake up",
+        "mode": "immediate"
       }
     }
   },

@@ -1,5 +1,5 @@
 use crate::common::{self, OrPanic as _};
-use crate::{assert_success, assert_table_contains, first_field, stdout};
+use crate::{assert_header_fields, assert_success, assert_table_contains, first_field, stdout};
 use serde_json::Value;
 
 #[test]
@@ -75,7 +75,19 @@ pub(crate) fn session_resources_list_and_get_by_id() {
         .or_panic("sm get session --show-labels executes");
     assert_success("sm get session --show-labels", &labeled_list);
     let labeled_stdout = stdout(&labeled_list);
-    assert!(labeled_stdout.starts_with("ID RUNTIME ROLE NAMESPACE DIR STATE PID TMUX LABELS"));
+    assert_header_fields(
+        &labeled_stdout,
+        &[
+            "ID",
+            "RUNTIME",
+            "NAMESPACE",
+            "ROLE",
+            "TMUX",
+            "STATUS",
+            "AGE",
+            "LABELS",
+        ],
+    );
     assert!(labeled_stdout.contains("area=get"));
 
     let json_list = daemon

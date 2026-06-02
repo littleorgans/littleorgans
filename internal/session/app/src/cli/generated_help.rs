@@ -63,20 +63,33 @@ pub const SESSION_LABEL_SELECTOR_HELP: &str = "Session selector used for matchin
 pub const SESSION_LABEL_MUTATION_HELP: &str = "Label mutation as key=value or key-.";
 
 #[rustfmt::skip]
-pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected sessions.";
+pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected running sessions.";
 #[rustfmt::skip]
-pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
-#[rustfmt::skip]
-pub const MAIL_SEND_FROM_HELP: &str = "Sender session id. Defaults to HELIOY_SESSION_ID when set.";
+pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching running sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
 pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
+#[rustfmt::skip]
+pub const MAIL_SEND_NOTIFY_HELP: &str = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.";
+#[rustfmt::skip]
+pub const MAIL_SEND_CONTEXT_ID_HELP: &str = "Conversation correlation tag.";
+#[rustfmt::skip]
+pub const MAIL_SEND_INTENT_HELP: &str = "Message intent tag: request, result, or inform.";
+#[rustfmt::skip]
+pub const MAIL_SEND_IDEMPOTENCY_KEY_HELP: &str = "Optional client idempotency key scoped to the derived sender.";
 
 #[rustfmt::skip]
-pub const MAIL_READ_ABOUT: &str = "Read unread mail for selected sessions.";
+pub const MAIL_READ_ABOUT: &str = "Read unread mail for the caller session.";
+
 #[rustfmt::skip]
-pub const MAIL_READ_SELECTOR_HELP: &str = "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+pub const MAIL_PEEK_ABOUT: &str = "List conversation context IDs, or peek at a filtered transcript without draining mail.";
 #[rustfmt::skip]
-pub const MAIL_READ_PEEK_HELP: &str = "Return unread mail without marking it read.";
+pub const MAIL_PEEK_CONTEXT_ID_HELP: &str = "Conversation context ID to inspect.";
+#[rustfmt::skip]
+pub const MAIL_PEEK_SELECTOR_HELP: &str = "Participant selector used for matching conversations or transcript messages.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+#[rustfmt::skip]
+pub const MAIL_PEEK_RECIPIENT_HELP: &str = "Recipient selector used for matching conversation mailboxes.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+#[rustfmt::skip]
+pub const MAIL_PEEK_INCLUDE_SYSTEM_HELP: &str = "Include system receipt metadata in the transcript.";
 
 #[rustfmt::skip]
 pub const MAIL_CHECK_ABOUT: &str = "Return unread mail count for selected sessions.";
@@ -87,6 +100,11 @@ pub const MAIL_CHECK_SELECTOR_HELP: &str = "Inbox owner selector used for matchi
 pub const MAIL_STOP_CHECK_ABOUT: &str = "Check unread mail for stop-hook decisions.";
 #[rustfmt::skip]
 pub const MAIL_STOP_CHECK_SELECTOR_HELP: &str = "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
+
+#[rustfmt::skip]
+pub const MAIL_TAIL_ABOUT: &str = "Follow the operator message transcript without draining mail.";
+#[rustfmt::skip]
+pub const MAIL_TAIL_ONCE_HELP: &str = "Return immediately after the current transcript batch.";
 
 #[rustfmt::skip]
 pub const NUDGE_ABOUT: &str = "Send an ephemeral nudge to selected sessions.";

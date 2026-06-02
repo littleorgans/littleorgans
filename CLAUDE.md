@@ -126,6 +126,27 @@ No automatic migration is promised from old local roots. Release notes may
 tell Stuart how to stop old daemons and start fresh, but code should not carry
 legacy path fallbacks.
 
+## Identifier format (open decision, not yet executed)
+
+Session, message, and event ids are `uuid::Uuid` v7 today: time-ordered and 36
+chars. Intent is to move id generation to uniform random (v4) so a short hex
+prefix discriminates like a git short SHA, letting commands reference a session
+by the shortest unambiguous prefix instead of the full 36 chars. This does not
+shrink the stored or wire key, which stays 128-bit and 36 chars; a physically
+shorter key would mean replacing the bare `Uuid` type with a compact
+`SessionId` newtype across the workspace (131 files reference `Uuid`, no newtype
+exists) and is out of scope for now.
+
+Work when executed: swap the production `Uuid::now_v7()` sites (session
+`handler/spawn.rs`, `handler/messaging.rs`, `events.rs`, `service.rs`, store
+`spawn_intents.rs`/`namespaces.rs`, `driver/conv.rs`; runtime
+`shim_socket.rs`; im-core `audit.rs`) to `new_v4()`, flip the workspace `uuid`
+feature from `v7` to `v4`, replace any reliance on chronological id ordering
+with explicit `created_at`/`sent_at` sorts, update the `assert_uuid_v7` test,
+and revise the UUIDv7 wording in the parent `littleorgans/CLAUDE.md` join-key
+line and the transport-matters spawn-id note above. Pairs with the short-id
+display and prefix selector on `lilo mail peek` / `lilo get session`.
+
 ## Engineering standards
 
 DRY is mandatory. Search before adding helpers, constants, types, modules, or

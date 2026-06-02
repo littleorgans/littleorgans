@@ -2,8 +2,8 @@ mod common;
 
 use common::OrPanic as _;
 use lilo_rm_core::{
-    NudgeFailureReason, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse,
-    RuntimeRpc, read_json_line, write_json_line,
+    NudgeFailureReason, NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse,
+    RuntimeResponse, RuntimeRpc, read_json_line, write_json_line,
 };
 use lilo_session_driver::RtmdDriver;
 use lilo_wire::LilodRpc;
@@ -17,7 +17,7 @@ async fn rtmd_nudge_maps_delivered_outcome() {
     let (driver, server) = mock_rtmd_nudge(session_id, NudgeOutcome::Delivered);
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello")
+        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate)
         .await
         .or_panic("nudge delegates to rtmd");
 
@@ -35,7 +35,7 @@ async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
     );
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello")
+        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate)
         .await
         .or_panic("failed nudge outcome remains a response");
 
@@ -58,6 +58,7 @@ fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> (RtmdDriver, Join
                 request: NudgeRequest {
                     session_id,
                     content: "hello".to_string(),
+                    mode: NudgeMode::Immediate,
                 },
             }
         );

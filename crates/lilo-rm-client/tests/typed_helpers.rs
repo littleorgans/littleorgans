@@ -7,9 +7,9 @@ use lilo_rm_core::{
     DockerIsolationStatus, DockerReadiness, DockerStatus, DoctorPayload, DoctorResponse, ErrorCode,
     EventBatch, EventsPayload, EventsRequest, HeadlessSpawnTarget, IsolationPolicy,
     KillByPidPayload, KillByPidRequest, KillByPidResponse, KillOutcome, KillRequest, KilledPayload,
-    Lifecycle, LifecycleCounts, MigrationState, NudgeFailureReason, NudgeOutcome, NudgePayload,
-    NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeKind, RuntimeResponse, RuntimeRpc,
-    RuntimeSignal, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, SpawnTarget,
+    Lifecycle, LifecycleCounts, MigrationState, NudgeFailureReason, NudgeMode, NudgeOutcome,
+    NudgePayload, NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeKind, RuntimeResponse,
+    RuntimeRpc, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     SpawnedPayload, StatusFilter, StatusPayload, ValidateTargetPayload, ValidateTargetRequest,
     ValidateTargetResponse, VersionInfo, VersionPayload, WatcherCounts,
 };
@@ -215,6 +215,7 @@ fn nudge_request() -> NudgeRequest {
     NudgeRequest {
         session_id: session_id(),
         content: "wake up".to_owned(),
+        mode: NudgeMode::Immediate,
     }
 }
 

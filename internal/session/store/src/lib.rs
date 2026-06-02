@@ -7,6 +7,6 @@ pub mod sqlite;
 mod test_support;
 
 pub use sqlite::{
-    PendingSpawnIntent, SessionDraft, SessionSpawnIntent, SpawnIntentError, SpawnIntentStatus,
-    SqliteStore,
+    MailWriteOutcome, PendingSpawnIntent, SessionDraft, SessionSpawnIntent, SpawnIntentError,
+    SpawnIntentStatus, SqliteStore,
 };

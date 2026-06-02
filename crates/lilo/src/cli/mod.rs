@@ -387,20 +387,6 @@ mod tests {
             (
                 &[
                     "lilo",
-                    "mail",
-                    "send",
-                    "--to",
-                    "abc",
-                    "--content",
-                    "hello",
-                    "--output",
-                    "json",
-                ],
-                "mail",
-            ),
-            (
-                &[
-                    "lilo",
                     "nudge",
                     "--to",
                     "abc",

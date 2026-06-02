@@ -28,11 +28,12 @@ pub use mcp::{
 };
 pub use paths::{DaemonEndpoint, LiloPathError, LiloPaths};
 pub use proto::{
-    CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest, DeleteResponse, DoctorFinding,
-    DoctorRequest, DoctorResponse, LabelRequest, LabelResponse, ListRequest, ListResponse,
-    LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse, MailReadRequest,
+    CallerContextRequest, CaptureRequest, CaptureResponse, DaemonStatus, DeleteRequest,
+    DeleteResponse, DoctorFinding, DoctorRequest, DoctorResponse, LabelRequest, LabelResponse,
+    ListRequest, ListResponse, LogsRequest, LogsResponse, MailCheckRequest, MailCheckResponse,
+    MailLogCursor, MailLogFilter, MailPeekRequest, MailPeekResponse, MailReadRequest,
     MailReadResponse, MailSendRequest, MailSendResponse, MailStopCheckRequest,
-    MailStopCheckResponse, MailUnreadCount, McpBridgeRequest, McpBridgeResponse,
+    MailStopCheckResponse, MailTailRequest, MailTailResponse, McpBridgeRequest, McpBridgeResponse,
     NamespaceCreateRequest, NamespaceCreateResponse, NamespaceDeleteRequest,
     NamespaceDeleteResponse, NamespaceGetRequest, NamespaceGetResponse, NamespaceListRequest,
     NamespaceListResponse, NudgeDelivery, NudgeRequest, NudgeResponse, RpcResponse,
@@ -40,7 +41,9 @@ pub use proto::{
     WaitCondition, WaitRequest, WaitResponse,
 };
 pub use types::{
-    Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailStatus,
-    NAMESPACE_MAX_LEN, Namespace, NamespaceError, NamespaceRecord, NamespaceScope,
-    RESERVED_NAMESPACE_PREFIX, RuntimeKind, Selector, Session, SessionState,
+    Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailCountView,
+    MailDeliveryStatus, MailIntent, MailNotifyMode, MailNotifyStatus, MailSendResult, MailStatus,
+    MessageView, NAMESPACE_MAX_LEN, Namespace, NamespaceError, NamespaceRecord, NamespaceScope,
+    RESERVED_NAMESPACE_PREFIX, RecipientSummary, RuntimeKind, Selector, SenderRef, SenderView,
+    Session, SessionState,
 };

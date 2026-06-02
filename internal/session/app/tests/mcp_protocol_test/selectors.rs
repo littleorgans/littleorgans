@@ -107,9 +107,36 @@ pub(crate) async fn session_tools_share_agent_handlers_and_namespace_read_scope(
     let implicit_alpha = call_tool(&mut caller_mcp, 10, "session_list", json!({}));
     assert_session_ids(&implicit_alpha, &[&caller, &alpha_peer]);
 
+    let mailed_alpha = call_tool(
+        &mut caller_mcp,
+        11,
+        "mail_send",
+        json!({
+            "to": "role:engineer",
+            "content": "alpha only",
+            "context_id": "scope-thread",
+            "intent": "inform"
+        }),
+    );
+    assert_mail_recipient_ids(&mailed_alpha, &[&alpha_peer]);
+
+    let mailed_all = call_tool(
+        &mut caller_mcp,
+        12,
+        "mail_send",
+        json!({
+            "to": "role:engineer",
+            "all_namespaces": true,
+            "content": "all",
+            "context_id": "scope-thread",
+            "intent": "inform"
+        }),
+    );
+    assert_mail_recipient_ids(&mailed_all, &[&alpha_peer, &beta_peer]);
+
     let nudged_alpha = call_tool(
         &mut mcp,
-        11,
+        13,
         "nudge",
         json!({ "to": "all", "namespace": "alpha", "content": "ping" }),
     );
@@ -117,9 +144,27 @@ pub(crate) async fn session_tools_share_agent_handlers_and_namespace_read_scope(
 
     let nudged_all = call_tool(
         &mut mcp,
-        12,
+        14,
         "nudge",
         json!({ "to": "all", "all_namespaces": true, "content": "ping" }),
     );
     assert_nudged_ids(&nudged_all, &[&caller, &alpha_peer, &beta_peer]);
+}
+
+fn assert_mail_recipient_ids(response: &serde_json::Value, expected: &[&str]) {
+    assert!(response["error"].is_null());
+    let mut actual = response["result"]["structuredContent"]["results"]
+        .as_array()
+        .or_panic("mail results is array")
+        .iter()
+        .filter_map(|result| result["message"]["recipient"]["session_id"].as_str())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let mut expected = expected
+        .iter()
+        .map(|value| (*value).to_string())
+        .collect::<Vec<_>>();
+    actual.sort();
+    expected.sort();
+    assert_eq!(actual, expected);
 }

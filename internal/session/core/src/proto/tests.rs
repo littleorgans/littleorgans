@@ -1,6 +1,10 @@
-use lilo_rm_core::{IsolationPolicy, MountSpec};
+use lilo_rm_core::{IsolationPolicy, MountSpec, NudgeMode};
 
-use super::{DeleteRequest, MailSendRequest, NudgeRequest, RpcResponse, SessionRpc, SpawnRequest};
+use super::{
+    CallerContextRequest, DeleteRequest, MailReadRequest, MailSendRequest, NudgeRequest,
+    RpcResponse, SessionRpc, SpawnRequest,
+};
+use crate::MailIntent;
 use crate::test_support::OrPanic as _;
 use crate::{RuntimeKind, Selector};
 
@@ -104,13 +108,30 @@ fn delete_request_round_trips_as_tagged_json() {
 fn mail_request_round_trips_as_tagged_json() {
     let request = SessionRpc::MailSend {
         request: MailSendRequest {
-            from: Some("019e32e3-0000-7000-8000-000000000000".to_string()),
             to: Selector::Id {
                 id: "019e32e3-0000-7000-8000-000000000001"
                     .parse()
                     .or_panic("expected value"),
             },
             content: "review the spec".to_string(),
+            notify: None,
+            context_id: "review-thread".to_string(),
+            intent: MailIntent::Request,
+            idempotency_key: Some("send-1".to_string()),
+        },
+    };
+
+    assert_rpc_round_trip(&request);
+}
+
+#[test]
+fn caller_context_request_round_trips_as_tagged_json() {
+    let request = SessionRpc::CallerContext {
+        request: CallerContextRequest {
+            caller_session_id: "019e32e3-0000-7000-8000-000000000002".to_string(),
+            request: Box::new(SessionRpc::MailRead {
+                request: MailReadRequest {},
+            }),
         },
     };
 
@@ -127,6 +148,7 @@ fn nudge_request_round_trips_as_tagged_json() {
                     .or_panic("expected value"),
             },
             content: "ping".to_string(),
+            mode: NudgeMode::Immediate,
         },
     };
 

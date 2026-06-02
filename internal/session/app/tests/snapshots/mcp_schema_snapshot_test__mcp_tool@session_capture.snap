@@ -1,6 +1,5 @@
 ---
 source: internal/session/app/tests/mcp_schema_snapshot_test.rs
-assertion_line: 8
 expression: tool
 ---
 {
@@ -9,7 +8,7 @@ expression: tool
     "additionalProperties": false,
     "properties": {
       "all_namespaces": {
-        "description": "Bypass namespace scoping and read across all namespaces.",
+        "description": "Bypass namespace scoping and match across all namespaces.",
         "type": "boolean"
       },
       "id": {
@@ -18,7 +17,7 @@ expression: tool
         "type": "string"
       },
       "namespace": {
-        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
         "type": "string"
       },
       "scrollback_lines": {

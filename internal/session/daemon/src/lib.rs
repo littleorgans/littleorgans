@@ -6,6 +6,7 @@ pub mod events;
 pub mod handler;
 pub mod identity_client;
 pub mod lifecycle;
+mod mail_safety;
 pub mod mcp_bridge;
 #[doc(hidden)]
 pub mod mcp_tools;

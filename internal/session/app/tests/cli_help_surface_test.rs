@@ -88,9 +88,9 @@ fn retained_leaf_commands_print_help_on_bare_invocation() {
         ["delete", "session"].as_slice(),
         ["delete", "namespace"].as_slice(),
         ["mail", "send"].as_slice(),
-        ["mail", "read"].as_slice(),
         ["mail", "check"].as_slice(),
         ["mail", "stop-check"].as_slice(),
+        ["mail", "tail"].as_slice(),
         ["label"].as_slice(),
         ["logs"].as_slice(),
         ["capture"].as_slice(),
@@ -197,6 +197,35 @@ fn capture_help_targets_one_session_id() {
     assert!(!stdout.contains("--json"), "{stdout}");
     assert!(!stdout.contains("--selector"), "{stdout}");
     assert!(!stdout.contains("role:<name>"), "{stdout}");
+}
+
+#[test]
+fn mail_help_matches_protocol_v1_surface() {
+    let send = help(&["mail", "send", "--help"]);
+    for expected in ["--notify", "--context-id", "--intent", "--idempotency-key"] {
+        assert!(
+            send.contains(expected),
+            "mail send help missing {expected:?}\n{send}"
+        );
+    }
+    assert!(!send.contains("--from"), "{send}");
+
+    let read = help(&["mail", "read", "--help"]);
+    assert!(!read.contains("--selector"), "{read}");
+    assert!(!read.contains("--peek"), "{read}");
+
+    let mail = help(&["mail", "--help"]);
+    assert!(mail.contains("peek"), "{mail}");
+    assert!(mail.contains("tail"), "{mail}");
+
+    let peek = help(&["mail", "peek", "--help"]);
+    assert!(peek.contains("--selector"), "{peek}");
+    assert!(peek.contains("--recipient"), "{peek}");
+    assert!(peek.contains("--include-system"), "{peek}");
+
+    let tail = help(&["mail", "tail", "--help"]);
+    assert!(tail.contains("--once"), "{tail}");
+    assert!(tail.contains("--context-id"), "{tail}");
 }
 
 #[test]
@@ -326,8 +355,10 @@ fn retained_help_nodes() -> Vec<&'static [&'static str]> {
         &["mail", "--help"],
         &["mail", "send", "--help"],
         &["mail", "read", "--help"],
+        &["mail", "peek", "--help"],
         &["mail", "check", "--help"],
         &["mail", "stop-check", "--help"],
+        &["mail", "tail", "--help"],
         &["label", "--help"],
         &["logs", "--help"],
         &["capture", "--help"],

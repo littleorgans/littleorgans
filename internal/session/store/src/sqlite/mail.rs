@@ -1,7 +1,10 @@
+use std::collections::BTreeSet;
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
-use lilo_session_core::Mail;
-use sqlx::Row;
+use lilo_session_core::{Mail, MailIntent, MailStatus, SenderRef, SmError};
 use sqlx::sqlite::SqliteRow;
+use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -16,30 +19,89 @@ pub enum MailRowError {
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
     Uuid(#[from] uuid::Error),
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
+    Session(#[from] SmError),
     #[error("{field} out of range: {value}")]
     IntegerOutOfRange { field: &'static str, value: i64 },
+    #[error("idempotency key {key} conflicts with existing mail")]
+    IdempotencyConflict { key: String },
 }
 
 impl SqliteStore {
-    pub async fn insert_mail(&self, mail: &Mail) -> Result<(), MailRowError> {
-        sqlx::query(
-            "INSERT INTO session_mail (id, sender_id, recipient_id, content, sent_at, read_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(mail.id.to_string())
-        .bind(mail.sender_id.to_string())
-        .bind(mail.recipient_id.to_string())
-        .bind(&mail.content)
-        .bind(mail.sent_at.to_rfc3339())
-        .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+    pub async fn insert_mail(&self, mail: &Mail) -> Result<Mail, MailRowError> {
+        let mut inserted = self
+            .insert_mail_for_recipients(mail, &[mail.recipient_id])
+            .await?;
+        Ok(inserted.remove(0))
+    }
+
+    pub async fn insert_mail_for_recipients(
+        &self,
+        mail: &Mail,
+        recipient_ids: &[Uuid],
+    ) -> Result<Vec<Mail>, MailRowError> {
+        Ok(self
+            .insert_mail_for_recipients_with_outcome(mail, recipient_ids)
+            .await?
+            .mail)
+    }
+
+    pub async fn insert_mail_for_recipients_with_outcome(
+        &self,
+        mail: &Mail,
+        recipient_ids: &[Uuid],
+    ) -> Result<MailWriteOutcome, MailRowError> {
+        if recipient_ids.is_empty() {
+            return Ok(MailWriteOutcome {
+                mail: Vec::new(),
+                inserted: false,
+            });
+        }
+        let sender_ref = serde_json::to_string(&mail.sender)?;
+        let mut transaction = self.pool.begin().await?;
+        if let Some(replay) =
+            load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?
+        {
+            transaction.commit().await?;
+            return Ok(MailWriteOutcome {
+                mail: replay,
+                inserted: false,
+            });
+        }
+        insert_message(&mut transaction, mail, &sender_ref).await?;
+        insert_deliveries(&mut transaction, mail, recipient_ids).await?;
+        let outcome = MailWriteOutcome {
+            mail: mail_for_recipients(mail, recipient_ids),
+            inserted: true,
+        };
+        transaction.commit().await?;
+        Ok(outcome)
+    }
+
+    pub async fn idempotent_mail_for_recipients(
+        &self,
+        mail: &Mail,
+        recipient_ids: &[Uuid],
+    ) -> Result<Option<Vec<Mail>>, MailRowError> {
+        if recipient_ids.is_empty() || mail.idempotency_key.is_none() {
+            return Ok(None);
+        }
+        let sender_ref = serde_json::to_string(&mail.sender)?;
+        let mut transaction = self.pool.begin().await?;
+        let replay =
+            load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?;
+        transaction.commit().await?;
+        Ok(replay)
     }
 
     pub async fn count_unread_mail(&self, recipient_id: &Uuid) -> Result<usize, MailRowError> {
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_mail WHERE recipient_id = ? AND read_at IS NULL",
+            "SELECT COUNT(*)
+             FROM message_deliveries
+             WHERE recipient_session_id = ?
+               AND status = 'unread'",
         )
         .bind(recipient_id.to_string())
         .fetch_one(&self.pool)
@@ -53,158 +115,441 @@ impl SqliteStore {
         read_at: DateTime<Utc>,
         peek: bool,
     ) -> Result<Vec<Mail>, MailRowError> {
-        let mail = self.list_unread_mail(recipient_id).await?;
-        if !peek && !mail.is_empty() {
-            let mut tx = self.pool.begin().await?;
-            for item in &mail {
-                sqlx::query("UPDATE session_mail SET read_at = ? WHERE id = ? AND read_at IS NULL")
-                    .bind(read_at.to_rfc3339())
-                    .bind(item.id.to_string())
-                    .execute(&mut *tx)
-                    .await?;
-            }
-            tx.commit().await?;
+        if peek {
+            return fetch_unread(&self.pool, recipient_id).await;
+        }
+
+        let mut transaction = self.pool.begin().await?;
+        let mut mail = fetch_unread(&mut *transaction, recipient_id).await?;
+        for item in &mail {
+            sqlx::query(
+                "UPDATE message_deliveries
+                 SET status = 'read', read_at = ?
+                 WHERE message_id = ?
+                   AND recipient_session_id = ?
+                   AND status = 'unread'",
+            )
+            .bind(read_at.to_rfc3339())
+            .bind(item.id.to_string())
+            .bind(recipient_id.to_string())
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
+        for item in &mut mail {
+            item.read_at = Some(read_at);
         }
         Ok(mail)
     }
 
-    async fn list_unread_mail(&self, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError> {
-        self.query_mail(
-            "SELECT * FROM session_mail
-             WHERE recipient_id = ? AND read_at IS NULL
-             ORDER BY sent_at",
-            [recipient_id.to_string()],
+    pub async fn count_conversation_depth(&self, context_id: &str) -> Result<usize, MailRowError> {
+        count_query(
+            self.pool(),
+            "SELECT COUNT(*)
+             FROM messages
+             WHERE context_id = ?
+               AND intent != 'receipt'",
+            [context_id.to_string()],
+            "conversation_depth",
         )
         .await
     }
 
-    async fn query_mail<const N: usize>(
+    pub async fn count_sender_rate_since(
         &self,
-        sql: &str,
-        params: [String; N],
+        sender: &SenderRef,
+        since: DateTime<Utc>,
+    ) -> Result<usize, MailRowError> {
+        count_query(
+            self.pool(),
+            "SELECT COUNT(*)
+             FROM messages
+             WHERE sender_ref = ?
+               AND intent != 'receipt'
+               AND sent_at >= ?",
+            [serde_json::to_string(sender)?, since.to_rfc3339()],
+            "sender_rate",
+        )
+        .await
+    }
+
+    pub async fn list_message_log(
+        &self,
+        context_id: Option<&str>,
+        participant_ids: Option<&[Uuid]>,
+        recipient_ids: Option<&[Uuid]>,
+        include_system: bool,
+        after: Option<(&DateTime<Utc>, &Uuid)>,
     ) -> Result<Vec<Mail>, MailRowError> {
-        let mut query = sqlx::query(sql);
-        for param in params {
-            query = query.bind(param);
+        if participant_ids.is_some_and(<[Uuid]>::is_empty)
+            || recipient_ids.is_some_and(<[Uuid]>::is_empty)
+        {
+            return Ok(Vec::new());
         }
-        let rows = query.fetch_all(&self.pool).await?;
+
+        let sender_refs = participant_sender_refs(participant_ids)?;
+        let mut query = QueryBuilder::<Sqlite>::new(MESSAGE_LOG_SELECT_SQL);
+        if let Some(context_id) = context_id {
+            query.push(" AND m.context_id = ");
+            query.push_bind(context_id);
+        }
+        if !include_system {
+            query.push(" AND m.intent != 'receipt'");
+        }
+        if let Some(participant_ids) = participant_ids {
+            query.push(" AND (d.recipient_session_id IN (");
+            push_uuid_binds(&mut query, participant_ids);
+            query.push(") OR m.sender_ref IN (");
+            push_string_binds(&mut query, &sender_refs);
+            query.push("))");
+        }
+        if let Some(recipient_ids) = recipient_ids {
+            query.push(" AND d.recipient_session_id IN (");
+            push_uuid_binds(&mut query, recipient_ids);
+            query.push(")");
+        }
+        if let Some((sent_at, message_id)) = after {
+            let sent_at = sent_at.to_rfc3339();
+            query.push(" AND (m.sent_at > ");
+            query.push_bind(sent_at.clone());
+            query.push(" OR (m.sent_at = ");
+            query.push_bind(sent_at);
+            query.push(" AND m.message_id > ");
+            query.push_bind(message_id.to_string());
+            query.push("))");
+        }
+        query.push(" ORDER BY m.sent_at, m.message_id, d.recipient_session_id");
+
+        let rows = query.build().fetch_all(&self.pool).await?;
         rows.iter().map(mail_from_row).collect()
     }
+}
+
+pub struct MailWriteOutcome {
+    pub mail: Vec<Mail>,
+    pub inserted: bool,
+}
+
+async fn insert_message(
+    transaction: &mut Transaction<'_, Sqlite>,
+    mail: &Mail,
+    sender_ref: &str,
+) -> Result<(), MailRowError> {
+    sqlx::query(
+        "INSERT INTO messages
+         (message_id, sender_ref, context_id, intent, idempotency_key, content, sent_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(mail.id.to_string())
+    .bind(sender_ref)
+    .bind(&mail.context_id)
+    .bind(mail.intent.to_string())
+    .bind(&mail.idempotency_key)
+    .bind(&mail.content)
+    .bind(mail.sent_at.to_rfc3339())
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+async fn insert_deliveries(
+    transaction: &mut Transaction<'_, Sqlite>,
+    mail: &Mail,
+    recipient_ids: &[Uuid],
+) -> Result<(), MailRowError> {
+    for recipient_id in recipient_ids {
+        sqlx::query(
+            "INSERT INTO message_deliveries
+             (message_id, recipient_session_id, status, read_at)
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(mail.id.to_string())
+        .bind(recipient_id.to_string())
+        .bind(mail.status.to_string())
+        .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
+        .execute(&mut **transaction)
+        .await?;
+    }
+    Ok(())
 }
 
 fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
     Ok(Mail {
         id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
-        sender_id: Uuid::parse_str(&row.try_get::<String, _>("sender_id")?)?,
+        sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
         recipient_id: Uuid::parse_str(&row.try_get::<String, _>("recipient_id")?)?,
         content: row.try_get("content")?,
         sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
         read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
+        status: MailStatus::from_str(&row.try_get::<String, _>("status")?)?,
+        context_id: row.try_get("context_id")?,
+        intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
+        idempotency_key: row.try_get("idempotency_key")?,
     })
+}
+
+#[derive(Clone)]
+struct StoredMessage {
+    id: Uuid,
+    sender: SenderRef,
+    content: String,
+    sent_at: DateTime<Utc>,
+    context_id: String,
+    intent: MailIntent,
+    idempotency_key: Option<String>,
+}
+
+impl StoredMessage {
+    fn to_mail(
+        &self,
+        recipient_id: Uuid,
+        read_at: Option<DateTime<Utc>>,
+        status: MailStatus,
+    ) -> Mail {
+        Mail {
+            id: self.id,
+            sender: self.sender.clone(),
+            recipient_id,
+            content: self.content.clone(),
+            sent_at: self.sent_at,
+            read_at,
+            status,
+            context_id: self.context_id.clone(),
+            intent: self.intent,
+            idempotency_key: self.idempotency_key.clone(),
+        }
+    }
+}
+
+async fn load_idempotent_replay(
+    transaction: &mut Transaction<'_, Sqlite>,
+    sender_ref: &str,
+    mail: &Mail,
+    recipient_ids: &[Uuid],
+) -> Result<Option<Vec<Mail>>, MailRowError> {
+    let Some(key) = &mail.idempotency_key else {
+        return Ok(None);
+    };
+    let Some(existing) = message_by_idempotency(transaction, sender_ref, key).await? else {
+        return Ok(None);
+    };
+    validate_idempotent_replay(transaction, &existing, mail, recipient_ids).await?;
+    Ok(Some(
+        load_message_deliveries(transaction, &existing, recipient_ids).await?,
+    ))
+}
+
+async fn message_by_idempotency(
+    transaction: &mut Transaction<'_, Sqlite>,
+    sender_ref: &str,
+    key: &str,
+) -> Result<Option<StoredMessage>, MailRowError> {
+    sqlx::query(
+        "SELECT message_id AS id, sender_ref, content, sent_at, context_id, intent, idempotency_key
+         FROM messages
+         WHERE sender_ref = ?
+           AND idempotency_key = ?",
+    )
+    .bind(sender_ref)
+    .bind(key)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .map(|row| stored_message_from_row(&row))
+    .transpose()
+}
+
+async fn validate_idempotent_replay(
+    transaction: &mut Transaction<'_, Sqlite>,
+    existing: &StoredMessage,
+    mail: &Mail,
+    recipient_ids: &[Uuid],
+) -> Result<(), MailRowError> {
+    let key = mail.idempotency_key.clone().unwrap_or_default();
+    let matches_message = existing.sender == mail.sender
+        && existing.content == mail.content
+        && existing.context_id == mail.context_id
+        && existing.intent == mail.intent
+        && existing.idempotency_key == mail.idempotency_key;
+    if !matches_message {
+        return Err(MailRowError::IdempotencyConflict { key });
+    }
+    let existing_recipients = recipient_set_for_message(transaction, &existing.id).await?;
+    if existing_recipients != recipient_set(recipient_ids) {
+        return Err(MailRowError::IdempotencyConflict { key });
+    }
+    Ok(())
+}
+
+async fn recipient_set_for_message(
+    transaction: &mut Transaction<'_, Sqlite>,
+    message_id: &Uuid,
+) -> Result<BTreeSet<String>, MailRowError> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT recipient_session_id
+         FROM message_deliveries
+         WHERE message_id = ?",
+    )
+    .bind(message_id.to_string())
+    .fetch_all(&mut **transaction)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+fn recipient_set(recipient_ids: &[Uuid]) -> BTreeSet<String> {
+    recipient_ids.iter().map(Uuid::to_string).collect()
+}
+
+async fn load_message_deliveries(
+    transaction: &mut Transaction<'_, Sqlite>,
+    message: &StoredMessage,
+    recipient_ids: &[Uuid],
+) -> Result<Vec<Mail>, MailRowError> {
+    let mut mail = Vec::new();
+    for recipient_id in recipient_ids {
+        let row = sqlx::query(
+            "SELECT read_at, status
+             FROM message_deliveries
+             WHERE message_id = ?
+               AND recipient_session_id = ?",
+        )
+        .bind(message.id.to_string())
+        .bind(recipient_id.to_string())
+        .fetch_one(&mut **transaction)
+        .await?;
+        let read_at = parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?;
+        let status = MailStatus::from_str(&row.try_get::<String, _>("status")?)?;
+        mail.push(message.to_mail(*recipient_id, read_at, status));
+    }
+    Ok(mail)
+}
+
+fn mail_for_recipients(mail: &Mail, recipient_ids: &[Uuid]) -> Vec<Mail> {
+    recipient_ids
+        .iter()
+        .map(|recipient_id| Mail {
+            recipient_id: *recipient_id,
+            ..mail.clone()
+        })
+        .collect()
+}
+
+/// Mark every unread delivery addressed to `recipient_id` as undeliverable.
+/// Called when a recipient session reaches a terminal state (terminated or
+/// lost) and can no longer read its mail, so the unread count stays honest
+/// while the transcript still shows the dropped delivery. Read deliveries are
+/// left untouched.
+pub(super) async fn mark_unread_undeliverable<'e, E>(
+    executor: E,
+    recipient_id: &Uuid,
+) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    sqlx::query(
+        "UPDATE message_deliveries
+         SET status = 'undeliverable'
+         WHERE recipient_session_id = ?
+           AND status = 'unread'",
+    )
+    .bind(recipient_id.to_string())
+    .execute(executor)
+    .await?;
+    Ok(())
+}
+
+async fn fetch_unread<'e, E>(executor: E, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    let rows = sqlx::query(UNREAD_MAIL_SQL)
+        .bind(recipient_id.to_string())
+        .fetch_all(executor)
+        .await?;
+    rows.iter().map(mail_from_row).collect()
+}
+
+const UNREAD_MAIL_SQL: &str = "
+    SELECT m.message_id AS id,
+           m.sender_ref,
+           d.recipient_session_id AS recipient_id,
+           m.content,
+           m.sent_at,
+           d.read_at,
+           d.status,
+           m.context_id,
+           m.intent,
+           m.idempotency_key
+    FROM message_deliveries d
+    JOIN messages m ON m.message_id = d.message_id
+    WHERE d.recipient_session_id = ?
+      AND d.status = 'unread'
+    ORDER BY m.sent_at, m.message_id
+";
+
+const MESSAGE_LOG_SELECT_SQL: &str = "
+    SELECT m.message_id AS id,
+           m.sender_ref,
+           d.recipient_session_id AS recipient_id,
+           m.content,
+           m.sent_at,
+           d.read_at,
+           d.status,
+           m.context_id,
+           m.intent,
+           m.idempotency_key
+    FROM messages m
+    JOIN message_deliveries d ON d.message_id = m.message_id
+    WHERE 1 = 1
+";
+
+fn stored_message_from_row(row: &SqliteRow) -> Result<StoredMessage, MailRowError> {
+    Ok(StoredMessage {
+        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
+        content: row.try_get("content")?,
+        sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
+        context_id: row.try_get("context_id")?,
+        intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
+        idempotency_key: row.try_get("idempotency_key")?,
+    })
+}
+
+async fn count_query<const N: usize>(
+    pool: &sqlx::SqlitePool,
+    sql: &str,
+    params: [String; N],
+    field: &'static str,
+) -> Result<usize, MailRowError> {
+    let mut query = sqlx::query_scalar::<_, i64>(sql);
+    for param in params {
+        query = query.bind(param);
+    }
+    let count = query.fetch_one(pool).await?;
+    usize::try_from(count).map_err(|_| integer_out_of_range(field, count))
 }
 
 fn integer_out_of_range(field: &'static str, value: i64) -> MailRowError {
     MailRowError::IntegerOutOfRange { field, value }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::test_support::OrPanic as _;
-    use chrono::Utc;
+fn participant_sender_refs(participant_ids: Option<&[Uuid]>) -> Result<Vec<String>, MailRowError> {
+    participant_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|id| serde_json::to_string(&SenderRef::session(*id)).map_err(Into::into))
+        .collect()
+}
 
-    use super::*;
-
-    #[tokio::test]
-    async fn mail_round_trip_marks_read() {
-        let (_dir, store) = SqliteStore::open_temp().await;
-        let now = Utc::now();
-        let mail = Mail {
-            id: Uuid::now_v7(),
-            sender_id: Uuid::now_v7(),
-            recipient_id: Uuid::now_v7(),
-            content: "review the spec".to_string(),
-            sent_at: now,
-            read_at: None,
-        };
-
-        store.insert_mail(&mail).await.or_panic("mail inserts");
-
-        assert_eq!(
-            store
-                .count_unread_mail(&mail.recipient_id)
-                .await
-                .or_panic("unread count"),
-            1
-        );
-        assert_eq!(
-            store
-                .read_unread_mail(&mail.recipient_id, Utc::now(), false)
-                .await
-                .or_panic("mail reads"),
-            vec![mail.clone()]
-        );
-        assert_eq!(
-            store
-                .count_unread_mail(&mail.recipient_id)
-                .await
-                .or_panic("unread count"),
-            0
-        );
+fn push_uuid_binds(query: &mut QueryBuilder<'_, Sqlite>, ids: &[Uuid]) {
+    let mut separated = query.separated(", ");
+    for id in ids {
+        separated.push_bind(id.to_string());
     }
+}
 
-    #[tokio::test]
-    async fn peek_keeps_mail_unread() {
-        let (_dir, store) = SqliteStore::open_temp().await;
-        let mail = Mail {
-            id: Uuid::now_v7(),
-            sender_id: Uuid::now_v7(),
-            recipient_id: Uuid::now_v7(),
-            content: "review the spec".to_string(),
-            sent_at: Utc::now(),
-            read_at: None,
-        };
-
-        store.insert_mail(&mail).await.or_panic("mail inserts");
-        let read = store
-            .read_unread_mail(&mail.recipient_id, Utc::now(), true)
-            .await
-            .or_panic("mail peeks");
-
-        assert_eq!(read, vec![mail.clone()]);
-        assert_eq!(
-            store
-                .count_unread_mail(&mail.recipient_id)
-                .await
-                .or_panic("unread count"),
-            1
-        );
-    }
-
-    #[tokio::test]
-    async fn unread_count_stays_fast_on_populated_mail_table() {
-        let (_dir, store) = SqliteStore::open_temp().await;
-        let recipient_id = Uuid::now_v7();
-        for index in 0..1_000 {
-            store
-                .insert_mail(&Mail {
-                    id: Uuid::now_v7(),
-                    sender_id: Uuid::now_v7(),
-                    recipient_id,
-                    content: format!("message {index}"),
-                    sent_at: Utc::now(),
-                    read_at: None,
-                })
-                .await
-                .or_panic("mail inserts");
-        }
-
-        let started = std::time::Instant::now();
-        let unread = store
-            .count_unread_mail(&recipient_id)
-            .await
-            .or_panic("unread count");
-
-        assert_eq!(unread, 1_000);
-        assert!(started.elapsed() < std::time::Duration::from_millis(100));
+fn push_string_binds<'q>(query: &mut QueryBuilder<'q, Sqlite>, values: &'q [String]) {
+    let mut separated = query.separated(", ");
+    for value in values {
+        separated.push_bind(value);
     }
 }

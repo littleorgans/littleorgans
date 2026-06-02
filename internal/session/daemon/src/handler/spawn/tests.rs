@@ -297,7 +297,12 @@ impl RuntimePort for StaticStatusRuntimePort {
         })
     }
 
-    fn nudge<'a>(&'a self, _session_id: &'a str, _content: &'a str) -> PortFuture<'a, NudgeResult> {
+    fn nudge<'a>(
+        &'a self,
+        _session_id: &'a str,
+        _content: &'a str,
+        _mode: lilo_rm_core::NudgeMode,
+    ) -> PortFuture<'a, NudgeResult> {
         unsupported_port_call("nudge")
     }
 

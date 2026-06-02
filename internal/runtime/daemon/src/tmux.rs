@@ -1,5 +1,7 @@
 use anyhow::{Context, Result, bail};
-use lilo_rm_core::{CaptureError, LaunchEnv, PaneSnapshot, TmuxAddress, strip_ansi_escapes};
+use lilo_rm_core::{
+    CaptureError, LaunchEnv, NudgeMode, PaneSnapshot, RuntimeKind, TmuxAddress, strip_ansi_escapes,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
@@ -20,14 +22,10 @@ impl TmuxGateway {
         server_label: Option<&str>,
         tmux_pane: &TmuxAddress,
         content: &str,
-    ) -> Result<bool> {
-        if !Self::is_alive(server_label, tmux_pane).await? {
-            return Ok(false);
-        }
-        for trailing in build_nudge_send_keys_steps(content) {
-            send_keys(server_label, tmux_pane, &trailing).await?;
-        }
-        Ok(true)
+        mode: NudgeMode,
+        runtime: &RuntimeKind,
+    ) -> Result<crate::tmux_nudge::NudgeSendOutcome> {
+        crate::tmux_nudge::nudge(server_label, tmux_pane, content, mode, runtime).await
     }
 
     pub async fn respawn_pane(
@@ -180,7 +178,7 @@ async fn tmux_history_output(
     })
 }
 
-async fn send_keys(
+pub(crate) async fn send_keys(
     server_label: Option<&str>,
     tmux_pane: &TmuxAddress,
     trailing: &[String],
@@ -192,6 +190,34 @@ async fn send_keys(
         .await?
         .context("tmux is not installed")?;
     ensure_success(&output, "tmux send-keys").map(|_| ())
+}
+
+/// Whether the pane is currently in a tmux mode (copy-mode/view-mode). Keys
+/// sent to a pane in such a mode are consumed by the mode key table instead of
+/// reaching the running agent, so a nudge must exit the mode before typing.
+pub(crate) async fn pane_in_mode(
+    server_label: Option<&str>,
+    tmux_pane: &TmuxAddress,
+) -> Result<bool> {
+    let target = tmux_pane.to_string();
+    let output = tmux_output_owned_with_label(
+        server_label,
+        vec![
+            "display-message".to_owned(),
+            "-t".to_owned(),
+            target,
+            "-p".to_owned(),
+            "#{pane_in_mode}".to_owned(),
+        ],
+    )
+    .await?
+    .context("tmux is not installed")?;
+    Ok(ensure_success(&output, "tmux display-message")?.trim() == "1")
+}
+
+/// The send-keys trailer that exits any active tmux mode for a pane.
+pub(crate) fn copy_mode_cancel_step() -> [String; 2] {
+    ["-X".to_owned(), "cancel".to_owned()]
 }
 
 async fn tmux_output_owned(args: Vec<String>) -> Result<Option<std::process::Output>> {
@@ -253,7 +279,7 @@ fn unix_epoch_ms() -> u64 {
 /// mode does not eat shell metacharacters, then a hex CR (`0d`) to flush any
 /// terminal paste buffer, then a real `Enter` to submit. Without the final
 /// `Enter`, agents like Claude Code see the payload typed but never submitted.
-fn build_nudge_send_keys_steps(content: &str) -> [Vec<String>; 3] {
+pub(crate) fn build_nudge_send_keys_steps(content: &str) -> [Vec<String>; 3] {
     [
         vec!["-l".to_owned(), content.to_owned()],
         vec!["-H".to_owned(), "0d".to_owned()],
@@ -343,6 +369,16 @@ mod tests {
         assert_eq!(steps[0], vec!["-l".to_owned(), "hello world".to_owned()]);
         assert_eq!(steps[1], vec!["-H".to_owned(), "0d".to_owned()]);
         assert_eq!(steps[2], vec!["Enter".to_owned()]);
+    }
+
+    #[test]
+    fn copy_mode_cancel_step_exits_the_mode() {
+        // Guard sent before the nudge payload when a pane is parked in
+        // copy-mode, so keystrokes reach the agent instead of the mode table.
+        assert_eq!(
+            copy_mode_cancel_step(),
+            ["-X".to_owned(), "cancel".to_owned()]
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ pub use lifecycle::{
     Lifecycle, LifecycleState, LostEvidence, RuntimeEvent, RuntimeExit, ShimExit,
     ShimLaunchRequest, ShimReady, TerminationEvidence,
 };
-pub use nudge::{NudgeFailureReason, NudgeOutcome, NudgeRequest, NudgeResponse};
+pub use nudge::{NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, NudgeResponse};
 pub use runtime::{RuntimeKind, RuntimeSignal, RuntimeSignalParseError};
 pub use spawn::{
     HeadlessSpawnTarget, KillRequest, MountSpec, MountSpecParseError, SpawnRequest, SpawnTarget,

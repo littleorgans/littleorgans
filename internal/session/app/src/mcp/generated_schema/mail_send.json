@@ -1,24 +1,55 @@
 {
-  "description": "Send durable mail to sessions selected by selector.",
+  "description": "Send durable mail to running sessions selected by selector.",
   "inputSchema": {
     "additionalProperties": false,
     "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and match across all namespaces.",
+        "type": "boolean"
+      },
       "content": {
         "description": "Message content.",
         "type": "string"
       },
-      "from": {
-        "description": "Sender session id. Defaults to HELIOY_SESSION_ID when set; otherwise lilod records the controller sender.",
+      "context_id": {
+        "description": "Conversation correlation tag.",
+        "type": "string"
+      },
+      "idempotency_key": {
+        "description": "Optional client idempotency key scoped to the derived sender.",
+        "type": "string"
+      },
+      "intent": {
+        "description": "Message intent tag. Receipt is reserved for daemon system messages.",
+        "enum": [
+          "request",
+          "result",
+          "inform"
+        ],
+        "type": "string"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "notify": {
+        "description": "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.",
+        "enum": [
+          "wait",
+          "steer"
+        ],
         "type": "string"
       },
       "to": {
-        "description": "Recipient selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "description": "Recipient selector used for matching running sessions.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
         "type": "string"
       }
     },
     "required": [
       "to",
-      "content"
+      "content",
+      "context_id",
+      "intent"
     ],
     "type": "object"
   },
@@ -31,7 +62,7 @@
         },
         "type": "array"
       },
-      "mail": {
+      "results": {
         "items": {
           "type": "object"
         },
@@ -39,7 +70,7 @@
       }
     },
     "required": [
-      "mail"
+      "results"
     ],
     "type": "object"
   }

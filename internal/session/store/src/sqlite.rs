@@ -1,6 +1,8 @@
 mod events;
 mod labels;
 mod mail;
+#[cfg(test)]
+mod mail_tests;
 mod namespaces;
 mod sessions;
 mod spawn_intents;
@@ -11,7 +13,7 @@ mod time;
 use lilo_db::LiloDb;
 use sqlx::SqlitePool;
 
-pub use mail::MailRowError;
+pub use mail::{MailRowError, MailWriteOutcome};
 pub use namespaces::{NamespaceRecord, NamespaceRowError, SessionNamespace};
 pub use sessions::SessionRowError;
 pub use spawn_intents::{

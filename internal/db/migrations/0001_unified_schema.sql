@@ -47,17 +47,39 @@ CREATE TABLE session_namespaces (
 INSERT INTO session_namespaces (slug, created_at)
 VALUES ('default', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
-CREATE TABLE session_mail (
-    id TEXT PRIMARY KEY NOT NULL,
-    sender_id TEXT NOT NULL,
-    recipient_id TEXT NOT NULL,
+CREATE TABLE messages (
+    message_id TEXT PRIMARY KEY NOT NULL,
+    sender_ref TEXT NOT NULL,
+    context_id TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    idempotency_key TEXT,
     content TEXT NOT NULL,
-    sent_at TEXT NOT NULL,
-    read_at TEXT
+    sent_at TEXT NOT NULL
 );
 
-CREATE INDEX idx_session_mail_recipient_unread
-    ON session_mail(recipient_id, read_at, sent_at);
+CREATE UNIQUE INDEX idx_messages_sender_idempotency
+    ON messages(sender_ref, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+CREATE INDEX idx_messages_context_sent
+    ON messages(context_id, sent_at, message_id);
+
+CREATE INDEX idx_messages_sender_sent
+    ON messages(sender_ref, sent_at, message_id);
+
+CREATE TABLE message_deliveries (
+    message_id TEXT NOT NULL,
+    recipient_session_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('unread', 'read', 'undeliverable')),
+    read_at TEXT,
+    PRIMARY KEY (message_id, recipient_session_id)
+);
+
+CREATE INDEX idx_message_deliveries_recipient_unread
+    ON message_deliveries(recipient_session_id, status, read_at, message_id);
+
+CREATE INDEX idx_message_deliveries_message
+    ON message_deliveries(message_id);
 
 CREATE TABLE session_labels (
     session_id TEXT NOT NULL,

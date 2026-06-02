@@ -11,19 +11,32 @@ use super::{DaemonState, HandlerResult};
 impl DaemonState {
     pub async fn handle(&self, context: RequestContext, request: SessionRpc) -> HandlerResult {
         match request {
+            SessionRpc::CallerContext { request } => {
+                let context = match with_caller_session_id(
+                    context,
+                    &request.caller_session_id,
+                    "caller session id",
+                ) {
+                    Ok(context) => context,
+                    Err(message) => return error_response(message),
+                };
+                let request = *request.request;
+                if matches!(
+                    request,
+                    SessionRpc::CallerContext { .. } | SessionRpc::McpBridge { .. }
+                ) {
+                    return error_response("nested caller context requests are not supported");
+                }
+                self.handle_direct(context, request).await
+            }
             SessionRpc::McpBridge { request } => {
                 let context = match request.caller_session_id.as_deref() {
-                    Some(raw) => match Uuid::parse_str(raw) {
-                        Ok(id) => context.with_mcp_caller_session_id(id),
-                        Err(error) => {
-                            return HandlerResult {
-                                response: RpcResponse::Error {
-                                    message: format!("invalid MCP caller session id: {error}"),
-                                },
-                                shutdown: false,
-                            };
+                    Some(raw) => {
+                        match with_caller_session_id(context, raw, "MCP caller session id") {
+                            Ok(context) => context,
+                            Err(message) => return error_response(message),
                         }
-                    },
+                    }
                     None => context,
                 };
                 HandlerResult {
@@ -76,9 +89,15 @@ impl DaemonState {
             SessionRpc::MailRead { request } => {
                 response(self.mail_read(&context, request).await, false)
             }
+            SessionRpc::MailPeek { request } => {
+                response(self.mail_peek(&context, &request).await, false)
+            }
             SessionRpc::MailCheck { request } => response(self.mail_check(&request).await, false),
             SessionRpc::MailStopCheck { request } => {
                 response(self.mail_stop_check(&request).await, false)
+            }
+            SessionRpc::MailTail { request } => {
+                response(self.mail_tail(&context, &request).await, false)
             }
             SessionRpc::Nudge { request } => response(self.nudge(&context, request).await, false),
             SessionRpc::Label { request } => response(self.label(&context, request).await, false),
@@ -88,6 +107,12 @@ impl DaemonState {
             }
             SessionRpc::Doctor { request } => response(self.doctor(&context, request).await, false),
             SessionRpc::Wait { request } => response(self.wait(request).await, false),
+            SessionRpc::CallerContext { .. } => response(
+                Err(anyhow::anyhow!(
+                    "nested caller context requests are not supported"
+                )),
+                false,
+            ),
             SessionRpc::McpBridge { .. } => response(
                 Err(anyhow::anyhow!(
                     "nested MCP bridge requests are not supported"
@@ -107,6 +132,25 @@ impl DaemonState {
                 message: "stopping".to_string(),
             },
         })
+    }
+}
+
+fn with_caller_session_id(
+    context: RequestContext,
+    raw: &str,
+    label: &str,
+) -> std::result::Result<RequestContext, String> {
+    Uuid::parse_str(raw)
+        .map(|id| context.with_caller_session_id(id))
+        .map_err(|error| format!("invalid {label}: {error}"))
+}
+
+fn error_response(message: impl Into<String>) -> HandlerResult {
+    HandlerResult {
+        response: RpcResponse::Error {
+            message: message.into(),
+        },
+        shutdown: false,
     }
 }
 

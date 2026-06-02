@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
 use lilo_rm_core::{IsolationPolicy, MountSpec};
-use lilo_session_core::{Namespace, RuntimeKind};
+use lilo_session_core::{MailNotifyMode, Namespace, RuntimeKind};
 
 use crate::cli::generated_help;
 use crate::cli::selector_scope::NamespaceScopeArgs;
@@ -268,10 +268,14 @@ pub enum MailAction {
     Send(MailSendArgs),
     #[command(about = generated_help::MAIL_READ_ABOUT, long_about = generated_help::MAIL_READ_ABOUT)]
     Read(MailReadArgs),
+    #[command(about = generated_help::MAIL_PEEK_ABOUT, long_about = generated_help::MAIL_PEEK_ABOUT)]
+    Peek(MailObservationArgs),
     #[command(about = generated_help::MAIL_CHECK_ABOUT, long_about = generated_help::MAIL_CHECK_ABOUT)]
     Check(MailCheckArgs),
     #[command(name = "stop-check", about = generated_help::MAIL_STOP_CHECK_ABOUT, long_about = generated_help::MAIL_STOP_CHECK_ABOUT)]
     StopCheck(MailStopCheckArgs),
+    #[command(about = generated_help::MAIL_TAIL_ABOUT, long_about = generated_help::MAIL_TAIL_ABOUT)]
+    Tail(MailTailArgs),
 }
 
 #[derive(Debug, Args)]
@@ -281,33 +285,66 @@ pub struct MailSendArgs {
     pub to: String,
     #[command(flatten)]
     pub scope: NamespaceScopeArgs,
-    #[arg(long, help = generated_help::MAIL_SEND_FROM_HELP)]
-    pub from: Option<String>,
     #[arg(long, help = generated_help::MAIL_SEND_CONTENT_HELP)]
     pub content: String,
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = MailNotifyMode::WAIT_VALUE,
+        value_parser = clap::builder::PossibleValuesParser::new(MailNotifyMode::CLIENT_VALUES),
+        help = generated_help::MAIL_SEND_NOTIFY_HELP
+    )]
+    pub notify: Option<String>,
+    #[arg(long, help = generated_help::MAIL_SEND_CONTEXT_ID_HELP)]
+    pub context_id: String,
+    #[arg(long, help = generated_help::MAIL_SEND_INTENT_HELP)]
+    pub intent: String,
+    #[arg(long, help = generated_help::MAIL_SEND_IDEMPOTENCY_KEY_HELP)]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Args)]
-#[command(arg_required_else_help = true)]
-pub struct MailReadArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_READ_SELECTOR_HELP)]
-    pub selector: String,
-    #[arg(long, help = generated_help::MAIL_READ_PEEK_HELP)]
-    pub peek: bool,
+pub struct MailReadArgs {}
+
+#[derive(Debug, Args)]
+pub struct MailObservationArgs {
+    #[arg(long, help = generated_help::MAIL_PEEK_CONTEXT_ID_HELP)]
+    pub context_id: Option<String>,
+    #[arg(long, help = generated_help::MAIL_PEEK_SELECTOR_HELP)]
+    pub selector: Option<String>,
+    #[arg(long, help = generated_help::MAIL_PEEK_RECIPIENT_HELP)]
+    pub recipient: Option<String>,
+    #[arg(long, help = generated_help::MAIL_PEEK_INCLUDE_SYSTEM_HELP)]
+    pub include_system: bool,
+    #[command(flatten)]
+    pub scope: NamespaceScopeArgs,
 }
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
 pub struct MailCheckArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
+    #[arg(long, help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
     pub selector: String,
+    #[command(flatten)]
+    pub scope: NamespaceScopeArgs,
 }
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
 pub struct MailStopCheckArgs {
-    #[arg(long, alias = "from", help = generated_help::MAIL_STOP_CHECK_SELECTOR_HELP)]
+    #[arg(long, help = generated_help::MAIL_STOP_CHECK_SELECTOR_HELP)]
     pub selector: String,
+    #[command(flatten)]
+    pub scope: NamespaceScopeArgs,
+}
+
+#[derive(Debug, Args)]
+#[command(arg_required_else_help = true)]
+pub struct MailTailArgs {
+    #[command(flatten)]
+    pub observation: MailObservationArgs,
+    #[arg(long, help = generated_help::MAIL_TAIL_ONCE_HELP)]
+    pub once: bool,
 }
 
 #[derive(Debug, Args)]
@@ -330,6 +367,11 @@ pub struct NudgeArgs {
     pub scope: NamespaceScopeArgs,
     #[arg(long, help = generated_help::NUDGE_CONTENT_HELP)]
     pub content: String,
+    #[arg(
+        long,
+        help = "Wait until the recipient is idle before delivering (default: deliver immediately)."
+    )]
+    pub wait: bool,
 }
 
 #[derive(Debug, Args)]

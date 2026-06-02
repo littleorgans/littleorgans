@@ -1,4 +1,4 @@
-pub const TOOL_NAMES: [&str; 22] = [
+pub const TOOL_NAMES: [&str; 24] = [
     "agent_run",
     "session_run",
     "agent_list",
@@ -15,8 +15,10 @@ pub const TOOL_NAMES: [&str; 22] = [
     "session_label",
     "mail_send",
     "mail_read",
+    "mail_peek",
     "mail_check",
     "mail_stop_check",
+    "mail_tail",
     "nudge",
     "logs",
     "wait",

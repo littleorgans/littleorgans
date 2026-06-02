@@ -117,11 +117,12 @@ mod tests {
             tables,
             BTreeSet::from([
                 "identity_audit".to_string(),
+                "message_deliveries".to_string(),
+                "messages".to_string(),
                 "runtime_lifecycle".to_string(),
                 "runtime_metadata".to_string(),
                 "session_event_cursor".to_string(),
                 "session_labels".to_string(),
-                "session_mail".to_string(),
                 "session_namespaces".to_string(),
                 "session_sessions".to_string(),
                 "session_spawn_intents".to_string(),

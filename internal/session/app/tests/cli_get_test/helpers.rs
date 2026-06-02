@@ -24,8 +24,18 @@ pub(crate) fn assert_success(command: &str, output: &std::process::Output) {
 
 pub(crate) fn assert_table_contains(stdout: &[u8], id: &str) {
     let stdout = String::from_utf8_lossy(stdout);
-    assert!(stdout.starts_with("ID RUNTIME"));
+    assert_header_fields(&stdout, &["ID", "RUNTIME"]);
     assert!(stdout.contains(id));
+}
+
+pub(crate) fn assert_header_fields(stdout: &str, expected: &[&str]) {
+    let headers = stdout
+        .lines()
+        .next()
+        .or_panic("table has a header")
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    assert_eq!(&headers[..expected.len()], expected);
 }
 
 pub(crate) fn stdout(output: &std::process::Output) -> String {

@@ -1,0 +1,62 @@
+---
+source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+expression: tool
+---
+{
+  "description": "Follow the operator message transcript via append events without draining mail.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "all_namespaces": {
+        "description": "Bypass namespace scoping and match across all namespaces.",
+        "type": "boolean"
+      },
+      "context_id": {
+        "description": "Conversation correlation tag to follow.",
+        "type": "string"
+      },
+      "include_system": {
+        "description": "Include system receipt metadata in the transcript.",
+        "type": "boolean"
+      },
+      "namespace": {
+        "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
+        "type": "string"
+      },
+      "once": {
+        "description": "Return immediately after the current transcript batch.",
+        "type": "boolean"
+      },
+      "recipient": {
+        "description": "Recipient selector used for matching mailboxes.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      },
+      "selector": {
+        "description": "Participant selector used for matching messages.\n\nGrammar:\n  all\n  <uuid>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "name": "mail_tail",
+  "outputSchema": {
+    "properties": {
+      "cursor": {
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "messages": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "messages"
+    ],
+    "type": "object"
+  }
+}

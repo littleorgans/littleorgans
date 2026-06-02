@@ -1,6 +1,8 @@
 use anyhow::{Result, bail};
 use clap::Args;
-use lilo_rm_core::{NudgeFailureReason, NudgeOutcome, NudgeRequest, RuntimeResponse, RuntimeRpc};
+use lilo_rm_core::{
+    NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, RuntimeResponse, RuntimeRpc,
+};
 use uuid::Uuid;
 
 use crate::cli::output;
@@ -13,16 +15,27 @@ pub struct NudgeArgs {
     session_id: Uuid,
     #[arg(long)]
     content: String,
+    #[arg(
+        long,
+        help = "Wait until the recipient is idle before delivering (default: deliver immediately)."
+    )]
+    wait: bool,
 }
 
 pub async fn run(args: NudgeArgs) -> Result<()> {
     let socket_path = crate::shared::socket_path()?;
+    let mode = if args.wait {
+        NudgeMode::Wait
+    } else {
+        NudgeMode::Immediate
+    };
     let response = crate::shared::request(
         &socket_path,
         RuntimeRpc::Nudge {
             request: NudgeRequest {
                 session_id: args.session_id,
                 content: args.content,
+                mode,
             },
         },
     )

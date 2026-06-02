@@ -1,8 +1,6 @@
 mod common;
 use common::OrPanic as _;
-use common::{
-    assert_success, create_namespace, first_table_field as first_field, set_context, stderr, stdout,
-};
+use common::{assert_success, create_namespace, run_session, set_context, stderr, stdout};
 
 use std::path::{Path, PathBuf};
 
@@ -175,20 +173,43 @@ fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
     let mail_default = daemon
         .command()
         .current_dir(alpha_dir)
-        .args(["mail", "send", "--to", "all", "--content", "scoped"])
+        .args([
+            "mail",
+            "send",
+            "--to",
+            "all",
+            "--content",
+            "scoped",
+            "--context-id",
+            "scope-thread",
+            "--intent",
+            "inform",
+        ])
         .output()
         .or_panic("sm mail send executes");
     assert_success("sm mail send", &mail_default);
-    assert_stdout_line_count("sm mail send", &mail_default, 1);
+    assert_stdout_line_count("sm mail send", &mail_default, 2);
 
     let mail_all = daemon
         .command()
         .current_dir(alpha_dir)
-        .args(["mail", "send", "--to", "all", "--content", "all", "-A"])
+        .args([
+            "mail",
+            "send",
+            "--to",
+            "all",
+            "--content",
+            "all",
+            "--context-id",
+            "scope-thread",
+            "--intent",
+            "inform",
+            "-A",
+        ])
         .output()
         .or_panic("sm mail send -A executes");
     assert_success("sm mail send -A", &mail_all);
-    assert_stdout_line_count("sm mail send -A", &mail_all, 2);
+    assert_stdout_line_count("sm mail send -A", &mail_all, 3);
 
     let nudge_default = daemon
         .command()
@@ -263,25 +284,6 @@ fn legacy_workspace_selector_is_rejected_by_cli() {
 
     assert!(!selected.status.success());
     assert!(stderr(&selected).contains("unsupported selector"));
-}
-
-fn run_session(daemon: &common::DaemonFixture, namespace: &str, dir: &Path) -> String {
-    let output = daemon
-        .command()
-        .args([
-            "run",
-            "claude",
-            "--role",
-            "engineer",
-            "--dir",
-            &dir.display().to_string(),
-            "--namespace",
-            namespace,
-        ])
-        .output()
-        .or_panic("sm run executes");
-    assert_success("sm run", &output);
-    first_field(&output.stdout)
 }
 
 fn assert_contains_only(output: &std::process::Output, present: &str, absent: &str) {

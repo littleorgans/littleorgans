@@ -204,6 +204,25 @@ pub fn set_context(daemon: &DaemonFixture, name: &str) {
     assert_success("sm config set-context", &output);
 }
 
+pub fn run_session(daemon: &DaemonFixture, namespace: &str, dir: &Path) -> String {
+    let output = daemon
+        .command()
+        .args([
+            "run",
+            "claude",
+            "--role",
+            "engineer",
+            "--dir",
+            &dir.display().to_string(),
+            "--namespace",
+            namespace,
+        ])
+        .output()
+        .or_panic("sm run executes");
+    assert_success("sm run", &output);
+    first_table_field(&output.stdout)
+}
+
 pub fn namespace_binding_contents(dir: &Path) -> String {
     std::fs::read_to_string(dir.join("config").join("session").join("namespace"))
         .or_panic("binding file reads")

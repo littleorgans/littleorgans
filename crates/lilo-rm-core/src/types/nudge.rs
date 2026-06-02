@@ -5,6 +5,23 @@ use uuid::Uuid;
 pub struct NudgeRequest {
     pub session_id: Uuid,
     pub content: String,
+    pub mode: NudgeMode,
+}
+
+/// Delivery policy for a nudge, expressing how to treat a recipient that is
+/// mid-work. `Immediate` is the historical fire-now behaviour; `Wait` and
+/// `Steer` are requested by `lilo mail send --notify`.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NudgeMode {
+    /// Deliver right away regardless of recipient state (bare `lilo nudge`,
+    /// MCP nudge, diagnostic `lilo runtime nudge`).
+    Immediate,
+    /// Wait until the recipient agent is idle, then deliver. Times out to
+    /// `AgentBusyTimeout` without delivering.
+    Wait,
+    /// If the recipient agent is working, interrupt it first, then deliver.
+    Steer,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -27,6 +44,7 @@ pub enum NudgeFailureReason {
     HeadlessLifecycle,
     SessionEnded,
     TmuxPaneDead,
+    AgentBusyTimeout,
 }
 
 impl NudgeFailureReason {
@@ -35,6 +53,7 @@ impl NudgeFailureReason {
             Self::HeadlessLifecycle => "headless_lifecycle",
             Self::SessionEnded => "session_ended",
             Self::TmuxPaneDead => "tmux_pane_dead",
+            Self::AgentBusyTimeout => "agent_busy_timeout",
         }
     }
 }
@@ -51,5 +70,9 @@ mod tests {
         );
         assert_eq!(NudgeFailureReason::SessionEnded.as_str(), "session_ended");
         assert_eq!(NudgeFailureReason::TmuxPaneDead.as_str(), "tmux_pane_dead");
+        assert_eq!(
+            NudgeFailureReason::AgentBusyTimeout.as_str(),
+            "agent_busy_timeout"
+        );
     }
 }

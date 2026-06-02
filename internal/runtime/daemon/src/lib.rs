@@ -30,6 +30,8 @@ mod spawn_preflight;
 #[cfg(test)]
 mod test_support;
 mod tmux;
+mod tmux_busy;
+mod tmux_nudge;
 #[cfg(any(test, feature = "test-support"))]
 pub mod tmux_test_support;
 pub(crate) mod version;

@@ -4,7 +4,7 @@
     "additionalProperties": false,
     "properties": {
       "all_namespaces": {
-        "description": "Bypass namespace scoping and read across all namespaces.",
+        "description": "Bypass namespace scoping and match across all namespaces.",
         "type": "boolean"
       },
       "for": {
@@ -12,7 +12,7 @@
         "type": "string"
       },
       "namespace": {
-        "description": "Namespace slug to scope this read. Overrides the caller session namespace fallback.",
+        "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
         "type": "string"
       },
       "selector": {

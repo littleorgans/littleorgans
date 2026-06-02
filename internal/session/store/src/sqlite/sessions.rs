@@ -58,6 +58,23 @@ impl SqliteStore {
             .next())
     }
 
+    pub async fn list_sessions_by_ids(
+        &self,
+        ids: &[Uuid],
+    ) -> Result<Vec<Session>, SessionRowError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT * FROM session_sessions
+             WHERE id IN ({placeholders})
+             ORDER BY created_at"
+        );
+        let params = ids.iter().map(Uuid::to_string);
+        self.query_sessions(&sql, params).await
+    }
+
     pub async fn list_sessions(&self, id: Option<&str>) -> Result<Vec<Session>, SessionRowError> {
         match id {
             Some(id) => {
@@ -197,6 +214,7 @@ impl SqliteStore {
         exit_code: Option<i32>,
         terminated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
              SET state = ?, exit_code = ?, terminated_at = ?, updated_at = ?
@@ -207,8 +225,10 @@ impl SqliteStore {
         .bind(terminated_at.to_rfc3339())
         .bind(terminated_at.to_rfc3339())
         .bind(id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        super::mail::mark_unread_undeliverable(&mut *transaction, id).await?;
+        transaction.commit().await?;
         self.get_session(id).await
     }
 
@@ -218,6 +238,7 @@ impl SqliteStore {
         evidence: LostEvidence,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
              SET state = ?, lost_evidence = ?, updated_at = ?
@@ -227,8 +248,10 @@ impl SqliteStore {
         .bind(lost_evidence_to_sql(evidence))
         .bind(updated_at.to_rfc3339())
         .bind(id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
+        super::mail::mark_unread_undeliverable(&mut *transaction, id).await?;
+        transaction.commit().await?;
         self.get_session(id).await
     }
 

@@ -172,9 +172,10 @@ mod tests {
     use lilo_rm_core::{
         CaptureError, CaptureRequest, EventBatch, EventsRequest, HeadlessSpawnTarget,
         IsolationPolicy, KillByPidRequest, KillOutcome, KillRequest, Lifecycle, LifecycleState,
-        NudgeFailureReason, NudgeOutcome, NudgeRequest, RuntimeEvent, RuntimeKind, RuntimeResponse,
-        RuntimeRpc, RuntimeSignal, ShimReady, SpawnConflictKind, SpawnConflictPayload,
-        SpawnRequest, SpawnTarget, SpawnedPayload, StatusFilter, StatusRequest,
+        NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, RuntimeEvent, RuntimeKind,
+        RuntimeResponse, RuntimeRpc, RuntimeSignal, ShimReady, SpawnConflictKind,
+        SpawnConflictPayload, SpawnRequest, SpawnTarget, SpawnedPayload, StatusFilter,
+        StatusRequest,
     };
     use std::path::Path;
     use std::process::Command;
@@ -283,6 +284,7 @@ mod tests {
         let nudge_request = NudgeRequest {
             session_id: nudge_session_id,
             content: "wake".to_owned(),
+            mode: NudgeMode::Immediate,
         };
         let direct_nudge = service
             .nudge_runtime(nudge_request.clone())
