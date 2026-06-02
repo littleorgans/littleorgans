@@ -421,13 +421,6 @@ pub const CLI_SURFACE_JSON: &str = r#"{
           "group": "operator",
           "hidden": null,
           "name": "session"
-        },
-        {
-          "about": "Identity substrate operator namespace",
-          "const_name": "IDENTITY",
-          "group": "operator",
-          "hidden": null,
-          "name": "identity"
         }
       ],
       "heading": "Substrate operator commands",
@@ -496,7 +489,6 @@ pub const MCP_SCHEMA_JSON: &str = r#"{
           "mcp",
           "runtime",
           "session",
-          "identity",
           "doctor",
           "daemon"
         ],

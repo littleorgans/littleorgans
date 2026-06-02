@@ -417,13 +417,6 @@
           "group": "operator",
           "hidden": null,
           "name": "session"
-        },
-        {
-          "about": "Identity substrate operator namespace",
-          "const_name": "IDENTITY",
-          "group": "operator",
-          "hidden": null,
-          "name": "identity"
         }
       ],
       "heading": "Substrate operator commands",

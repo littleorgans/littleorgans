@@ -17,7 +17,6 @@
           "mcp",
           "runtime",
           "session",
-          "identity",
           "doctor",
           "daemon"
         ],

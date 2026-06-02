@@ -100,8 +100,10 @@ for later migration work.
 User verbs are kubectl-shaped: `lilo run`, `lilo create session`,
 `lilo get session`, `lilo delete session`, `lilo label`, `lilo mail`,
 `lilo nudge`, `lilo capture`, `lilo logs`, `lilo wait`, and `lilo mcp`.
-Operator namespaces are explicit substrate access: `lilo runtime ...`,
-`lilo session ...`, and `lilo identity ...`.
+Operator namespaces are explicit substrate access: `lilo runtime ...` and
+`lilo session ...`. Identity has no command namespace until it owns real verbs
+(`whoami` / `can-i` / audit); its authorization runs at the library layer
+inside session and runtime, not as a CLI command.
 
 `lilo run` and `lilo create session` are session-backed paths. Raw
 `lilo runtime spawn` is diagnostic runtime access, remains identity-gated, and

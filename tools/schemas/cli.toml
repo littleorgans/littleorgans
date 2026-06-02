@@ -257,12 +257,6 @@ group = "operator"
 about = "Session substrate operator namespace"
 
 [[commands]]
-name = "identity"
-const_name = "IDENTITY"
-group = "operator"
-about = "Identity substrate operator namespace"
-
-[[commands]]
 name = "doctor"
 const_name = "DOCTOR"
 group = "diagnostics"

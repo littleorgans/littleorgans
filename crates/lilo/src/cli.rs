@@ -3,10 +3,9 @@ pub mod doctor;
 pub mod generated_help;
 pub mod generated_schema;
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
 use lilo_runtime_app::cli as runtime_cli;
@@ -129,13 +128,6 @@ impl Cli {
                 lilo_runtime_app::cli::shim::run(args)
                     .await
                     .map_err(Diagnostic::from)
-            }
-            Command::Identity(args) => {
-                reject_unsupported_json_output(
-                    "identity",
-                    json_output || args.requests_json_output(),
-                )?;
-                Err(Diagnostic::domain("identity is not yet implemented"))
             }
         }
     }
@@ -321,8 +313,6 @@ define_commands!(
     Runtime(runtime_cli::OperatorArgs) => "runtime",
     #[command(about = generated_help::SESSION_ABOUT)]
     Session(session_cli::OperatorArgs) => "session",
-    #[command(about = generated_help::IDENTITY_ABOUT)]
-    Identity(PlaceholderArgs) => "identity",
     #[command(about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
     #[command(about = generated_help::DAEMON_ABOUT)]
@@ -330,22 +320,6 @@ define_commands!(
     #[command(hide = true)]
     RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
 );
-
-#[derive(Debug, Args)]
-pub struct PlaceholderArgs {
-    #[arg(num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    pub args: Vec<OsString>,
-}
-
-impl PlaceholderArgs {
-    fn requests_json_output(&self) -> bool {
-        self.args.iter().any(|arg| arg == "--output=json")
-            || self
-                .args
-                .windows(2)
-                .any(|args| args[0] == "--output" && args[1] == "json")
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -360,6 +334,7 @@ mod tests {
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
         assert!(!help.contains("__shim"));
+        assert!(!help.contains("identity"));
     }
 
     #[test]
@@ -542,10 +517,6 @@ mod tests {
                 &["lilo", "runtime", "status", "--output", "json"],
                 "runtime",
             ),
-            (
-                &["lilo", "identity", "whoami", "--output", "json"],
-                "identity",
-            ),
         ];
 
         for (args, command) in cases {
@@ -567,17 +538,6 @@ mod tests {
                 error.message
             );
         }
-    }
-
-    #[tokio::test]
-    async fn placeholder_commands_accept_future_arguments() {
-        let cli = Cli::try_parse_from(["lilo", "identity", "whoami"])
-            .expect("parse future identity args");
-
-        let error = cli.run().await.expect_err("identity is not implemented");
-
-        assert_eq!(error.exit_code, lilo_common::exit_codes::DOMAIN);
-        assert!(error.message.contains("identity is not yet implemented"));
     }
 
     #[test]
