@@ -12,7 +12,13 @@ use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
 use lilo_runtime_app::cli as runtime_cli;
 use lilo_session_app::cli::{self as session_cli, cli_def as session_cli_def};
 
+use self::generated_help::GLOBAL_OPTIONS_HEADING;
 use self::{daemon::DaemonCli, doctor::DoctorCommand};
+
+/// Help styling: the default clap theme bolds and underlines the `Usage:`
+/// heading. Drop the underline (keep bold) so it reads as a plain heading.
+const HELP_STYLES: clap::builder::Styles =
+    clap::builder::Styles::styled().usage(clap::builder::styling::Style::new().bold());
 
 #[derive(Debug, Parser)]
 #[command(
@@ -22,20 +28,43 @@ use self::{daemon::DaemonCli, doctor::DoctorCommand};
     about = "Local-first Little Organs control plane",
     arg_required_else_help = true,
     disable_help_subcommand = true,
+    disable_help_flag = true,
+    styles = HELP_STYLES,
     help_template = generated_help::ROOT_HELP_TEMPLATE
 )]
 pub struct Cli {
-    #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        default_value_t = Output::Human,
+        help_heading = GLOBAL_OPTIONS_HEADING
+    )]
     output: Output,
     #[arg(
         long,
         global = true,
         action = clap::ArgAction::Count,
-        help = "Increase log verbosity; repeat for more detail (-v, -vv)."
+        help = "Increase log verbosity; repeat for more detail (-v, -vv).",
+        help_heading = GLOBAL_OPTIONS_HEADING
     )]
     pub verbose: u8,
-    #[arg(long, short = 'c', global = true)]
+    #[arg(
+        long,
+        short = 'c',
+        global = true,
+        help_heading = GLOBAL_OPTIONS_HEADING
+    )]
     pub config: Option<PathBuf>,
+    #[arg(
+        long,
+        short = 'h',
+        global = true,
+        action = clap::ArgAction::Help,
+        help = "Print help",
+        help_heading = GLOBAL_OPTIONS_HEADING
+    )]
+    help: Option<bool>,
     #[command(subcommand)]
     command: Command,
 }
@@ -192,7 +221,7 @@ pub(crate) fn resolve_lilo_paths() -> Result<LiloPaths, LiloPathError> {
 /// bottom position. Applied only to commands with examples; commands without
 /// keep clap's default template so their spacing stays clean.
 const LEAF_HELP_TEMPLATE: &str =
-    "{before-help}{about-with-newline}\n{usage-heading} {usage}{after-help}\n{all-args}";
+    "{before-help}{about-with-newline}\n{usage-heading}\n  {usage}{after-help}\n{all-args}";
 
 macro_rules! define_commands {
     ($(

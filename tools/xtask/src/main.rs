@@ -10,6 +10,11 @@ use lilo_common::exit_codes;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+/// Heading for the always-present global flags. Emitted into `generated_help.rs`
+/// and used in the root help template so the leaf `help_heading` attributes and
+/// the root template share one source.
+const GLOBAL_OPTIONS_HEADING: &str = "Global Options";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "xtask",
@@ -227,6 +232,12 @@ fn generated_help_rs(registry: &CliRegistry) -> String {
     )
     .expect("write help template");
     output.push('\n');
+    push_help_const(
+        &mut output,
+        "GLOBAL_OPTIONS_HEADING",
+        GLOBAL_OPTIONS_HEADING,
+    );
+    output.push('\n');
     for command in &registry.commands {
         output.push_str(&command_help_consts(command));
     }
@@ -336,7 +347,7 @@ fn generated_header() -> String {
 }
 
 fn root_help_template(registry: &CliRegistry) -> String {
-    let mut template = String::from("{about-with-newline}\n{usage-heading} {usage}\n\n");
+    let mut template = String::from("{about-with-newline}\n{usage-heading}\n  {usage}\n\n");
     for group in &registry.groups {
         writeln!(template, "{}:", group.heading).expect("write group heading");
         for command in registry.public_commands_for_group(&group.id) {
@@ -345,7 +356,8 @@ fn root_help_template(registry: &CliRegistry) -> String {
         }
         template.push('\n');
     }
-    template.push_str("Options:\n{options}{after-help}\n");
+    writeln!(template, "{GLOBAL_OPTIONS_HEADING}:").expect("write global options heading");
+    template.push_str("{options}{after-help}\n");
     template
 }
 

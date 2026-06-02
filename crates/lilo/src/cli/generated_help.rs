@@ -2,7 +2,10 @@
 #![allow(clippy::all, dead_code)]
 
 #[rustfmt::skip]
-pub const ROOT_HELP_TEMPLATE: &str = "{about-with-newline}\n{usage-heading} {usage}\n\nSession commands:\n  run        Run an agent session\n  create     Create a session, label, or other resource\n  get        Show sessions and other resources\n  delete     Delete sessions and other resources\n  label      Update labels on a resource\n  mail       Send mail to an agent\n  nudge      Nudge an agent\n  capture    Capture session output\n  logs       Tail session logs\n  wait       Wait for a session condition\n  mcp        Run lilo as an MCP server\n\nSubstrate operator commands:\n  runtime    Raw runtime operator namespace. runtime spawn never creates session records.\n  session    Session substrate operator namespace\n  identity   Identity substrate operator namespace\n\nDiagnostics:\n  doctor     Inspect local lilo health\n\nDaemon lifecycle:\n  daemon     Manage the local lilo daemon process\n\nOptions:\n{options}{after-help}\n";
+pub const ROOT_HELP_TEMPLATE: &str = "{about-with-newline}\n{usage-heading}\n  {usage}\n\nSession commands:\n  run        Run an agent session\n  create     Create a session, label, or other resource\n  get        Show sessions and other resources\n  delete     Delete sessions and other resources\n  label      Update labels on a resource\n  mail       Send mail to an agent\n  nudge      Nudge an agent\n  capture    Capture session output\n  logs       Tail session logs\n  wait       Wait for a session condition\n  mcp        Run lilo as an MCP server\n\nSubstrate operator commands:\n  runtime    Raw runtime operator namespace. runtime spawn never creates session records.\n  session    Session substrate operator namespace\n  identity   Identity substrate operator namespace\n\nDiagnostics:\n  doctor     Inspect local lilo health\n\nDaemon lifecycle:\n  daemon     Manage the local lilo daemon process\n\nGlobal Options:\n{options}{after-help}\n";
+
+#[rustfmt::skip]
+pub const GLOBAL_OPTIONS_HEADING: &str = "Global Options";
 
 #[rustfmt::skip]
 pub const RUN_ABOUT: &str = "Run an agent session";
