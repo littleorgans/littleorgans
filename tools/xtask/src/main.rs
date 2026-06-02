@@ -13,7 +13,7 @@ use serde_json::json;
 /// Heading for the always-present global flags. Emitted into `generated_help.rs`
 /// and used in the root help template so the leaf `help_heading` attributes and
 /// the root template share one source.
-const GLOBAL_OPTIONS_HEADING: &str = "Global Options";
+const GLOBAL_OPTIONS_HEADING: &str = "Global options";
 
 #[derive(Debug, Parser)]
 #[command(
