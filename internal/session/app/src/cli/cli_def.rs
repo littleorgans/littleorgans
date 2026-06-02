@@ -36,8 +36,6 @@ pub enum Command {
     Get(GetArgs),
     #[command(about = "Delete sessions and namespaces")]
     Delete(DeleteArgs),
-    #[command(about = generated_help::DOCTOR_ABOUT, long_about = generated_help::DOCTOR_ABOUT)]
-    Doctor(DoctorArgs),
     #[command(about = "Send and read durable session mail")]
     Mail(MailArgs),
     #[command(about = generated_help::SESSION_LABEL_ABOUT, long_about = generated_help::SESSION_LABEL_ABOUT, arg_required_else_help = true)]
@@ -58,8 +56,6 @@ pub enum Command {
 pub enum OperatorCommand {
     #[command(about = CONFIG_ABOUT)]
     Config(ConfigArgs),
-    #[command(about = generated_help::DOCTOR_ABOUT, long_about = generated_help::DOCTOR_ABOUT)]
-    Doctor(DoctorArgs),
 }
 
 #[derive(Debug, Args)]
@@ -230,9 +226,6 @@ pub struct DeleteNamespaceArgs {
     #[arg(help = NAMESPACE_DELETE_HELP)]
     pub namespace: Namespace,
 }
-
-#[derive(Debug, Args)]
-pub struct DoctorArgs {}
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]

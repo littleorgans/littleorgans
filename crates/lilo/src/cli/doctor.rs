@@ -4,10 +4,12 @@ use clap::Args;
 use lilo_common::diagnostic::Diagnostic;
 use lilo_db::LiloDb;
 use lilo_paths::{DaemonEndpoint, LiloPaths};
-use lilo_session_core::{DoctorRequest, RpcResponse, SessionRpc};
+use lilo_session_core::{DoctorRequest, RpcResponse, RuntimeDoctorReport, SessionRpc};
 use serde::Serialize;
 
 use super::{Output, resolve_lilo_paths};
+
+mod runtime;
 
 const DOCTOR_RPC_TIMEOUT: Duration = Duration::from_secs(3);
 const UNKNOWN_DAEMON_VERSION: &str = "unknown/pre-field";
@@ -41,24 +43,32 @@ struct DoctorStatus {
     daemon: DaemonHealth,
     database: DatabaseHealth,
     substrates: SubstrateHealth,
+    runtime: Option<RuntimeDoctorReport>,
     warnings: Vec<String>,
 }
 
 impl DoctorStatus {
     async fn collect() -> Result<Self, Diagnostic> {
         let paths = paths()?;
-        let daemon = DaemonHealth::collect(&paths).await;
+        let DaemonProbe {
+            health: daemon,
+            runtime,
+        } = DaemonHealth::collect(&paths).await;
         let database = DatabaseHealth::collect(&paths).await;
         let substrates = match database.db.as_ref() {
             Some(db) => SubstrateHealth::collect(db).await,
             None => SubstrateHealth::default(),
         };
-        let warnings = Self::warnings_for_daemon(&daemon);
+        let mut warnings = Self::warnings_for_daemon(&daemon);
+        if let Some(runtime) = &runtime {
+            warnings.extend(Self::warnings_for_runtime(runtime));
+        }
 
         Ok(Self {
             daemon,
             database: database.health,
             substrates,
+            runtime,
             warnings,
         })
     }
@@ -108,6 +118,10 @@ impl DoctorStatus {
             .collect::<Vec<String>>()
     }
 
+    fn warnings_for_runtime(report: &RuntimeDoctorReport) -> Vec<String> {
+        runtime::warnings_for_report(report)
+    }
+
     fn render_warnings(&self) -> String {
         let mut rendered = String::new();
         for warning in &self.warnings {
@@ -126,12 +140,17 @@ struct DaemonHealth {
     version: Option<String>,
 }
 
+struct DaemonProbe {
+    health: DaemonHealth,
+    runtime: Option<RuntimeDoctorReport>,
+}
+
 impl DaemonHealth {
-    async fn collect(paths: &LiloPaths) -> Self {
+    async fn collect(paths: &LiloPaths) -> DaemonProbe {
         Self::collect_with_timeout(paths, DOCTOR_RPC_TIMEOUT).await
     }
 
-    async fn collect_with_timeout(paths: &LiloPaths, timeout: Duration) -> Self {
+    async fn collect_with_timeout(paths: &LiloPaths, timeout: Duration) -> DaemonProbe {
         let socket_path = paths.socket_path();
         let endpoint = DaemonEndpoint::from_paths(paths);
         let response = lilo_session_daemon::send_request_with_timeout(
@@ -142,15 +161,22 @@ impl DaemonHealth {
             timeout,
         )
         .await;
-        let (reachable, version) = match response {
-            Ok(RpcResponse::Doctor { response }) => (true, response.daemon_version),
-            _ => (false, None),
+        let (reachable, version, runtime) = match response {
+            Ok(RpcResponse::Doctor { response }) => (
+                true,
+                response.daemon_version,
+                Some(response.runtime_matters),
+            ),
+            _ => (false, None, None),
         };
-        Self {
-            socket_exists: socket_path.exists(),
-            reachable,
-            version,
-            socket_path: socket_path.display().to_string(),
+        DaemonProbe {
+            health: Self {
+                socket_exists: socket_path.exists(),
+                reachable,
+                version,
+                socket_path: socket_path.display().to_string(),
+            },
+            runtime,
         }
     }
 
@@ -320,9 +346,10 @@ mod tests {
         let database = DatabaseHealth::collect(&paths).await;
         let db = database.db.expect("db opens");
         let status = DoctorStatus {
-            daemon: DaemonHealth::collect(&paths).await,
+            daemon: DaemonHealth::collect(&paths).await.health,
             substrates: SubstrateHealth::collect(&db).await,
             database: database.health,
+            runtime: None,
             warnings: Vec::new(),
         };
 
@@ -352,7 +379,9 @@ mod tests {
         });
 
         let started = Instant::now();
-        let health = DaemonHealth::collect_with_timeout(&paths, Duration::from_millis(50)).await;
+        let health = DaemonHealth::collect_with_timeout(&paths, Duration::from_millis(50))
+            .await
+            .health;
         let elapsed = started.elapsed();
         server.abort();
 
@@ -404,6 +433,7 @@ mod tests {
                 error: None,
             },
             substrates: SubstrateHealth::default(),
+            runtime: None,
         };
 
         let rendered = status.render_human();
@@ -414,6 +444,36 @@ mod tests {
             "warn: {}",
             daemon_version_skew_warning("0.0.0+old")
         )));
+    }
+
+    #[test]
+    fn render_json_includes_runtime_detail_section() {
+        let report = RuntimeDoctorReport {
+            status: "ok".to_string(),
+            doctor: Some(Box::new(runtime::response())),
+            socket_path: Some("/tmp/rtmd.sock".to_string()),
+            code: None,
+            message: None,
+        };
+        let status = DoctorStatus {
+            daemon: daemon_health(true, Some(crate::VERSION)),
+            database: DatabaseHealth {
+                path: "/tmp/lilo.db".to_string(),
+                status: "ok",
+                pragmas: DbPragmas::default(),
+                error: None,
+            },
+            substrates: SubstrateHealth::default(),
+            runtime: Some(report),
+            warnings: Vec::new(),
+        };
+
+        let value: serde_json::Value =
+            serde_json::from_str(&status.render_json().expect("json")).expect("valid json");
+
+        assert_eq!(value["runtime"]["status"], "ok");
+        assert_eq!(value["runtime"]["doctor"]["socket_path"], "/tmp/rtmd.sock");
+        assert!(value["runtime"]["doctor"]["launchers"].is_array());
     }
 
     fn daemon_health(reachable: bool, version: Option<&str>) -> DaemonHealth {

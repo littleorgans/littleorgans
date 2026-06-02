@@ -3,7 +3,6 @@ pub mod cli_def;
 pub mod client;
 pub mod config;
 pub mod delete;
-pub mod doctor;
 pub mod generated_help;
 pub mod get;
 pub mod label;
@@ -33,7 +32,6 @@ pub struct OperatorArgs {
 pub async fn run_operator(args: OperatorArgs, json_output: bool) -> Result<()> {
     let command = match args.command {
         OperatorCommand::Config(args) => Command::Config(args),
-        OperatorCommand::Doctor(args) => Command::Doctor(args),
     };
 
     dispatch(command, json_output).await
@@ -48,7 +46,6 @@ pub async fn dispatch(command: Command, json_output: bool) -> Result<()> {
         Command::Config(args) => config::run(args).await,
         Command::Get(args) => get::run(args, json_output).await,
         Command::Delete(args) => delete::run(args).await,
-        Command::Doctor(args) => doctor::run(args).await,
         Command::Mail(args) => mail::run(args, json_output).await,
         Command::Label(args) => label::run(args).await,
         Command::Logs(args) => logs::run(args).await,
@@ -83,7 +80,6 @@ impl Command {
             Self::Create(_) => JsonOutputSupport::Unsupported("create"),
             Self::Config(_) => JsonOutputSupport::Unsupported("config"),
             Self::Delete(_) => JsonOutputSupport::Unsupported("delete"),
-            Self::Doctor(_) => JsonOutputSupport::Unsupported("doctor"),
             Self::Label(_) => JsonOutputSupport::Unsupported("label"),
             Self::Logs(_) => JsonOutputSupport::Unsupported("logs"),
             Self::Wait(_) => JsonOutputSupport::Unsupported("wait"),
@@ -97,7 +93,6 @@ impl OperatorCommand {
     pub fn json_output_support(&self) -> JsonOutputSupport {
         match self {
             Self::Config(_) => JsonOutputSupport::Unsupported("config"),
-            Self::Doctor(_) => JsonOutputSupport::Unsupported("doctor"),
         }
     }
 }

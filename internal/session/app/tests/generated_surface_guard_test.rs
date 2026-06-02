@@ -22,6 +22,7 @@ fn generated_docs_do_not_reference_removed_cli_forms() {
         "sm get agents",
         "sm delete agent",
         "sm init namespace",
+        "sm doctor",
         ".sm/namespace",
     ];
     for path in removed_surface_guard_paths() {

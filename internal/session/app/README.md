@@ -17,7 +17,7 @@ sm get session --selector id:<session-id> --show-labels
 sm capture <session-id>
 sm delete namespace project-alpha
 sm logs id:<session-id>
-sm doctor
+lilo doctor
 lilo daemon stop
 ```
 
@@ -106,19 +106,19 @@ sm mcp
 | Tool | CLI | Purpose |
 |------|-----|---------|
 | `session_run` | `sm run` | Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
-| `agent_run` | `sm run` | Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
+| `agent_run` | MCP only | Deprecated compatibility alias for session_run. Start a session through the session daemon and composed runtime service. Supports claude and codex runtimes, headless or tmux targets, docker isolation, image selection, Docker bind mounts, a role, a directory, a namespace, labels, and filesystem agent config resolution. The tool returns the persisted session record. |
 | `session_list` | `sm get session` | List session records known to the session-matters daemon. Supports the shared selector grammar. |
-| `agent_list` | `sm get session` | Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar. |
-| `session_get` | `sm get session` | Get one session record by id. The tool returns an error envelope when the id is unknown. |
-| `agent_get` | `sm get session` | Deprecated compatibility alias for session_get. Get one session record by id. The tool returns an error envelope when the id is unknown. |
+| `agent_list` | MCP only | Deprecated compatibility alias for session_list. List session records known to the session-matters daemon. Supports the shared selector grammar. |
+| `session_get` | MCP only | Get one session record by id. The tool returns an error envelope when the id is unknown. |
+| `agent_get` | MCP only | Deprecated compatibility alias for session_get. Get one session record by id. The tool returns an error envelope when the id is unknown. |
 | `namespace_list` | `sm get namespace` | List namespace records known to the session-matters daemon. |
-| `namespace_get` | `sm get namespace` | Get one namespace record by slug. The tool returns an error envelope when the slug is unknown. |
+| `namespace_get` | MCP only | Get one namespace record by slug. The tool returns an error envelope when the slug is unknown. |
 | `session_capture` | `sm capture` | Capture tmux pane scrollback for one selected session. |
-| `agent_capture` | `sm capture` | Deprecated compatibility alias for session_capture. Capture tmux pane scrollback for one selected session. |
+| `agent_capture` | MCP only | Deprecated compatibility alias for session_capture. Capture tmux pane scrollback for one selected session. |
 | `session_delete` | `sm delete session` | Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period. |
-| `agent_delete` | `sm delete session` | Deprecated compatibility alias for session_delete. Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period. |
+| `agent_delete` | MCP only | Deprecated compatibility alias for session_delete. Terminate daemon owned sessions selected by selector. Defaults to SIGTERM with a five second grace period. |
 | `session_label` | `sm label` | Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
-| `agent_label` | `sm label` | Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
+| `agent_label` | MCP only | Deprecated compatibility alias for session_label. Add or remove one label on sessions selected by selector. Mutations use key=value to set and key- to remove. |
 | `mail_send` | `sm mail send` | Send durable mail to running sessions selected by selector. |
 | `mail_read` | `sm mail read` | Read unread mail for the caller session. Reads mark messages read. |
 | `mail_peek` | `sm mail peek` | Peek at the operator message transcript without draining mail. |
@@ -128,7 +128,7 @@ sm mcp
 | `nudge` | `sm nudge` | Send an ephemeral nudge to sessions selected by selector. Tmux-backed runtimes deliver through the composed runtime service; headless or ended runtimes return typed failure messages. |
 | `logs` | `sm logs` | Read the transcript linked to one selected session. |
 | `wait` | `sm wait` | Wait until a selector satisfies running, terminated, or count=N. |
-| `doctor` | `sm doctor` | Report session-matters daemon health, LOST sessions, and runtime-matters status. |
+| `doctor` | MCP only | Report session-matters daemon health, LOST sessions, and runtime-matters status. |
 
 ## Selector Grammar
 

@@ -130,6 +130,3 @@ pub const WAIT_SELECTOR_HELP: &str = "Session selector used for matching session
 pub const WAIT_FOR_HELP: &str = "Condition to wait for: running, terminated, or count=N.";
 #[rustfmt::skip]
 pub const WAIT_TIMEOUT_SECS_HELP: &str = "Seconds to wait before timing out. Defaults to 30.";
-
-#[rustfmt::skip]
-pub const DOCTOR_ABOUT: &str = "Report session-matters daemon health.";

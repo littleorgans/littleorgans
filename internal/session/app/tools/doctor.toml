@@ -2,6 +2,7 @@
 cli_name        = "doctor"
 mcp_description = "Report session-matters daemon health, LOST sessions, and runtime-matters status."
 cli_about       = "Report session-matters daemon health."
+render_cli_help = false
 output_schema   = '''
 {
   "type": "object",

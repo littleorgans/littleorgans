@@ -418,9 +418,9 @@ mod tests {
             .map(clap::Command::get_name)
             .collect();
 
-        assert_eq!(visible, ["config", "doctor"]);
+        assert_eq!(visible, ["config"]);
         assert!(help.contains("config"));
-        assert!(help.contains("doctor"));
+        assert!(!help.contains("doctor"));
     }
 
     #[test]

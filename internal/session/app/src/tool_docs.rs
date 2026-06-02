@@ -24,7 +24,7 @@ sm get session --selector id:<session-id> --show-labels
 sm capture <session-id>
 sm delete namespace project-alpha
 sm logs id:<session-id>
-sm doctor
+lilo doctor
 lilo daemon stop
 ```
 
@@ -178,10 +178,15 @@ fn append_tool_table(out: &mut String, tools: &[ToolContract]) {
     out.push_str("| Tool | CLI | Purpose |\n");
     out.push_str("|------|-----|---------|\n");
     for tool in tools {
+        let cli = if tool.artifacts.render_cli_help {
+            format!("`sm {}`", tool.cli.name)
+        } else {
+            "MCP only".to_string()
+        };
         let _ = writeln!(
             out,
-            "| `{}` | `sm {}` | {} |",
-            tool.name, tool.cli.name, tool.mcp_description
+            "| `{}` | {} | {} |",
+            tool.name, cli, tool.mcp_description
         );
     }
 }
