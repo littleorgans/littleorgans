@@ -3,7 +3,6 @@ pub mod cli_def;
 pub mod client;
 pub mod config;
 pub mod delete;
-pub mod doctor;
 pub mod generated_help;
 pub mod get;
 pub mod label;
@@ -21,16 +20,21 @@ pub mod wait;
 use anyhow::Result;
 use clap::Args;
 
-use self::cli_def::Command;
+use self::cli_def::{Command, OperatorCommand};
 
 #[derive(Debug, Args)]
+#[command(disable_help_subcommand = true)]
 pub struct OperatorArgs {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: OperatorCommand,
 }
 
 pub async fn run_operator(args: OperatorArgs, json_output: bool) -> Result<()> {
-    dispatch(args.command, json_output).await
+    let command = match args.command {
+        OperatorCommand::Config(args) => Command::Config(args),
+    };
+
+    dispatch(command, json_output).await
 }
 
 pub async fn dispatch(command: Command, json_output: bool) -> Result<()> {
@@ -42,7 +46,6 @@ pub async fn dispatch(command: Command, json_output: bool) -> Result<()> {
         Command::Config(args) => config::run(args).await,
         Command::Get(args) => get::run(args, json_output).await,
         Command::Delete(args) => delete::run(args).await,
-        Command::Doctor(args) => doctor::run(args).await,
         Command::Mail(args) => mail::run(args, json_output).await,
         Command::Label(args) => label::run(args).await,
         Command::Logs(args) => logs::run(args).await,
@@ -77,12 +80,19 @@ impl Command {
             Self::Create(_) => JsonOutputSupport::Unsupported("create"),
             Self::Config(_) => JsonOutputSupport::Unsupported("config"),
             Self::Delete(_) => JsonOutputSupport::Unsupported("delete"),
-            Self::Doctor(_) => JsonOutputSupport::Unsupported("doctor"),
             Self::Label(_) => JsonOutputSupport::Unsupported("label"),
             Self::Logs(_) => JsonOutputSupport::Unsupported("logs"),
             Self::Wait(_) => JsonOutputSupport::Unsupported("wait"),
             Self::Nudge(_) => JsonOutputSupport::Unsupported("nudge"),
             Self::Mcp(_) => JsonOutputSupport::Unsupported("mcp"),
+        }
+    }
+}
+
+impl OperatorCommand {
+    pub fn json_output_support(&self) -> JsonOutputSupport {
+        match self {
+            Self::Config(_) => JsonOutputSupport::Unsupported("config"),
         }
     }
 }

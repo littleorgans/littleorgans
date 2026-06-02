@@ -2,18 +2,18 @@ pub mod daemon;
 pub mod doctor;
 pub mod generated_help;
 pub mod generated_schema;
+pub mod version;
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{LiloHome, LiloPathError, LiloPaths};
 use lilo_runtime_app::cli as runtime_cli;
 use lilo_session_app::cli::{self as session_cli, cli_def as session_cli_def};
 
 use self::generated_help::GLOBAL_OPTIONS_HEADING;
-use self::{daemon::DaemonCli, doctor::DoctorCommand};
+use self::{daemon::DaemonCli, doctor::DoctorCommand, version::VersionCommand};
 
 /// Help styling: the default clap theme bolds and underlines the `Usage:`
 /// heading. Drop the underline (keep bold) so it reads as a plain heading.
@@ -123,19 +123,13 @@ impl Cli {
             }
             Command::Session(args) => run_session_operator(args, json_output).await,
             Command::Doctor(command) => command.run(self.output).await,
+            Command::Version(_command) => VersionCommand::run(self.output),
             Command::Daemon(command) => command.run(self.output).await,
             Command::RuntimeShim(args) => {
                 reject_unsupported_json_output("__shim", json_output)?;
                 lilo_runtime_app::cli::shim::run(args)
                     .await
                     .map_err(Diagnostic::from)
-            }
-            Command::Identity(args) => {
-                reject_unsupported_json_output(
-                    "identity",
-                    json_output || args.requests_json_output(),
-                )?;
-                Err(Diagnostic::domain("identity is not yet implemented"))
             }
         }
     }
@@ -145,7 +139,7 @@ async fn run_session(
     command: session_cli_def::Command,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    validate_session_json_output(&command, json_output)?;
+    validate_session_json_output(command.json_output_support(), json_output)?;
     session_cli::dispatch(command, json_output)
         .await
         .map_err(Diagnostic::from)
@@ -155,19 +149,17 @@ async fn run_session_operator(
     args: session_cli::OperatorArgs,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    validate_session_json_output(&args.command, json_output)?;
+    validate_session_json_output(args.command.json_output_support(), json_output)?;
     session_cli::run_operator(args, json_output)
         .await
         .map_err(Diagnostic::from)
 }
 
 fn validate_session_json_output(
-    command: &session_cli_def::Command,
+    support: session_cli::JsonOutputSupport,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    if let (true, session_cli::JsonOutputSupport::Unsupported(command)) =
-        (json_output, command.json_output_support())
-    {
+    if let (true, session_cli::JsonOutputSupport::Unsupported(command)) = (json_output, support) {
         return Err(unsupported_json_output(command));
     }
 
@@ -321,31 +313,18 @@ define_commands!(
     Runtime(runtime_cli::OperatorArgs) => "runtime",
     #[command(about = generated_help::SESSION_ABOUT)]
     Session(session_cli::OperatorArgs) => "session",
-    #[command(about = generated_help::IDENTITY_ABOUT)]
-    Identity(PlaceholderArgs) => "identity",
     #[command(about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
+    #[command(
+        about = generated_help::VERSION_ABOUT,
+        long_about = generated_help::VERSION_LONG_ABOUT
+    )]
+    Version(VersionCommand) => "version",
     #[command(about = generated_help::DAEMON_ABOUT)]
     Daemon(DaemonCli) => "daemon",
     #[command(hide = true)]
     RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
 );
-
-#[derive(Debug, Args)]
-pub struct PlaceholderArgs {
-    #[arg(num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    pub args: Vec<OsString>,
-}
-
-impl PlaceholderArgs {
-    fn requests_json_output(&self) -> bool {
-        self.args.iter().any(|arg| arg == "--output=json")
-            || self
-                .args
-                .windows(2)
-                .any(|args| args[0] == "--output" && args[1] == "json")
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -360,6 +339,7 @@ mod tests {
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
         assert!(!help.contains("__shim"));
+        assert!(!help.contains("identity"));
     }
 
     #[test]
@@ -423,6 +403,62 @@ mod tests {
         assert!(session_idx < operator_idx);
         assert!(operator_idx < diagnostics_idx);
         assert!(diagnostics_idx < daemon_idx);
+    }
+
+    #[test]
+    fn session_operator_help_lists_only_operator_commands() {
+        let mut command = Cli::command();
+        let session = command
+            .find_subcommand_mut("session")
+            .expect("session subcommand exists");
+        let help = session.render_long_help().to_string();
+        let visible: Vec<_> = session
+            .get_subcommands()
+            .filter(|subcommand| !subcommand.is_hide_set())
+            .map(clap::Command::get_name)
+            .collect();
+
+        assert_eq!(visible, ["config"]);
+        assert!(help.contains("config"));
+        assert!(!help.contains("doctor"));
+    }
+
+    #[test]
+    fn runtime_operator_help_lists_raw_process_toolkit() {
+        let mut command = Cli::command();
+        let runtime = command
+            .find_subcommand_mut("runtime")
+            .expect("runtime subcommand exists");
+        let help = runtime.render_long_help().to_string();
+        let visible: Vec<_> = runtime
+            .get_subcommands()
+            .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "help")
+            .map(clap::Command::get_name)
+            .collect();
+
+        assert_eq!(
+            visible,
+            [
+                "spawn",
+                "kill",
+                "nudge",
+                "capture",
+                "validate-target",
+                "status",
+                "events",
+            ]
+        );
+        for expected in [
+            "nudge            Deliver a nudge message to a running runtime session.",
+            "capture          Capture the pane snapshot for a runtime session.",
+            "validate-target  Validate a spawn target without starting a runtime.",
+            "events           Stream runtime lifecycle events.",
+        ] {
+            assert!(
+                help.contains(expected),
+                "missing runtime help: {expected}\n{help}"
+            );
+        }
     }
 
     #[test]
@@ -527,24 +563,8 @@ mod tests {
             ),
             (&["lilo", "mcp", "--output", "json"], "mcp"),
             (
-                &[
-                    "lilo",
-                    "session",
-                    "label",
-                    "abc",
-                    "key=value",
-                    "--output",
-                    "json",
-                ],
-                "label",
-            ),
-            (
                 &["lilo", "runtime", "status", "--output", "json"],
                 "runtime",
-            ),
-            (
-                &["lilo", "identity", "whoami", "--output", "json"],
-                "identity",
             ),
         ];
 
@@ -567,17 +587,6 @@ mod tests {
                 error.message
             );
         }
-    }
-
-    #[tokio::test]
-    async fn placeholder_commands_accept_future_arguments() {
-        let cli = Cli::try_parse_from(["lilo", "identity", "whoami"])
-            .expect("parse future identity args");
-
-        let error = cli.run().await.expect_err("identity is not implemented");
-
-        assert_eq!(error.exit_code, lilo_common::exit_codes::DOMAIN);
-        assert!(error.message.contains("identity is not yet implemented"));
     }
 
     #[test]

@@ -100,8 +100,10 @@ for later migration work.
 User verbs are kubectl-shaped: `lilo run`, `lilo create session`,
 `lilo get session`, `lilo delete session`, `lilo label`, `lilo mail`,
 `lilo nudge`, `lilo capture`, `lilo logs`, `lilo wait`, and `lilo mcp`.
-Operator namespaces are explicit substrate access: `lilo runtime ...`,
-`lilo session ...`, and `lilo identity ...`.
+Operator namespaces are explicit substrate access: `lilo runtime ...` and
+`lilo session ...`. Identity has no command namespace until it owns real verbs
+(`whoami` / `can-i` / audit); its authorization runs at the library layer
+inside session and runtime, not as a CLI command.
 
 `lilo run` and `lilo create session` are session-backed paths. Raw
 `lilo runtime spawn` is diagnostic runtime access, remains identity-gated, and
@@ -184,6 +186,11 @@ reference docs once a generator owns them.
 Release-plz manages per-package crate tags using package-version tag names.
 The release workflow creates the top-level binary tag such as `v0.8.0` only
 after crate publication succeeds.
+
+Before crate publication, review `crates/lilo-rm-core/src/version.rs`: the
+hand-maintained `RUNTIME_PROTOCOL_VERSION` and capabilities list are the
+smd↔rtmd compat contract, and build.rs `git_sha` has no `.git` to read from a
+published crates.io tarball.
 
 `lilo-mirror-publish` is a future data-driven tool under
 `tools/mirror-publish`. Its manifest defines one mirror per substrate with

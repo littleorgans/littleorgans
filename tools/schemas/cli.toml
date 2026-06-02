@@ -257,16 +257,19 @@ group = "operator"
 about = "Session substrate operator namespace"
 
 [[commands]]
-name = "identity"
-const_name = "IDENTITY"
-group = "operator"
-about = "Identity substrate operator namespace"
-
-[[commands]]
 name = "doctor"
 const_name = "DOCTOR"
 group = "diagnostics"
 about = "Inspect local lilo health"
+
+[[commands]]
+name = "version"
+const_name = "VERSION"
+group = "diagnostics"
+about = "Print lilo version metadata"
+long_about = """
+Print the composed lilo binary's version metadata, including the CLI version, \
+runtime protocol version, and advertised runtime capabilities."""
 
 [[commands]]
 name = "daemon"

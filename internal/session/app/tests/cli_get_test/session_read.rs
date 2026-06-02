@@ -158,25 +158,6 @@ pub(crate) fn capture_takes_exact_session_id() {
     assert_eq!(body["session"]["id"], id);
     assert_eq!(body["capture"]["status"], "failed");
 
-    let operator_capture = daemon
-        .lilo_command()
-        .args([
-            "session",
-            "capture",
-            &id,
-            "--output",
-            "json",
-            "--scrollback-lines",
-            "20",
-        ])
-        .output()
-        .or_panic("lilo session capture <id> --output json executes");
-    assert_success("lilo session capture <id> --output json", &operator_capture);
-    let body: Value =
-        serde_json::from_slice(&operator_capture.stdout).or_panic("capture JSON parses");
-    assert_eq!(body["session"]["id"], id);
-    assert_eq!(body["capture"]["status"], "failed");
-
     for args in [
         ["capture", &id, "--json"].as_slice(),
         ["capture", "--selector", "all"].as_slice(),

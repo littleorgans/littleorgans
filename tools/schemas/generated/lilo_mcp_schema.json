@@ -17,8 +17,8 @@
           "mcp",
           "runtime",
           "session",
-          "identity",
           "doctor",
+          "version",
           "daemon"
         ],
         "type": "string"

@@ -421,13 +421,6 @@ pub const CLI_SURFACE_JSON: &str = r#"{
           "group": "operator",
           "hidden": null,
           "name": "session"
-        },
-        {
-          "about": "Identity substrate operator namespace",
-          "const_name": "IDENTITY",
-          "group": "operator",
-          "hidden": null,
-          "name": "identity"
         }
       ],
       "heading": "Substrate operator commands",
@@ -441,6 +434,14 @@ pub const CLI_SURFACE_JSON: &str = r#"{
           "group": "diagnostics",
           "hidden": null,
           "name": "doctor"
+        },
+        {
+          "about": "Print lilo version metadata",
+          "const_name": "VERSION",
+          "group": "diagnostics",
+          "hidden": null,
+          "long_about": "Print the composed lilo binary's version metadata, including the CLI version, runtime protocol version, and advertised runtime capabilities.",
+          "name": "version"
         }
       ],
       "heading": "Diagnostics",
@@ -496,8 +497,8 @@ pub const MCP_SCHEMA_JSON: &str = r#"{
           "mcp",
           "runtime",
           "session",
-          "identity",
           "doctor",
+          "version",
           "daemon"
         ],
         "type": "string"
