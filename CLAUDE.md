@@ -187,6 +187,11 @@ Release-plz manages per-package crate tags using package-version tag names.
 The release workflow creates the top-level binary tag such as `v0.8.0` only
 after crate publication succeeds.
 
+Before crate publication, review `crates/lilo-rm-core/src/version.rs`: the
+hand-maintained `RUNTIME_PROTOCOL_VERSION` and capabilities list are the
+smd↔rtmd compat contract, and build.rs `git_sha` has no `.git` to read from a
+published crates.io tarball.
+
 `lilo-mirror-publish` is a future data-driven tool under
 `tools/mirror-publish`. Its manifest defines one mirror per substrate with
 paths, public crates, binary metadata, README source, changelog filter,
