@@ -2,7 +2,7 @@
 #![allow(clippy::all, dead_code)]
 
 #[rustfmt::skip]
-pub const ROOT_HELP_TEMPLATE: &str = "{about-with-newline}\n{usage-heading}\n  {usage}\n\nSession commands:\n  run        Run an agent session\n  create     Create a session, label, or other resource\n  get        Show sessions and other resources\n  delete     Delete sessions and other resources\n  label      Update labels on a resource\n  mail       Send mail to an agent\n  nudge      Nudge an agent\n  capture    Capture session output\n  logs       Tail session logs\n  wait       Wait for a session condition\n  mcp        Run lilo as an MCP server\n\nSubstrate operator commands:\n  runtime    Raw runtime operator namespace. runtime spawn never creates session records.\n  session    Session substrate operator namespace\n\nDiagnostics:\n  doctor     Inspect local lilo health\n\nDaemon lifecycle:\n  daemon     Manage the local lilo daemon process\n\nGlobal options:\n{options}{after-help}\n";
+pub const ROOT_HELP_TEMPLATE: &str = "{about-with-newline}\n{usage-heading}\n  {usage}\n\nSession commands:\n  run        Run an agent session\n  create     Create a session, label, or other resource\n  get        Show sessions and other resources\n  delete     Delete sessions and other resources\n  label      Update labels on a resource\n  mail       Send mail to an agent\n  nudge      Nudge an agent\n  capture    Capture session output\n  logs       Tail session logs\n  wait       Wait for a session condition\n  mcp        Run lilo as an MCP server\n\nSubstrate operator commands:\n  runtime    Raw runtime operator namespace. runtime spawn never creates session records.\n  session    Session substrate operator namespace\n\nDiagnostics:\n  doctor     Inspect local lilo health\n  version    Print lilo version metadata\n\nDaemon lifecycle:\n  daemon     Manage the local lilo daemon process\n\nGlobal options:\n{options}{after-help}\n";
 
 #[rustfmt::skip]
 pub const GLOBAL_OPTIONS_HEADING: &str = "Global options";
@@ -79,6 +79,10 @@ pub const RUNTIME_ABOUT: &str = "Raw runtime operator namespace. runtime spawn n
 pub const SESSION_ABOUT: &str = "Session substrate operator namespace";
 #[rustfmt::skip]
 pub const DOCTOR_ABOUT: &str = "Inspect local lilo health";
+#[rustfmt::skip]
+pub const VERSION_ABOUT: &str = "Print lilo version metadata";
+#[rustfmt::skip]
+pub const VERSION_LONG_ABOUT: &str = "Print the composed lilo binary's version metadata, including the CLI version, runtime protocol version, and advertised runtime capabilities.";
 #[rustfmt::skip]
 pub const DAEMON_ABOUT: &str = "Manage the local lilo daemon process";
 #[rustfmt::skip]

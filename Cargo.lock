@@ -1023,6 +1023,7 @@ dependencies = [
  "lilo-common",
  "lilo-db",
  "lilo-paths",
+ "lilo-rm-core",
  "lilo-runtime-app",
  "lilo-session-app",
  "lilo-session-core",

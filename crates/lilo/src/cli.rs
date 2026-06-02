@@ -2,6 +2,7 @@ pub mod daemon;
 pub mod doctor;
 pub mod generated_help;
 pub mod generated_schema;
+pub mod version;
 
 use std::path::PathBuf;
 
@@ -12,7 +13,7 @@ use lilo_runtime_app::cli as runtime_cli;
 use lilo_session_app::cli::{self as session_cli, cli_def as session_cli_def};
 
 use self::generated_help::GLOBAL_OPTIONS_HEADING;
-use self::{daemon::DaemonCli, doctor::DoctorCommand};
+use self::{daemon::DaemonCli, doctor::DoctorCommand, version::VersionCommand};
 
 /// Help styling: the default clap theme bolds and underlines the `Usage:`
 /// heading. Drop the underline (keep bold) so it reads as a plain heading.
@@ -122,6 +123,7 @@ impl Cli {
             }
             Command::Session(args) => run_session_operator(args, json_output).await,
             Command::Doctor(command) => command.run(self.output).await,
+            Command::Version(_command) => VersionCommand::run(self.output),
             Command::Daemon(command) => command.run(self.output).await,
             Command::RuntimeShim(args) => {
                 reject_unsupported_json_output("__shim", json_output)?;
@@ -313,6 +315,11 @@ define_commands!(
     Session(session_cli::OperatorArgs) => "session",
     #[command(about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
+    #[command(
+        about = generated_help::VERSION_ABOUT,
+        long_about = generated_help::VERSION_LONG_ABOUT
+    )]
+    Version(VersionCommand) => "version",
     #[command(about = generated_help::DAEMON_ABOUT)]
     Daemon(DaemonCli) => "daemon",
     #[command(hide = true)]

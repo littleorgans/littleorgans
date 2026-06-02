@@ -434,6 +434,14 @@ pub const CLI_SURFACE_JSON: &str = r#"{
           "group": "diagnostics",
           "hidden": null,
           "name": "doctor"
+        },
+        {
+          "about": "Print lilo version metadata",
+          "const_name": "VERSION",
+          "group": "diagnostics",
+          "hidden": null,
+          "long_about": "Print the composed lilo binary's version metadata, including the CLI version, runtime protocol version, and advertised runtime capabilities.",
+          "name": "version"
         }
       ],
       "heading": "Diagnostics",
@@ -490,6 +498,7 @@ pub const MCP_SCHEMA_JSON: &str = r#"{
           "runtime",
           "session",
           "doctor",
+          "version",
           "daemon"
         ],
         "type": "string"

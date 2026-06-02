@@ -18,6 +18,7 @@
           "runtime",
           "session",
           "doctor",
+          "version",
           "daemon"
         ],
         "type": "string"
