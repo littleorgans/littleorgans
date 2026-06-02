@@ -24,66 +24,225 @@ name = "run"
 const_name = "RUN"
 group = "session"
 about = "Run an agent session"
+long_about = """
+Run an agent session.
+
+Launches a runtime under a new identity-gated session record and reconciles \
+it to running. The session is recorded with its role and labels and appears in \
+`lilo get session`. Use --target to attach a tmux pane or run headless, and \
+--isolation to run on the host or inside docker."""
+
+[[commands.examples]]
+description = "Run a headless Claude session as an engineer in the current directory"
+args = ["run", "--role", "engineer", "--dir", ".", "claude"]
+
+[[commands.examples]]
+description = "Run Codex in a named tmux pane, preempting any current occupant"
+args = ["run", "--role", "reviewer", "--target", "tmux:work:0.1", "--force", "codex"]
+
+[[commands.examples]]
+description = "Run inside a docker profile with a writable bind mount"
+args = ["run", "--role", "engineer", "--isolation", "docker", "--mount", "/repo:/work:rw", "claude"]
+
+[[commands.examples]]
+description = "Run into a namespace with a task label"
+args = ["run", "--role", "engineer", "--namespace", "team-a", "--label", "task=alp-123", "claude"]
 
 [[commands]]
 name = "create"
 const_name = "CREATE"
 group = "session"
 about = "Create a session, label, or other resource"
+long_about = """
+Create a resource. `create namespace` adds a namespace before sessions run \
+into it; `create session` declaratively creates a headless session record, the \
+non-interactive sibling of `lilo run`."""
+
+[[commands.examples]]
+description = "Create a namespace before running sessions into it"
+args = ["create", "namespace", "alpha"]
+
+[[commands.examples]]
+description = "Declaratively create a headless Claude session record"
+args = ["create", "session", "claude", "--role", "engineer", "--dir", "/tmp/project"]
+
+[[commands.examples]]
+description = "Create a session into a namespace with a label"
+args = ["create", "session", "codex", "--role", "reviewer", "--namespace", "team-a", "--label", "app=web"]
 
 [[commands]]
 name = "get"
 const_name = "GET"
 group = "session"
 about = "Show sessions and other resources"
+long_about = """
+Show sessions and namespaces. With no argument it lists; a `--selector` narrows \
+the set by `role:`, `namespace:`, `label:`, `dir:`, a session id, or `all`."""
+
+[[commands.examples]]
+description = "List sessions in the current namespace with their labels"
+args = ["get", "session", "--show-labels"]
+
+[[commands.examples]]
+description = "Show sessions for one role across all namespaces"
+args = ["get", "session", "--selector", "role:engineer", "-A"]
+
+[[commands.examples]]
+description = "List namespaces"
+args = ["get", "namespace"]
 
 [[commands]]
 name = "delete"
 const_name = "DELETE"
 group = "session"
 about = "Delete sessions and other resources"
+long_about = """
+Delete sessions or namespaces. `delete session` signals the matching runtimes \
+with the requested signal (default SIGTERM), escalating to SIGKILL after the \
+grace period when needed; `delete namespace` terminates the namespace's \
+sessions, removes them, deletes the namespace, and clears any matching user \
+context."""
+
+[[commands.examples]]
+description = "Terminate sessions for a role, allowing 10s to drain"
+args = ["delete", "session", "role:engineer", "--grace", "10"]
+
+[[commands.examples]]
+description = "Force-kill matching sessions immediately"
+args = ["delete", "session", "label:app=web", "--signal", "SIGKILL", "--grace", "0"]
+
+[[commands.examples]]
+description = "Delete a namespace and its sessions"
+args = ["delete", "namespace", "alpha"]
 
 [[commands]]
 name = "label"
 const_name = "LABEL"
 group = "session"
 about = "Update labels on a resource"
+long_about = """
+Add or remove labels on the sessions a selector matches. A `key=value` mutation \
+adds or overwrites; a `key-` mutation removes."""
+
+[[commands.examples]]
+description = "Add a label to the sessions matching a role"
+args = ["label", "role:engineer", "app=web"]
+
+[[commands.examples]]
+description = "Remove a label from matching sessions"
+args = ["label", "role:engineer", "app-"]
+
+[[commands.examples]]
+description = "Label matching sessions across all namespaces"
+args = ["label", "label:tier=canary", "promoted=true", "-A"]
 
 [[commands]]
 name = "mail"
 const_name = "MAIL"
 group = "session"
 about = "Send mail to an agent"
+long_about = """
+Send and inspect agent mail. `mail send` delivers a message to a recipient \
+selector with an intent (request, result, or inform); `mail peek` and \
+`mail tail` inspect a conversation; `mail check` and `mail read` manage an \
+inbox."""
+
+[[commands.examples]]
+description = "Send a request to an agent by role"
+args = ["mail", "send", "--to", "role:reviewer", "--content", "please review #42", "--context-id", "review-42", "--intent", "request"]
+
+[[commands.examples]]
+description = "Peek a conversation thread by context id"
+args = ["mail", "peek", "--context-id", "review-42"]
+
+[[commands.examples]]
+description = "Follow a conversation until the current batch ends"
+args = ["mail", "tail", "--context-id", "review-42", "--once"]
 
 [[commands]]
 name = "nudge"
 const_name = "NUDGE"
 group = "session"
 about = "Nudge an agent"
+long_about = """
+Deliver a lightweight nudge to the sessions a selector matches, optionally \
+waiting until the recipient is idle before delivering."""
+
+[[commands.examples]]
+description = "Nudge an agent by role"
+args = ["nudge", "--to", "role:engineer", "--content", "you have mail"]
+
+[[commands.examples]]
+description = "Wait for the recipient to go idle, then nudge"
+args = ["nudge", "--to", "role:engineer", "--content", "ready for review", "--wait"]
 
 [[commands]]
 name = "capture"
 const_name = "CAPTURE"
 group = "session"
 about = "Capture session output"
+long_about = """
+Capture the current terminal output of one session by its exact id, optionally \
+including tmux scrollback."""
+
+[[commands.examples]]
+description = "Capture a session's current screen"
+args = ["capture", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b"]
+
+[[commands.examples]]
+description = "Capture a session with 200 lines of scrollback"
+args = ["capture", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--scrollback-lines", "200"]
 
 [[commands]]
 name = "logs"
 const_name = "LOGS"
 group = "session"
 about = "Tail session logs"
+long_about = """
+Stream the transcript of the single session a selector matches. Use --follow to \
+tail appended output as it is written."""
+
+[[commands.examples]]
+description = "Follow one session's transcript live"
+args = ["logs", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--follow"]
+
+[[commands.examples]]
+description = "Show the last 4 KiB of a session's transcript"
+args = ["logs", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--max-bytes", "4096"]
 
 [[commands]]
 name = "wait"
 const_name = "WAIT"
 group = "session"
 about = "Wait for a session condition"
+long_about = """
+Block until a matching session is running or terminated, or until exactly \
+count=N sessions match the selector. Honors --timeout-secs (default 30)."""
+
+[[commands.examples]]
+description = "Wait up to 60s for a session to start running"
+args = ["wait", "role:engineer", "--for", "running", "--timeout-secs", "60"]
+
+[[commands.examples]]
+description = "Wait until a specific session terminates"
+args = ["wait", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--for", "terminated"]
+
+[[commands.examples]]
+description = "Wait until exactly three sessions match the selector"
+args = ["wait", "role:engineer", "--for", "count=3"]
 
 [[commands]]
 name = "mcp"
 const_name = "MCP"
 group = "session"
 about = "Run lilo as an MCP server"
+long_about = """
+Run lilo as an MCP server over stdio, bridging MCP tool calls to the local lilo \
+daemon. Intended to be launched by an MCP client, not run interactively."""
+
+[[commands.examples]]
+description = "Run lilo as an MCP server over stdio"
+args = ["mcp"]
 
 [[commands]]
 name = "runtime"

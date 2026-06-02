@@ -198,7 +198,17 @@ struct CommandSpec {
     const_name: String,
     group: Option<String>,
     about: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    long_about: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    examples: Vec<Example>,
     hidden: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Example {
+    description: String,
+    args: Vec<String>,
 }
 
 impl CommandSpec {
@@ -218,16 +228,87 @@ fn generated_help_rs(registry: &CliRegistry) -> String {
     .expect("write help template");
     output.push('\n');
     for command in &registry.commands {
-        output.push_str("#[rustfmt::skip]\n");
-        writeln!(
-            output,
-            "pub const {}_ABOUT: &str = {};",
-            command.const_name,
-            rust_string(&command.about)
-        )
-        .expect("write command about");
+        output.push_str(&command_help_consts(command));
     }
+    output.push_str(&example_invocations_const(registry));
     output
+}
+
+fn command_help_consts(command: &CommandSpec) -> String {
+    let mut out = String::new();
+    push_help_const(
+        &mut out,
+        &format!("{}_ABOUT", command.const_name),
+        &command.about,
+    );
+    if let Some(long_about) = &command.long_about {
+        push_help_const(
+            &mut out,
+            &format!("{}_LONG_ABOUT", command.const_name),
+            long_about,
+        );
+    }
+    if !command.examples.is_empty() {
+        push_help_const(
+            &mut out,
+            &format!("{}_EXAMPLES", command.const_name),
+            &examples_block(&command.examples),
+        );
+    }
+    out
+}
+
+fn push_help_const(out: &mut String, name: &str, value: &str) {
+    out.push_str("#[rustfmt::skip]\n");
+    writeln!(out, "pub const {name}: &str = {};", rust_string(value)).expect("write help const");
+}
+
+fn examples_block(examples: &[Example]) -> String {
+    let mut block = String::from("Examples:\n");
+    for (index, example) in examples.iter().enumerate() {
+        if index > 0 {
+            block.push('\n');
+        }
+        writeln!(block, "  # {}", example.description).expect("write example description");
+        let command = example
+            .args
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        writeln!(block, "  lilo {command}").expect("write example command");
+    }
+    block
+}
+
+/// POSIX-quote an example argument so the rendered command line stays
+/// copy-pasteable once arguments carry spaces or shell metacharacters. Args in
+/// the safe set render bare, so existing single-token examples are unchanged.
+fn shell_quote(arg: &str) -> String {
+    const SAFE: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:=,@%+";
+    if !arg.is_empty() && arg.chars().all(|character| SAFE.contains(character)) {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+}
+
+fn example_invocations_const(registry: &CliRegistry) -> String {
+    let mut out = String::from("#[rustfmt::skip]\n");
+    out.push_str("pub const EXAMPLE_INVOCATIONS: &[&[&str]] = &[\n");
+    for command in &registry.commands {
+        for example in &command.examples {
+            let argv = example
+                .args
+                .iter()
+                .map(|arg| rust_string(arg))
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(out, "    &[{argv}],").expect("write example invocation row");
+        }
+    }
+    out.push_str("];\n");
+    out
 }
 
 fn generated_schema_rs(registry: &CliRegistry) -> XtaskResult<String> {

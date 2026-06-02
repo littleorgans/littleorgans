@@ -7,25 +7,69 @@ pub const ROOT_HELP_TEMPLATE: &str = "{about-with-newline}\n{usage-heading} {usa
 #[rustfmt::skip]
 pub const RUN_ABOUT: &str = "Run an agent session";
 #[rustfmt::skip]
+pub const RUN_LONG_ABOUT: &str = "Run an agent session.\n\nLaunches a runtime under a new identity-gated session record and reconciles it to running. The session is recorded with its role and labels and appears in `lilo get session`. Use --target to attach a tmux pane or run headless, and --isolation to run on the host or inside docker.";
+#[rustfmt::skip]
+pub const RUN_EXAMPLES: &str = "Examples:\n  # Run a headless Claude session as an engineer in the current directory\n  lilo run --role engineer --dir . claude\n\n  # Run Codex in a named tmux pane, preempting any current occupant\n  lilo run --role reviewer --target tmux:work:0.1 --force codex\n\n  # Run inside a docker profile with a writable bind mount\n  lilo run --role engineer --isolation docker --mount /repo:/work:rw claude\n\n  # Run into a namespace with a task label\n  lilo run --role engineer --namespace team-a --label task=alp-123 claude\n";
+#[rustfmt::skip]
 pub const CREATE_ABOUT: &str = "Create a session, label, or other resource";
+#[rustfmt::skip]
+pub const CREATE_LONG_ABOUT: &str = "Create a resource. `create namespace` adds a namespace before sessions run into it; `create session` declaratively creates a headless session record, the non-interactive sibling of `lilo run`.";
+#[rustfmt::skip]
+pub const CREATE_EXAMPLES: &str = "Examples:\n  # Create a namespace before running sessions into it\n  lilo create namespace alpha\n\n  # Declaratively create a headless Claude session record\n  lilo create session claude --role engineer --dir /tmp/project\n\n  # Create a session into a namespace with a label\n  lilo create session codex --role reviewer --namespace team-a --label app=web\n";
 #[rustfmt::skip]
 pub const GET_ABOUT: &str = "Show sessions and other resources";
 #[rustfmt::skip]
+pub const GET_LONG_ABOUT: &str = "Show sessions and namespaces. With no argument it lists; a `--selector` narrows the set by `role:`, `namespace:`, `label:`, `dir:`, a session id, or `all`.";
+#[rustfmt::skip]
+pub const GET_EXAMPLES: &str = "Examples:\n  # List sessions in the current namespace with their labels\n  lilo get session --show-labels\n\n  # Show sessions for one role across all namespaces\n  lilo get session --selector role:engineer -A\n\n  # List namespaces\n  lilo get namespace\n";
+#[rustfmt::skip]
 pub const DELETE_ABOUT: &str = "Delete sessions and other resources";
+#[rustfmt::skip]
+pub const DELETE_LONG_ABOUT: &str = "Delete sessions or namespaces. `delete session` signals the matching runtimes with the requested signal (default SIGTERM), escalating to SIGKILL after the grace period when needed; `delete namespace` terminates the namespace's sessions, removes them, deletes the namespace, and clears any matching user context.";
+#[rustfmt::skip]
+pub const DELETE_EXAMPLES: &str = "Examples:\n  # Terminate sessions for a role, allowing 10s to drain\n  lilo delete session role:engineer --grace 10\n\n  # Force-kill matching sessions immediately\n  lilo delete session label:app=web --signal SIGKILL --grace 0\n\n  # Delete a namespace and its sessions\n  lilo delete namespace alpha\n";
 #[rustfmt::skip]
 pub const LABEL_ABOUT: &str = "Update labels on a resource";
 #[rustfmt::skip]
+pub const LABEL_LONG_ABOUT: &str = "Add or remove labels on the sessions a selector matches. A `key=value` mutation adds or overwrites; a `key-` mutation removes.";
+#[rustfmt::skip]
+pub const LABEL_EXAMPLES: &str = "Examples:\n  # Add a label to the sessions matching a role\n  lilo label role:engineer app=web\n\n  # Remove a label from matching sessions\n  lilo label role:engineer app-\n\n  # Label matching sessions across all namespaces\n  lilo label label:tier=canary promoted=true -A\n";
+#[rustfmt::skip]
 pub const MAIL_ABOUT: &str = "Send mail to an agent";
+#[rustfmt::skip]
+pub const MAIL_LONG_ABOUT: &str = "Send and inspect agent mail. `mail send` delivers a message to a recipient selector with an intent (request, result, or inform); `mail peek` and `mail tail` inspect a conversation; `mail check` and `mail read` manage an inbox.";
+#[rustfmt::skip]
+pub const MAIL_EXAMPLES: &str = "Examples:\n  # Send a request to an agent by role\n  lilo mail send --to role:reviewer --content 'please review #42' --context-id review-42 --intent request\n\n  # Peek a conversation thread by context id\n  lilo mail peek --context-id review-42\n\n  # Follow a conversation until the current batch ends\n  lilo mail tail --context-id review-42 --once\n";
 #[rustfmt::skip]
 pub const NUDGE_ABOUT: &str = "Nudge an agent";
 #[rustfmt::skip]
+pub const NUDGE_LONG_ABOUT: &str = "Deliver a lightweight nudge to the sessions a selector matches, optionally waiting until the recipient is idle before delivering.";
+#[rustfmt::skip]
+pub const NUDGE_EXAMPLES: &str = "Examples:\n  # Nudge an agent by role\n  lilo nudge --to role:engineer --content 'you have mail'\n\n  # Wait for the recipient to go idle, then nudge\n  lilo nudge --to role:engineer --content 'ready for review' --wait\n";
+#[rustfmt::skip]
 pub const CAPTURE_ABOUT: &str = "Capture session output";
+#[rustfmt::skip]
+pub const CAPTURE_LONG_ABOUT: &str = "Capture the current terminal output of one session by its exact id, optionally including tmux scrollback.";
+#[rustfmt::skip]
+pub const CAPTURE_EXAMPLES: &str = "Examples:\n  # Capture a session's current screen\n  lilo capture 0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b\n\n  # Capture a session with 200 lines of scrollback\n  lilo capture 0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b --scrollback-lines 200\n";
 #[rustfmt::skip]
 pub const LOGS_ABOUT: &str = "Tail session logs";
 #[rustfmt::skip]
+pub const LOGS_LONG_ABOUT: &str = "Stream the transcript of the single session a selector matches. Use --follow to tail appended output as it is written.";
+#[rustfmt::skip]
+pub const LOGS_EXAMPLES: &str = "Examples:\n  # Follow one session's transcript live\n  lilo logs 0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b --follow\n\n  # Show the last 4 KiB of a session's transcript\n  lilo logs 0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b --max-bytes 4096\n";
+#[rustfmt::skip]
 pub const WAIT_ABOUT: &str = "Wait for a session condition";
 #[rustfmt::skip]
+pub const WAIT_LONG_ABOUT: &str = "Block until a matching session is running or terminated, or until exactly count=N sessions match the selector. Honors --timeout-secs (default 30).";
+#[rustfmt::skip]
+pub const WAIT_EXAMPLES: &str = "Examples:\n  # Wait up to 60s for a session to start running\n  lilo wait role:engineer --for running --timeout-secs 60\n\n  # Wait until a specific session terminates\n  lilo wait 0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b --for terminated\n\n  # Wait until exactly three sessions match the selector\n  lilo wait role:engineer --for count=3\n";
+#[rustfmt::skip]
 pub const MCP_ABOUT: &str = "Run lilo as an MCP server";
+#[rustfmt::skip]
+pub const MCP_LONG_ABOUT: &str = "Run lilo as an MCP server over stdio, bridging MCP tool calls to the local lilo daemon. Intended to be launched by an MCP client, not run interactively.";
+#[rustfmt::skip]
+pub const MCP_EXAMPLES: &str = "Examples:\n  # Run lilo as an MCP server over stdio\n  lilo mcp\n";
 #[rustfmt::skip]
 pub const RUNTIME_ABOUT: &str = "Raw runtime operator namespace. runtime spawn never creates session records.";
 #[rustfmt::skip]
@@ -38,3 +82,35 @@ pub const DOCTOR_ABOUT: &str = "Inspect local lilo health";
 pub const DAEMON_ABOUT: &str = "Manage the local lilo daemon process";
 #[rustfmt::skip]
 pub const RUNTIME_SHIM_ABOUT: &str = "Run the hidden runtime shim";
+#[rustfmt::skip]
+pub const EXAMPLE_INVOCATIONS: &[&[&str]] = &[
+    &["run", "--role", "engineer", "--dir", ".", "claude"],
+    &["run", "--role", "reviewer", "--target", "tmux:work:0.1", "--force", "codex"],
+    &["run", "--role", "engineer", "--isolation", "docker", "--mount", "/repo:/work:rw", "claude"],
+    &["run", "--role", "engineer", "--namespace", "team-a", "--label", "task=alp-123", "claude"],
+    &["create", "namespace", "alpha"],
+    &["create", "session", "claude", "--role", "engineer", "--dir", "/tmp/project"],
+    &["create", "session", "codex", "--role", "reviewer", "--namespace", "team-a", "--label", "app=web"],
+    &["get", "session", "--show-labels"],
+    &["get", "session", "--selector", "role:engineer", "-A"],
+    &["get", "namespace"],
+    &["delete", "session", "role:engineer", "--grace", "10"],
+    &["delete", "session", "label:app=web", "--signal", "SIGKILL", "--grace", "0"],
+    &["delete", "namespace", "alpha"],
+    &["label", "role:engineer", "app=web"],
+    &["label", "role:engineer", "app-"],
+    &["label", "label:tier=canary", "promoted=true", "-A"],
+    &["mail", "send", "--to", "role:reviewer", "--content", "please review #42", "--context-id", "review-42", "--intent", "request"],
+    &["mail", "peek", "--context-id", "review-42"],
+    &["mail", "tail", "--context-id", "review-42", "--once"],
+    &["nudge", "--to", "role:engineer", "--content", "you have mail"],
+    &["nudge", "--to", "role:engineer", "--content", "ready for review", "--wait"],
+    &["capture", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b"],
+    &["capture", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--scrollback-lines", "200"],
+    &["logs", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--follow"],
+    &["logs", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--max-bytes", "4096"],
+    &["wait", "role:engineer", "--for", "running", "--timeout-secs", "60"],
+    &["wait", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b", "--for", "terminated"],
+    &["wait", "role:engineer", "--for", "count=3"],
+    &["mcp"],
+];

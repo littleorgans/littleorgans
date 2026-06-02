@@ -27,7 +27,12 @@ use self::{daemon::DaemonCli, doctor::DoctorCommand};
 pub struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = Output::Human)]
     output: Output,
-    #[arg(long, global = true, action = clap::ArgAction::Count)]
+    #[arg(
+        long,
+        global = true,
+        action = clap::ArgAction::Count,
+        help = "Increase log verbosity; repeat for more detail (-v, -vv)."
+    )]
     pub verbose: u8,
     #[arg(long, short = 'c', global = true)]
     pub config: Option<PathBuf>,
@@ -181,6 +186,14 @@ pub(crate) fn resolve_lilo_paths() -> Result<LiloPaths, LiloPathError> {
     Ok(LiloPaths::new(home))
 }
 
+/// Leaf help layout for commands that carry an Examples block: the
+/// `{after-help}` block renders above the arguments/options section, the
+/// kubectl order (teaching before reference), rather than clap's default
+/// bottom position. Applied only to commands with examples; commands without
+/// keep clap's default template so their spacing stays clean.
+const LEAF_HELP_TEMPLATE: &str =
+    "{before-help}{about-with-newline}\n{usage-heading} {usage}{after-help}\n{all-args}";
+
 macro_rules! define_commands {
     ($(
         $(#[$meta:meta])*
@@ -198,52 +211,92 @@ macro_rules! define_commands {
 }
 
 define_commands!(
-    #[command(next_help_heading = "Session commands", about = generated_help::RUN_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::RUN_ABOUT,
+        long_about = generated_help::RUN_LONG_ABOUT,
+        after_help = generated_help::RUN_EXAMPLES
+    )]
     Run(session_cli_def::RunArgs) => "run",
     #[command(
-        next_help_heading = "Session commands",
-        about = generated_help::CREATE_ABOUT
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::CREATE_ABOUT,
+        long_about = generated_help::CREATE_LONG_ABOUT,
+        after_help = generated_help::CREATE_EXAMPLES
     )]
     Create(session_cli_def::CreateArgs) => "create",
-    #[command(next_help_heading = "Session commands", about = generated_help::GET_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::GET_ABOUT,
+        long_about = generated_help::GET_LONG_ABOUT,
+        after_help = generated_help::GET_EXAMPLES
+    )]
     Get(session_cli_def::GetArgs) => "get",
     #[command(
-        next_help_heading = "Session commands",
-        about = generated_help::DELETE_ABOUT
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::DELETE_ABOUT,
+        long_about = generated_help::DELETE_LONG_ABOUT,
+        after_help = generated_help::DELETE_EXAMPLES
     )]
     Delete(session_cli_def::DeleteArgs) => "delete",
-    #[command(next_help_heading = "Session commands", about = generated_help::LABEL_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::LABEL_ABOUT,
+        long_about = generated_help::LABEL_LONG_ABOUT,
+        after_help = generated_help::LABEL_EXAMPLES
+    )]
     Label(session_cli_def::LabelArgs) => "label",
-    #[command(next_help_heading = "Session commands", about = generated_help::MAIL_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::MAIL_ABOUT,
+        long_about = generated_help::MAIL_LONG_ABOUT,
+        after_help = generated_help::MAIL_EXAMPLES
+    )]
     Mail(session_cli_def::MailArgs) => "mail",
-    #[command(next_help_heading = "Session commands", about = generated_help::NUDGE_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::NUDGE_ABOUT,
+        long_about = generated_help::NUDGE_LONG_ABOUT,
+        after_help = generated_help::NUDGE_EXAMPLES
+    )]
     Nudge(session_cli_def::NudgeArgs) => "nudge",
-    #[command(next_help_heading = "Session commands", about = generated_help::CAPTURE_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::CAPTURE_ABOUT,
+        long_about = generated_help::CAPTURE_LONG_ABOUT,
+        after_help = generated_help::CAPTURE_EXAMPLES
+    )]
     Capture(session_cli_def::CaptureArgs) => "capture",
-    #[command(next_help_heading = "Session commands", about = generated_help::LOGS_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::LOGS_ABOUT,
+        long_about = generated_help::LOGS_LONG_ABOUT,
+        after_help = generated_help::LOGS_EXAMPLES
+    )]
     Logs(session_cli_def::LogsArgs) => "logs",
-    #[command(next_help_heading = "Session commands", about = generated_help::WAIT_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::WAIT_ABOUT,
+        long_about = generated_help::WAIT_LONG_ABOUT,
+        after_help = generated_help::WAIT_EXAMPLES
+    )]
     Wait(session_cli_def::WaitArgs) => "wait",
-    #[command(next_help_heading = "Session commands", about = generated_help::MCP_ABOUT)]
+    #[command(
+        help_template = LEAF_HELP_TEMPLATE,
+        about = generated_help::MCP_ABOUT,
+        long_about = generated_help::MCP_LONG_ABOUT,
+        after_help = generated_help::MCP_EXAMPLES
+    )]
     Mcp(session_cli_def::McpArgs) => "mcp",
-    #[command(
-        next_help_heading = "Substrate operator commands",
-        about = generated_help::RUNTIME_ABOUT
-    )]
+    #[command(about = generated_help::RUNTIME_ABOUT)]
     Runtime(runtime_cli::OperatorArgs) => "runtime",
-    #[command(
-        next_help_heading = "Substrate operator commands",
-        about = generated_help::SESSION_ABOUT
-    )]
+    #[command(about = generated_help::SESSION_ABOUT)]
     Session(session_cli::OperatorArgs) => "session",
-    #[command(
-        next_help_heading = "Substrate operator commands",
-        about = generated_help::IDENTITY_ABOUT
-    )]
+    #[command(about = generated_help::IDENTITY_ABOUT)]
     Identity(PlaceholderArgs) => "identity",
-    #[command(next_help_heading = "Diagnostics", about = generated_help::DOCTOR_ABOUT)]
+    #[command(about = generated_help::DOCTOR_ABOUT)]
     Doctor(DoctorCommand) => "doctor",
-    #[command(next_help_heading = "Daemon lifecycle", about = generated_help::DAEMON_ABOUT)]
+    #[command(about = generated_help::DAEMON_ABOUT)]
     Daemon(DaemonCli) => "daemon",
     #[command(hide = true)]
     RuntimeShim(lilo_runtime_app::cli::shim::ShimArgs) => "__shim",
@@ -278,6 +331,47 @@ mod tests {
         assert!(help.contains("doctor"));
         assert!(help.contains("runtime"));
         assert!(!help.contains("__shim"));
+    }
+
+    #[test]
+    fn run_help_uses_options_heading_and_shows_examples() {
+        let mut command = Cli::command();
+        let run = command
+            .find_subcommand_mut("run")
+            .expect("run subcommand exists");
+        let help = run.render_long_help().to_string();
+
+        assert!(
+            !help.contains("Session commands:"),
+            "run flags must not sit under the root group heading: {help}"
+        );
+        assert!(
+            help.contains("Examples:"),
+            "run --help must include an Examples block: {help}"
+        );
+        assert!(
+            help.contains("lilo run --role engineer --dir . claude"),
+            "run --help must show the headless example: {help}"
+        );
+    }
+
+    // Scope: clap-parse validity only — flag existence, required args, and
+    // FromStr-flag syntax (the isolation enum, MountSpec). It does NOT validate
+    // runtime semantics: selectors and `--target` are plain strings, and
+    // `docker:PROFILE` accepts any name, so example semantics (real selectors,
+    // valid tmux targets, real docker profiles) are gated by review, not by
+    // this test.
+    #[test]
+    fn documented_examples_parse_as_valid_invocations() {
+        for args in generated_help::EXAMPLE_INVOCATIONS {
+            let argv = std::iter::once("lilo").chain(args.iter().copied());
+            Cli::try_parse_from(argv).unwrap_or_else(|error| {
+                panic!(
+                    "documented example failed to parse: lilo {}: {error}",
+                    args.join(" ")
+                )
+            });
+        }
     }
 
     #[test]
