@@ -10,6 +10,7 @@ use crate::cli::selector_scope::NamespaceScopeArgs;
 const NAMESPACE_CREATE_HELP: &str = "Namespace slug to create.";
 const NAMESPACE_CONTEXT_HELP: &str = "Namespace slug to use as the user context.";
 const NAMESPACE_DELETE_HELP: &str = "Namespace slug to delete.";
+const CONFIG_ABOUT: &str = "Manage session-matters user configuration";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -29,7 +30,7 @@ pub enum Command {
     Run(RunArgs),
     #[command(about = "Create namespace and session records")]
     Create(CreateArgs),
-    #[command(about = "Manage session-matters user configuration")]
+    #[command(about = CONFIG_ABOUT)]
     Config(ConfigArgs),
     #[command(about = "Inspect sessions and namespaces")]
     Get(GetArgs),
@@ -51,6 +52,14 @@ pub enum Command {
     Nudge(NudgeArgs),
     #[command(about = "Bridge MCP stdio to the session-matters daemon")]
     Mcp(McpArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum OperatorCommand {
+    #[command(about = CONFIG_ABOUT)]
+    Config(ConfigArgs),
+    #[command(about = generated_help::DOCTOR_ABOUT, long_about = generated_help::DOCTOR_ABOUT)]
+    Doctor(DoctorArgs),
 }
 
 #[derive(Debug, Args)]

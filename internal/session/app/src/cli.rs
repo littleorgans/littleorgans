@@ -21,16 +21,22 @@ pub mod wait;
 use anyhow::Result;
 use clap::Args;
 
-use self::cli_def::Command;
+use self::cli_def::{Command, OperatorCommand};
 
 #[derive(Debug, Args)]
+#[command(disable_help_subcommand = true)]
 pub struct OperatorArgs {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: OperatorCommand,
 }
 
 pub async fn run_operator(args: OperatorArgs, json_output: bool) -> Result<()> {
-    dispatch(args.command, json_output).await
+    let command = match args.command {
+        OperatorCommand::Config(args) => Command::Config(args),
+        OperatorCommand::Doctor(args) => Command::Doctor(args),
+    };
+
+    dispatch(command, json_output).await
 }
 
 pub async fn dispatch(command: Command, json_output: bool) -> Result<()> {
@@ -83,6 +89,15 @@ impl Command {
             Self::Wait(_) => JsonOutputSupport::Unsupported("wait"),
             Self::Nudge(_) => JsonOutputSupport::Unsupported("nudge"),
             Self::Mcp(_) => JsonOutputSupport::Unsupported("mcp"),
+        }
+    }
+}
+
+impl OperatorCommand {
+    pub fn json_output_support(&self) -> JsonOutputSupport {
+        match self {
+            Self::Config(_) => JsonOutputSupport::Unsupported("config"),
+            Self::Doctor(_) => JsonOutputSupport::Unsupported("doctor"),
         }
     }
 }

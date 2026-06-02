@@ -137,7 +137,7 @@ async fn run_session(
     command: session_cli_def::Command,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    validate_session_json_output(&command, json_output)?;
+    validate_session_json_output(command.json_output_support(), json_output)?;
     session_cli::dispatch(command, json_output)
         .await
         .map_err(Diagnostic::from)
@@ -147,19 +147,17 @@ async fn run_session_operator(
     args: session_cli::OperatorArgs,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    validate_session_json_output(&args.command, json_output)?;
+    validate_session_json_output(args.command.json_output_support(), json_output)?;
     session_cli::run_operator(args, json_output)
         .await
         .map_err(Diagnostic::from)
 }
 
 fn validate_session_json_output(
-    command: &session_cli_def::Command,
+    support: session_cli::JsonOutputSupport,
     json_output: bool,
 ) -> Result<(), Diagnostic> {
-    if let (true, session_cli::JsonOutputSupport::Unsupported(command)) =
-        (json_output, command.json_output_support())
-    {
+    if let (true, session_cli::JsonOutputSupport::Unsupported(command)) = (json_output, support) {
         return Err(unsupported_json_output(command));
     }
 
@@ -401,6 +399,24 @@ mod tests {
     }
 
     #[test]
+    fn session_operator_help_lists_only_operator_commands() {
+        let mut command = Cli::command();
+        let session = command
+            .find_subcommand_mut("session")
+            .expect("session subcommand exists");
+        let help = session.render_long_help().to_string();
+        let visible: Vec<_> = session
+            .get_subcommands()
+            .filter(|subcommand| !subcommand.is_hide_set())
+            .map(clap::Command::get_name)
+            .collect();
+
+        assert_eq!(visible, ["config", "doctor"]);
+        assert!(help.contains("config"));
+        assert!(help.contains("doctor"));
+    }
+
+    #[test]
     fn output_flag_is_global_after_subcommands() {
         let cli = Cli::try_parse_from(["lilo", "doctor", "--output", "json"])
             .expect("parse doctor json output");
@@ -501,18 +517,6 @@ mod tests {
                 "wait",
             ),
             (&["lilo", "mcp", "--output", "json"], "mcp"),
-            (
-                &[
-                    "lilo",
-                    "session",
-                    "label",
-                    "abc",
-                    "key=value",
-                    "--output",
-                    "json",
-                ],
-                "label",
-            ),
             (
                 &["lilo", "runtime", "status", "--output", "json"],
                 "runtime",
