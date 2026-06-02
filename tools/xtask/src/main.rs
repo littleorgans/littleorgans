@@ -10,6 +10,11 @@ use lilo_common::exit_codes;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+/// Heading for the always-present global flags. Emitted into `generated_help.rs`
+/// and used in the root help template so the leaf `help_heading` attributes and
+/// the root template share one source.
+const GLOBAL_OPTIONS_HEADING: &str = "Global options";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "xtask",
@@ -198,7 +203,17 @@ struct CommandSpec {
     const_name: String,
     group: Option<String>,
     about: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    long_about: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    examples: Vec<Example>,
     hidden: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Example {
+    description: String,
+    args: Vec<String>,
 }
 
 impl CommandSpec {
@@ -217,17 +232,94 @@ fn generated_help_rs(registry: &CliRegistry) -> String {
     )
     .expect("write help template");
     output.push('\n');
+    push_help_const(
+        &mut output,
+        "GLOBAL_OPTIONS_HEADING",
+        GLOBAL_OPTIONS_HEADING,
+    );
+    output.push('\n');
     for command in &registry.commands {
-        output.push_str("#[rustfmt::skip]\n");
-        writeln!(
-            output,
-            "pub const {}_ABOUT: &str = {};",
-            command.const_name,
-            rust_string(&command.about)
-        )
-        .expect("write command about");
+        output.push_str(&command_help_consts(command));
     }
+    output.push_str(&example_invocations_const(registry));
     output
+}
+
+fn command_help_consts(command: &CommandSpec) -> String {
+    let mut out = String::new();
+    push_help_const(
+        &mut out,
+        &format!("{}_ABOUT", command.const_name),
+        &command.about,
+    );
+    if let Some(long_about) = &command.long_about {
+        push_help_const(
+            &mut out,
+            &format!("{}_LONG_ABOUT", command.const_name),
+            long_about,
+        );
+    }
+    if !command.examples.is_empty() {
+        push_help_const(
+            &mut out,
+            &format!("{}_EXAMPLES", command.const_name),
+            &examples_block(&command.examples),
+        );
+    }
+    out
+}
+
+fn push_help_const(out: &mut String, name: &str, value: &str) {
+    out.push_str("#[rustfmt::skip]\n");
+    writeln!(out, "pub const {name}: &str = {};", rust_string(value)).expect("write help const");
+}
+
+fn examples_block(examples: &[Example]) -> String {
+    let mut block = String::from("Examples:\n");
+    for (index, example) in examples.iter().enumerate() {
+        if index > 0 {
+            block.push('\n');
+        }
+        writeln!(block, "  # {}", example.description).expect("write example description");
+        let command = example
+            .args
+            .iter()
+            .map(|arg| shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        writeln!(block, "  lilo {command}").expect("write example command");
+    }
+    block
+}
+
+/// POSIX-quote an example argument so the rendered command line stays
+/// copy-pasteable once arguments carry spaces or shell metacharacters. Args in
+/// the safe set render bare, so existing single-token examples are unchanged.
+fn shell_quote(arg: &str) -> String {
+    const SAFE: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./:=,@%+";
+    if !arg.is_empty() && arg.chars().all(|character| SAFE.contains(character)) {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+}
+
+fn example_invocations_const(registry: &CliRegistry) -> String {
+    let mut out = String::from("#[rustfmt::skip]\n");
+    out.push_str("pub const EXAMPLE_INVOCATIONS: &[&[&str]] = &[\n");
+    for command in &registry.commands {
+        for example in &command.examples {
+            let argv = example
+                .args
+                .iter()
+                .map(|arg| rust_string(arg))
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(out, "    &[{argv}],").expect("write example invocation row");
+        }
+    }
+    out.push_str("];\n");
+    out
 }
 
 fn generated_schema_rs(registry: &CliRegistry) -> XtaskResult<String> {
@@ -255,7 +347,7 @@ fn generated_header() -> String {
 }
 
 fn root_help_template(registry: &CliRegistry) -> String {
-    let mut template = String::from("{about-with-newline}\n{usage-heading} {usage}\n\n");
+    let mut template = String::from("{about-with-newline}\n{usage-heading}\n  {usage}\n\n");
     for group in &registry.groups {
         writeln!(template, "{}:", group.heading).expect("write group heading");
         for command in registry.public_commands_for_group(&group.id) {
@@ -264,7 +356,8 @@ fn root_help_template(registry: &CliRegistry) -> String {
         }
         template.push('\n');
     }
-    template.push_str("Options:\n{options}{after-help}\n");
+    writeln!(template, "{GLOBAL_OPTIONS_HEADING}:").expect("write global options heading");
+    template.push_str("{options}{after-help}\n");
     template
 }
 

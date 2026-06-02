@@ -9,78 +9,397 @@ pub const CLI_SURFACE_JSON: &str = r#"{
         {
           "about": "Run an agent session",
           "const_name": "RUN",
+          "examples": [
+            {
+              "args": [
+                "run",
+                "--role",
+                "engineer",
+                "--dir",
+                ".",
+                "claude"
+              ],
+              "description": "Run a headless Claude session as an engineer in the current directory"
+            },
+            {
+              "args": [
+                "run",
+                "--role",
+                "reviewer",
+                "--target",
+                "tmux:work:0.1",
+                "--force",
+                "codex"
+              ],
+              "description": "Run Codex in a named tmux pane, preempting any current occupant"
+            },
+            {
+              "args": [
+                "run",
+                "--role",
+                "engineer",
+                "--isolation",
+                "docker",
+                "--mount",
+                "/repo:/work:rw",
+                "claude"
+              ],
+              "description": "Run inside a docker profile with a writable bind mount"
+            },
+            {
+              "args": [
+                "run",
+                "--role",
+                "engineer",
+                "--namespace",
+                "team-a",
+                "--label",
+                "task=alp-123",
+                "claude"
+              ],
+              "description": "Run into a namespace with a task label"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Run an agent session.\n\nLaunches a runtime under a new identity-gated session record and reconciles it to running. The session is recorded with its role and labels and appears in `lilo get session`. Use --target to attach a tmux pane or run headless, and --isolation to run on the host or inside docker.",
           "name": "run"
         },
         {
           "about": "Create a session, label, or other resource",
           "const_name": "CREATE",
+          "examples": [
+            {
+              "args": [
+                "create",
+                "namespace",
+                "alpha"
+              ],
+              "description": "Create a namespace before running sessions into it"
+            },
+            {
+              "args": [
+                "create",
+                "session",
+                "claude",
+                "--role",
+                "engineer",
+                "--dir",
+                "/tmp/project"
+              ],
+              "description": "Declaratively create a headless Claude session record"
+            },
+            {
+              "args": [
+                "create",
+                "session",
+                "codex",
+                "--role",
+                "reviewer",
+                "--namespace",
+                "team-a",
+                "--label",
+                "app=web"
+              ],
+              "description": "Create a session into a namespace with a label"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Create a resource. `create namespace` adds a namespace before sessions run into it; `create session` declaratively creates a headless session record, the non-interactive sibling of `lilo run`.",
           "name": "create"
         },
         {
           "about": "Show sessions and other resources",
           "const_name": "GET",
+          "examples": [
+            {
+              "args": [
+                "get",
+                "session",
+                "--show-labels"
+              ],
+              "description": "List sessions in the current namespace with their labels"
+            },
+            {
+              "args": [
+                "get",
+                "session",
+                "--selector",
+                "role:engineer",
+                "-A"
+              ],
+              "description": "Show sessions for one role across all namespaces"
+            },
+            {
+              "args": [
+                "get",
+                "namespace"
+              ],
+              "description": "List namespaces"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Show sessions and namespaces. With no argument it lists; a `--selector` narrows the set by `role:`, `namespace:`, `label:`, `dir:`, a session id, or `all`.",
           "name": "get"
         },
         {
           "about": "Delete sessions and other resources",
           "const_name": "DELETE",
+          "examples": [
+            {
+              "args": [
+                "delete",
+                "session",
+                "role:engineer",
+                "--grace",
+                "10"
+              ],
+              "description": "Terminate sessions for a role, allowing 10s to drain"
+            },
+            {
+              "args": [
+                "delete",
+                "session",
+                "label:app=web",
+                "--signal",
+                "SIGKILL",
+                "--grace",
+                "0"
+              ],
+              "description": "Force-kill matching sessions immediately"
+            },
+            {
+              "args": [
+                "delete",
+                "namespace",
+                "alpha"
+              ],
+              "description": "Delete a namespace and its sessions"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Delete sessions or namespaces. `delete session` signals the matching runtimes with the requested signal (default SIGTERM), escalating to SIGKILL after the grace period when needed; `delete namespace` terminates the namespace's sessions, removes them, deletes the namespace, and clears any matching user context.",
           "name": "delete"
         },
         {
           "about": "Update labels on a resource",
           "const_name": "LABEL",
+          "examples": [
+            {
+              "args": [
+                "label",
+                "role:engineer",
+                "app=web"
+              ],
+              "description": "Add a label to the sessions matching a role"
+            },
+            {
+              "args": [
+                "label",
+                "role:engineer",
+                "app-"
+              ],
+              "description": "Remove a label from matching sessions"
+            },
+            {
+              "args": [
+                "label",
+                "label:tier=canary",
+                "promoted=true",
+                "-A"
+              ],
+              "description": "Label matching sessions across all namespaces"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Add or remove labels on the sessions a selector matches. A `key=value` mutation adds or overwrites; a `key-` mutation removes.",
           "name": "label"
         },
         {
           "about": "Send mail to an agent",
           "const_name": "MAIL",
+          "examples": [
+            {
+              "args": [
+                "mail",
+                "send",
+                "--to",
+                "role:reviewer",
+                "--content",
+                "please review #42",
+                "--context-id",
+                "review-42",
+                "--intent",
+                "request"
+              ],
+              "description": "Send a request to an agent by role"
+            },
+            {
+              "args": [
+                "mail",
+                "peek",
+                "--context-id",
+                "review-42"
+              ],
+              "description": "Peek a conversation thread by context id"
+            },
+            {
+              "args": [
+                "mail",
+                "tail",
+                "--context-id",
+                "review-42",
+                "--once"
+              ],
+              "description": "Follow a conversation until the current batch ends"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Send and inspect agent mail. `mail send` delivers a message to a recipient selector with an intent (request, result, or inform); `mail peek` and `mail tail` inspect a conversation; `mail check` and `mail read` manage an inbox.",
           "name": "mail"
         },
         {
           "about": "Nudge an agent",
           "const_name": "NUDGE",
+          "examples": [
+            {
+              "args": [
+                "nudge",
+                "--to",
+                "role:engineer",
+                "--content",
+                "you have mail"
+              ],
+              "description": "Nudge an agent by role"
+            },
+            {
+              "args": [
+                "nudge",
+                "--to",
+                "role:engineer",
+                "--content",
+                "ready for review",
+                "--wait"
+              ],
+              "description": "Wait for the recipient to go idle, then nudge"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Deliver a lightweight nudge to the sessions a selector matches, optionally waiting until the recipient is idle before delivering.",
           "name": "nudge"
         },
         {
           "about": "Capture session output",
           "const_name": "CAPTURE",
+          "examples": [
+            {
+              "args": [
+                "capture",
+                "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b"
+              ],
+              "description": "Capture a session's current screen"
+            },
+            {
+              "args": [
+                "capture",
+                "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b",
+                "--scrollback-lines",
+                "200"
+              ],
+              "description": "Capture a session with 200 lines of scrollback"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Capture the current terminal output of one session by its exact id, optionally including tmux scrollback.",
           "name": "capture"
         },
         {
           "about": "Tail session logs",
           "const_name": "LOGS",
+          "examples": [
+            {
+              "args": [
+                "logs",
+                "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b",
+                "--follow"
+              ],
+              "description": "Follow one session's transcript live"
+            },
+            {
+              "args": [
+                "logs",
+                "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b",
+                "--max-bytes",
+                "4096"
+              ],
+              "description": "Show the last 4 KiB of a session's transcript"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Stream the transcript of the single session a selector matches. Use --follow to tail appended output as it is written.",
           "name": "logs"
         },
         {
           "about": "Wait for a session condition",
           "const_name": "WAIT",
+          "examples": [
+            {
+              "args": [
+                "wait",
+                "role:engineer",
+                "--for",
+                "running",
+                "--timeout-secs",
+                "60"
+              ],
+              "description": "Wait up to 60s for a session to start running"
+            },
+            {
+              "args": [
+                "wait",
+                "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b",
+                "--for",
+                "terminated"
+              ],
+              "description": "Wait until a specific session terminates"
+            },
+            {
+              "args": [
+                "wait",
+                "role:engineer",
+                "--for",
+                "count=3"
+              ],
+              "description": "Wait until exactly three sessions match the selector"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Block until a matching session is running or terminated, or until exactly count=N sessions match the selector. Honors --timeout-secs (default 30).",
           "name": "wait"
         },
         {
           "about": "Run lilo as an MCP server",
           "const_name": "MCP",
+          "examples": [
+            {
+              "args": [
+                "mcp"
+              ],
+              "description": "Run lilo as an MCP server over stdio"
+            }
+          ],
           "group": "session",
           "hidden": null,
+          "long_about": "Run lilo as an MCP server over stdio, bridging MCP tool calls to the local lilo daemon. Intended to be launched by an MCP client, not run interactively.",
           "name": "mcp"
         }
       ],
