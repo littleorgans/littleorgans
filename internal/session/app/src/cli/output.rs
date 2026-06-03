@@ -7,11 +7,68 @@ use lilo_session_core::{Label, MailCountView, MailSendResult, MessageView, Sende
 const CONTENT_PREVIEW_MAX_CHARS: usize = 120;
 const PREVIEW_ELLIPSIS: &str = "...";
 
+#[derive(Debug, Clone)]
+pub struct ShortSessionIdSet {
+    full_ids: Vec<String>,
+}
+
+impl ShortSessionIdSet {
+    #[must_use]
+    pub fn from_sessions(sessions: &[Session]) -> Self {
+        Self {
+            full_ids: sessions
+                .iter()
+                .map(|session| session.id.to_string())
+                .collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn render(&self, id: &SessionId) -> String {
+        id.short_with(|prefix| self.match_count(prefix) == 1)
+    }
+
+    fn match_count(&self, prefix: &str) -> usize {
+        self.full_ids
+            .iter()
+            .filter(|candidate| candidate.starts_with(prefix))
+            .count()
+    }
+}
+
 pub fn print_session_line(session: &Session, show_labels: bool) {
     println!("{}", session_cells(session, show_labels).join(" "));
 }
 
+pub fn print_session_line_short_id(
+    session: &Session,
+    show_labels: bool,
+    short_ids: &ShortSessionIdSet,
+) {
+    println!(
+        "{}",
+        session_cells_short_id(session, show_labels, short_ids).join(" ")
+    );
+}
+
 pub fn print_session_table(sessions: &[Session], show_labels: bool) {
+    print_session_table_with_rows(sessions, show_labels, session_cells);
+}
+
+pub fn print_session_table_short_ids(
+    sessions: &[Session],
+    show_labels: bool,
+    short_ids: &ShortSessionIdSet,
+) {
+    print_session_table_with_rows(sessions, show_labels, |session, show_labels| {
+        session_cells_short_id(session, show_labels, short_ids)
+    });
+}
+
+fn print_session_table_with_rows<F>(sessions: &[Session], show_labels: bool, row: F)
+where
+    F: Fn(&Session, bool) -> Vec<String>,
+{
     let headers = if show_labels {
         vec![
             "ID",
@@ -36,7 +93,7 @@ pub fn print_session_table(sessions: &[Session], show_labels: bool) {
     };
     let rows = sessions
         .iter()
-        .map(|session| session_cells(session, show_labels))
+        .map(|session| row(session, show_labels))
         .collect::<Vec<_>>();
     print_table(&headers, &rows);
 }
@@ -55,6 +112,10 @@ fn format_labels(labels: &[Label]) -> String {
 
 pub fn print_messages(messages: &[MessageView]) {
     print_message_table(messages);
+}
+
+pub fn print_messages_short_ids(messages: &[MessageView], short_ids: &ShortSessionIdSet) {
+    print_message_table_short_ids(messages, short_ids);
 }
 
 pub fn print_conversation_overview(messages: &[MessageView]) {
@@ -80,10 +141,21 @@ pub fn print_conversation_overview(messages: &[MessageView]) {
 }
 
 pub fn print_message_table(messages: &[MessageView]) {
+    print_message_table_with_rows(messages, message_row);
+}
+
+pub fn print_message_table_short_ids(messages: &[MessageView], short_ids: &ShortSessionIdSet) {
+    print_message_table_with_rows(messages, |message| message_row_short_id(message, short_ids));
+}
+
+fn print_message_table_with_rows<F>(messages: &[MessageView], row: F)
+where
+    F: Fn(&MessageView) -> (Vec<String>, String),
+{
     if messages.is_empty() {
         return;
     }
-    let rows = messages.iter().map(message_row).collect::<Vec<_>>();
+    let rows = messages.iter().map(row).collect::<Vec<_>>();
     print_table_with_details(
         &[
             "SENDER",
@@ -135,8 +207,20 @@ fn sender_display_label(sender: &SenderView) -> &str {
 }
 
 fn session_cells(session: &Session, show_labels: bool) -> Vec<String> {
+    session_cells_with_id(session, show_labels, session.id.to_string())
+}
+
+fn session_cells_short_id(
+    session: &Session,
+    show_labels: bool,
+    short_ids: &ShortSessionIdSet,
+) -> Vec<String> {
+    session_cells_with_id(session, show_labels, short_ids.render(&session.id))
+}
+
+fn session_cells_with_id(session: &Session, show_labels: bool, id: String) -> Vec<String> {
     let mut cells = vec![
-        session.id.to_string(),
+        id,
         session.runtime.to_string(),
         session.namespace.to_string(),
         session.role.clone(),
@@ -151,10 +235,24 @@ fn session_cells(session: &Session, show_labels: bool) -> Vec<String> {
 }
 
 fn message_row(item: &MessageView) -> (Vec<String>, String) {
+    message_row_with_recipient_id(item, item.recipient.session_id.to_string())
+}
+
+fn message_row_short_id(
+    item: &MessageView,
+    short_ids: &ShortSessionIdSet,
+) -> (Vec<String>, String) {
+    message_row_with_recipient_id(item, short_ids.render(&item.recipient.session_id))
+}
+
+fn message_row_with_recipient_id(
+    item: &MessageView,
+    recipient_id: String,
+) -> (Vec<String>, String) {
     let cells = vec![
         sender_display_label(&item.sender).to_string(),
         item.recipient.display_label.clone(),
-        item.recipient.session_id.to_string(),
+        recipient_id,
         item.context_id.clone(),
         item.intent.to_string(),
         item.status.to_string(),
@@ -370,9 +468,13 @@ fn truncate_preview(content: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
     use std::time::Duration;
 
-    use super::{format_duration_age, render_table};
+    use chrono::Utc;
+    use lilo_session_core::{Namespace, RuntimeKind, Session, SessionState};
+
+    use super::{ShortSessionIdSet, format_duration_age, render_table};
 
     #[test]
     fn render_table_aligns_columns_and_preserves_last_column_text() {
@@ -439,11 +541,47 @@ mod tests {
     }
 
     #[test]
+    fn short_session_ids_widen_past_forced_collision() {
+        let first = test_session("12345678-1234-4234-9234-123456789abc");
+        let second = test_session("12345679-1234-4234-9234-123456789abc");
+        let short_ids = ShortSessionIdSet::from_sessions(&[first.clone(), second.clone()]);
+
+        assert_eq!(short_ids.render(&first.id), "12345678");
+        assert_eq!(short_ids.render(&second.id), "12345679");
+    }
+
+    #[test]
     fn format_duration_age_uses_compact_resource_units() {
         assert_eq!(format_duration_age(Duration::from_secs(0)), "0s");
         assert_eq!(format_duration_age(Duration::from_secs(59)), "59s");
         assert_eq!(format_duration_age(Duration::from_mins(1)), "1m");
         assert_eq!(format_duration_age(Duration::from_hours(1)), "1h");
         assert_eq!(format_duration_age(Duration::from_hours(24)), "1d");
+    }
+
+    fn test_session(id: &str) -> Session {
+        let now = Utc::now();
+        Session {
+            id: lilo_common::id::SessionId::from_uuid(
+                uuid::Uuid::parse_str(id).expect("uuid parses"),
+            ),
+            runtime: RuntimeKind::Claude,
+            role: "engineer".to_string(),
+            workspace: "test".to_string(),
+            namespace: Namespace::default(),
+            dir: PathBuf::from("test"),
+            state: SessionState::Running,
+            runtime_pid: 42,
+            runtime_session: None,
+            transcript_path: None,
+            tmux_pane: None,
+            agent_config: None,
+            created_at: now,
+            started_at: now,
+            terminated_at: None,
+            exit_code: None,
+            updated_at: now,
+            labels: Vec::new(),
+        }
     }
 }

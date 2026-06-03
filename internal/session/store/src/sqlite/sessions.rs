@@ -4,7 +4,8 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use lilo_common::id::SessionId;
 use lilo_session_core::{
-    LabelOp, LostEvidence, Namespace, RuntimeKind, Selector, Session, SessionState,
+    LabelOp, LostEvidence, MIN_SELECTOR_PREFIX_LEN, Namespace, RuntimeKind, Selector, Session,
+    SessionState,
 };
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection};
@@ -28,6 +29,15 @@ pub enum SessionRowError {
     Namespace(#[from] lilo_session_core::NamespaceError),
     #[error("{field} out of range: {value}")]
     IntegerOutOfRange { field: &'static str, value: i64 },
+    #[error("session id prefix too short: {prefix} (minimum {min} characters)")]
+    PrefixTooShort { prefix: String, min: usize },
+    #[error("invalid session id prefix: {prefix} (expected lowercase hex or hyphen)")]
+    InvalidPrefix { prefix: String },
+    #[error("ambiguous session id prefix {prefix}: {candidates:?}")]
+    Ambiguous {
+        prefix: String,
+        candidates: Vec<String>,
+    },
 }
 
 impl SqliteStore {
@@ -104,6 +114,7 @@ impl SqliteStore {
                 )
                 .await
             }
+            Selector::Prefix { prefix } => self.query_prefix_sessions(prefix).await,
             Selector::Role { name } => {
                 self.query_sessions(
                     "SELECT * FROM session_sessions WHERE role = ? ORDER BY created_at",
@@ -147,6 +158,28 @@ impl SqliteStore {
         }
     }
 
+    async fn query_prefix_sessions(&self, prefix: &str) -> Result<Vec<Session>, SessionRowError> {
+        validate_session_id_prefix(prefix)?;
+        let sessions = self
+            .query_sessions(
+                "SELECT * FROM session_sessions
+                 WHERE id LIKE ? || '%'
+                 ORDER BY created_at",
+                [prefix.to_string()],
+            )
+            .await?;
+        if sessions.len() <= 1 {
+            return Ok(sessions);
+        }
+        Err(SessionRowError::Ambiguous {
+            prefix: prefix.to_string(),
+            candidates: sessions
+                .iter()
+                .map(|session| session.id.to_string())
+                .collect(),
+        })
+    }
+
     async fn query_label_in_sessions(
         &self,
         key: &str,
@@ -176,12 +209,21 @@ impl SqliteStore {
         &self,
         selectors: &[Selector],
     ) -> Result<Vec<Session>, SessionRowError> {
-        let mut sessions = self
-            .query_sessions(
+        let mut prefix_sessions = Vec::new();
+        collect_prefix_selectors(selectors, &mut prefix_sessions);
+        let mut sessions = if let Some((first, rest)) = prefix_sessions.split_first() {
+            let sessions = self.query_prefix_sessions(first).await?;
+            for prefix in rest {
+                self.query_prefix_sessions(prefix).await?;
+            }
+            sessions
+        } else {
+            self.query_sessions(
                 "SELECT * FROM session_sessions ORDER BY created_at",
                 std::iter::empty::<String>(),
             )
-            .await?;
+            .await?
+        };
         for selector in selectors {
             sessions.retain(|session| session_matches_selector(session, selector));
         }
@@ -324,6 +366,7 @@ fn session_matches_selector(session: &Session, selector: &Selector) -> bool {
     match selector {
         Selector::All => true,
         Selector::Id { id } => session.id == *id,
+        Selector::Prefix { prefix } => session.id.to_string().starts_with(prefix),
         Selector::Role { name } => session.role == *name,
         Selector::Namespace { namespace } => session.namespace == *namespace,
         Selector::Dir { path } => session.dir == *path,
@@ -345,6 +388,34 @@ fn session_matches_selector(session: &Session, selector: &Selector) -> bool {
             .iter()
             .any(|label| label.key == *key && values.contains(&label.value)),
     }
+}
+
+fn collect_prefix_selectors<'a>(selectors: &'a [Selector], prefixes: &mut Vec<&'a str>) {
+    for selector in selectors {
+        match selector {
+            Selector::Prefix { prefix } => prefixes.push(prefix),
+            Selector::And { selectors } => collect_prefix_selectors(selectors, prefixes),
+            _ => {}
+        }
+    }
+}
+
+fn validate_session_id_prefix(prefix: &str) -> Result<(), SessionRowError> {
+    if prefix.len() < MIN_SELECTOR_PREFIX_LEN {
+        return Err(SessionRowError::PrefixTooShort {
+            prefix: prefix.to_string(),
+            min: MIN_SELECTOR_PREFIX_LEN,
+        });
+    }
+    if !prefix
+        .chars()
+        .all(|ch| matches!(ch, '0'..='9' | 'a'..='f' | '-'))
+    {
+        return Err(SessionRowError::InvalidPrefix {
+            prefix: prefix.to_string(),
+        });
+    }
+    Ok(())
 }
 
 fn session_from_row(row: &SqliteRow) -> Result<Session, SessionRowError> {

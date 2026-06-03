@@ -25,6 +25,12 @@ fn selector_parser_covers_closed_grammar() {
         Selector::Id { id }
     );
     assert_eq!(
+        Selector::from_str("1234abcd").or_panic("expected value"),
+        Selector::Prefix {
+            prefix: "1234abcd".to_string()
+        }
+    );
+    assert_eq!(
         Selector::from_str("role:engineer").or_panic("expected value"),
         Selector::Role {
             name: "engineer".to_string()
@@ -68,6 +74,9 @@ fn selector_display_round_trips_through_from_str() {
     let cases = vec![
         Selector::All,
         Selector::Id { id },
+        Selector::Prefix {
+            prefix: "1234abcd".to_string(),
+        },
         Selector::Role {
             name: "engineer".to_string(),
         },
@@ -143,6 +152,11 @@ fn selector_rejects_legacy_workspace_and_invalid_new_selectors() {
         .err_or_panic("expected error")
         .to_string();
     assert_eq!(dir, "dir selector is empty");
+
+    let prefix = Selector::from_str("abc")
+        .err_or_panic("expected error")
+        .to_string();
+    assert!(prefix.contains("session id prefix must be at least 4 characters"));
 }
 
 #[test]

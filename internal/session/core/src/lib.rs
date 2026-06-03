@@ -41,9 +41,9 @@ pub use proto::{
     WaitCondition, WaitRequest, WaitResponse,
 };
 pub use types::{
-    Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence, Mail, MailCountView,
-    MailDeliveryStatus, MailIntent, MailNotifyMode, MailNotifyStatus, MailSendResult, MailStatus,
-    MessageView, NAMESPACE_MAX_LEN, Namespace, NamespaceError, NamespaceRecord, NamespaceScope,
-    RESERVED_NAMESPACE_PREFIX, RecipientSummary, RuntimeKind, Selector, SenderRef, SenderView,
-    Session, SessionState,
+    Channel, DEFAULT_NAMESPACE, Label, LabelMutation, LabelOp, LostEvidence,
+    MIN_SELECTOR_PREFIX_LEN, Mail, MailCountView, MailDeliveryStatus, MailIntent, MailNotifyMode,
+    MailNotifyStatus, MailSendResult, MailStatus, MessageView, NAMESPACE_MAX_LEN, Namespace,
+    NamespaceError, NamespaceRecord, NamespaceScope, RESERVED_NAMESPACE_PREFIX, RecipientSummary,
+    RuntimeKind, Selector, SenderRef, SenderView, Session, SessionState,
 };

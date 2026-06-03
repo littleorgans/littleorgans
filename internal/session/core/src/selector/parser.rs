@@ -7,9 +7,9 @@ use crate::label::parse_label_token;
 use crate::namespace::Namespace;
 use crate::{SmError, SmResult};
 
-use super::{LabelOp, Selector};
+use super::{LabelOp, MIN_SELECTOR_PREFIX_LEN, Selector};
 
-pub const SELECTOR_GRAMMAR_HINT: &str = "all, <uuid>, id:<uuid>, role:<name>, namespace:<slug>, dir:<path>, label:<key>=<value>, label:<key> in (v1, v2)";
+pub const SELECTOR_GRAMMAR_HINT: &str = "all, <uuid-or-prefix>, id:<uuid>, role:<name>, namespace:<slug>, dir:<path>, label:<key>=<value>, label:<key> in (v1, v2)";
 
 impl FromStr for Selector {
     type Err = SmError;
@@ -56,10 +56,30 @@ impl FromStr for Selector {
         if let Some(raw) = value.strip_prefix("label:") {
             return parse_label_selector(raw);
         }
+        if looks_like_session_id_prefix(value) {
+            return parse_prefix_selector(value);
+        }
         Err(SmError::Message(format!(
             "unsupported selector: {value} (expected one of: {SELECTOR_GRAMMAR_HINT})"
         )))
     }
+}
+
+fn looks_like_session_id_prefix(value: &str) -> bool {
+    value
+        .chars()
+        .all(|ch| matches!(ch, '0'..='9' | 'a'..='f' | '-'))
+}
+
+fn parse_prefix_selector(value: &str) -> SmResult<Selector> {
+    if value.len() < MIN_SELECTOR_PREFIX_LEN {
+        return Err(SmError::Message(format!(
+            "session id prefix must be at least {MIN_SELECTOR_PREFIX_LEN} characters"
+        )));
+    }
+    Ok(Selector::Prefix {
+        prefix: value.to_string(),
+    })
 }
 
 fn parse_label_selector(value: &str) -> SmResult<Selector> {

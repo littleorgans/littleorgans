@@ -14,6 +14,7 @@ use crate::cli::cli_def::{
 };
 use crate::cli::output::{
     print_conversation_overview, print_mail_counts, print_mail_send_summary, print_messages,
+    print_messages_short_ids,
 };
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
 
@@ -103,7 +104,8 @@ async fn peek(args: MailObservationArgs, json_output: bool) -> Result<()> {
             } else if should_print_conversation_overview(&args) {
                 print_conversation_overview(&response.messages);
             } else {
-                print_messages(&response.messages);
+                let short_ids = crate::cli::short_ids::load().await?;
+                print_messages_short_ids(&response.messages, &short_ids);
             }
             Ok(())
         }

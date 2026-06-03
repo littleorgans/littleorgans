@@ -7,4 +7,4 @@ mod types;
 
 pub use parser::SELECTOR_GRAMMAR_HINT;
 pub use scope::NamespaceScope;
-pub use types::{LabelOp, Selector};
+pub use types::{LabelOp, MIN_SELECTOR_PREFIX_LEN, Selector};

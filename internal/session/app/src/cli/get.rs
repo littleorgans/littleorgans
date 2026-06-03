@@ -3,7 +3,7 @@ use anyhow::{Result, bail};
 use lilo_session_core::{ListRequest, RpcResponse, Selector, SessionRpc};
 
 use crate::cli::cli_def::{GetArgs, GetResource, SessionGetArgs, SessionListArgs};
-use crate::cli::output::{print_session_line, print_session_table};
+use crate::cli::output::{print_session_line_short_id, print_session_table_short_ids};
 use crate::cli::selector_scope::scoped_selector;
 
 pub async fn run(args: GetArgs, json_output: bool) -> Result<()> {
@@ -36,7 +36,8 @@ async fn get_session(args: SessionGetArgs, json_output: bool) -> Result<()> {
                 .sessions
                 .first()
                 .ok_or_else(|| anyhow::anyhow!("unknown session: {id}"))?;
-            print_session_line(session, args.read.show_labels);
+            let short_ids = crate::cli::short_ids::load().await?;
+            print_session_line_short_id(session, args.read.show_labels, &short_ids);
             Ok(())
         }
         RpcResponse::Error { message } => bail!(message),
@@ -60,7 +61,8 @@ async fn list_sessions(args: SessionListArgs, json_output: bool) -> Result<()> {
             Ok(())
         }
         RpcResponse::Listed { response } => {
-            print_session_table(&response.sessions, args.read.show_labels);
+            let short_ids = crate::cli::short_ids::load().await?;
+            print_session_table_short_ids(&response.sessions, args.read.show_labels, &short_ids);
             Ok(())
         }
         RpcResponse::Error { message } => bail!(message),
