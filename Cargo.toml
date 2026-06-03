@@ -92,7 +92,7 @@ tracing = "0.1.41"
 # `json` feature retained beyond the runtime-matters baseline because
 # crates/lilo-common/src/logging.rs builds a JSON formatter via `.json()`.
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
-uuid = { version = "1.18.1", features = ["serde", "v7"] }
+uuid = { version = "1.18.1", features = ["serde", "v4", "v7"] }
 
 [workspace.lints.rust]
 unexpected_cfgs = "deny"
