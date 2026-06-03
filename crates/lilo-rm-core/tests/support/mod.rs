@@ -39,7 +39,7 @@ pub fn tmux_lifecycle(session_id: Uuid) -> Lifecycle {
 pub fn launch_spec() -> LaunchSpec {
     LaunchSpec {
         argv: vec!["claude".to_owned(), "--resume".to_owned()],
-        env: vec![LaunchEnv::new("RTM", "1")],
+        env: vec![LaunchEnv::new("EXAMPLE_RUNTIME_MARKER", "1")],
         cwd: "/tmp/rtm".into(),
         shell_resume: None,
     }
