@@ -1,5 +1,5 @@
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use chrono::{DateTime, Utc};
 
@@ -33,9 +33,9 @@ pub struct KillByPidResponse {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct StatusFilter {
-    pub session_id: Option<Uuid>,
+    pub session_id: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_ids: Vec<Uuid>,
+    pub session_ids: Vec<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_since: Option<DateTime<Utc>>,
     pub runtime: Option<String>,
@@ -53,7 +53,7 @@ impl StatusFilter {
         }
     }
 
-    pub const fn for_session(session_id: Uuid) -> Self {
+    pub const fn for_session(session_id: SessionId) -> Self {
         Self {
             session_id: Some(session_id),
             session_ids: Vec::new(),
@@ -63,7 +63,7 @@ impl StatusFilter {
         }
     }
 
-    pub fn requested_session_ids(&self) -> Vec<Uuid> {
+    pub fn requested_session_ids(&self) -> Vec<SessionId> {
         let mut ids = self.session_ids.clone();
         if let Some(session_id) = self.session_id
             && !ids.contains(&session_id)
@@ -110,7 +110,7 @@ pub struct MigrationState {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RecentLostEvent {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub evidence: LostEvidence,
     pub occurred_at: DateTime<Utc>,
 }
@@ -198,7 +198,7 @@ fn is_legacy_missing_docker_status(status: &DockerStatus) -> bool {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct LifecycleLogAvailability {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub log_availability: LogAvailability,
 }
 

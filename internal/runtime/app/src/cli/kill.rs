@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::{KillByPidRequest, KillRequest, KilledPayload, RuntimeSignal};
-use uuid::Uuid;
 
 use crate::cli::output;
 
@@ -15,7 +15,7 @@ pub struct KillArgs {
         conflicts_with = "pid",
         required_unless_present = "pid"
     )]
-    session_id: Option<Uuid>,
+    session_id: Option<SessionId>,
     #[arg(long, conflicts_with = "session_id")]
     pid: Option<u32>,
     #[arg(long, default_value_t = RuntimeSignal::Term)]

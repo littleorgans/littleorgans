@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{CaptureRequest, RuntimeResponse, RuntimeRpc};
-use uuid::Uuid;
 
 use crate::cli::output;
 
@@ -10,7 +10,7 @@ pub struct CaptureArgs {
     #[command(flatten)]
     output: output::OutputArgs,
     #[arg(value_name = "SESSION_ID")]
-    session_id: Uuid,
+    session_id: SessionId,
     #[arg(long)]
     scrollback_lines: Option<u32>,
 }

@@ -2,8 +2,8 @@ use std::fmt;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::label::Label;
 use crate::namespace::Namespace;
@@ -65,7 +65,7 @@ impl SessionState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Session {
-    pub id: Uuid,
+    pub id: SessionId,
     pub runtime: RuntimeKind,
     pub role: String,
     pub workspace: String,

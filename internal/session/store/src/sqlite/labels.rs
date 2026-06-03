@@ -1,13 +1,13 @@
+use lilo_common::id::SessionId;
 use lilo_session_core::{Label, LabelMutation, Session};
 use sqlx::{Executor, Row, Sqlite, SqliteConnection};
-use uuid::Uuid;
 
 use super::{SessionRowError, SqliteStore};
 
 impl SqliteStore {
     pub async fn apply_label_mutation(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         mutation: &LabelMutation,
     ) -> Result<Option<Session>, SessionRowError> {
         match mutation {
@@ -19,7 +19,7 @@ impl SqliteStore {
 
     pub(crate) async fn insert_session_labels(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         labels: &[Label],
     ) -> Result<(), SessionRowError> {
         for label in labels {
@@ -31,7 +31,7 @@ impl SqliteStore {
     pub(crate) async fn insert_session_labels_in(
         &self,
         conn: &mut SqliteConnection,
-        id: &Uuid,
+        id: &SessionId,
         labels: &[Label],
     ) -> Result<(), SessionRowError> {
         for label in labels {
@@ -42,7 +42,7 @@ impl SqliteStore {
 
     pub(crate) async fn labels_for_session(
         &self,
-        id: &Uuid,
+        id: &SessionId,
     ) -> Result<Vec<Label>, SessionRowError> {
         let rows = sqlx::query(
             "SELECT key, value
@@ -63,11 +63,11 @@ impl SqliteStore {
             .collect()
     }
 
-    async fn upsert_label(&self, id: &Uuid, label: &Label) -> Result<(), SessionRowError> {
+    async fn upsert_label(&self, id: &SessionId, label: &Label) -> Result<(), SessionRowError> {
         upsert_label_with(&self.pool, id, label).await
     }
 
-    async fn remove_label(&self, id: &Uuid, key: &str) -> Result<(), SessionRowError> {
+    async fn remove_label(&self, id: &SessionId, key: &str) -> Result<(), SessionRowError> {
         sqlx::query("DELETE FROM session_labels WHERE session_id = ? AND key = ?")
             .bind(id.to_string())
             .bind(key)
@@ -79,7 +79,7 @@ impl SqliteStore {
 
 async fn upsert_label_in(
     conn: &mut SqliteConnection,
-    id: &Uuid,
+    id: &SessionId,
     label: &Label,
 ) -> Result<(), SessionRowError> {
     upsert_label_with(&mut *conn, id, label).await
@@ -87,7 +87,7 @@ async fn upsert_label_in(
 
 async fn upsert_label_with<'e, E>(
     executor: E,
-    id: &Uuid,
+    id: &SessionId,
     label: &Label,
 ) -> Result<(), SessionRowError>
 where

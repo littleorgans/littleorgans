@@ -1,0 +1,7 @@
+{
+  // rust-analyzer runs cargo check/clippy in the background. Without its own
+  // target dir it shares target/ with the CLI and invalidates build artifacts on
+  // every save (the same clippy-vs-build thrash the justfile's per-tool dirs
+  // avoid). `true` points it at target/rust-analyzer.
+  "rust-analyzer.cargo.targetDir": true
+}

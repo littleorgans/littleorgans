@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use lilo_common::sql::WhereClause;
 use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Principal, ResourceSpec,
@@ -7,7 +8,6 @@ use serde::Serialize;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Executor, QueryBuilder, Row, Sqlite, SqliteConnection, SqlitePool};
 use thiserror::Error;
-use uuid::Uuid;
 
 use crate::schema::AUDIT_TABLE;
 
@@ -149,13 +149,13 @@ impl EncodedAuditRow {
 
     fn try_into_audit_row(self) -> Result<AuditRow, StoreError> {
         Ok(AuditRow {
-            id: Uuid::parse_str(&self.id)?,
+            id: self.id.parse()?,
             timestamp: DateTime::parse_from_rfc3339(&self.timestamp)?.with_timezone(&Utc),
             principal: serde_json::from_str::<Principal>(&self.principal)?,
             action: serde_json::from_str::<Action>(&self.action)?,
             resource: serde_json::from_str::<ResourceSpec>(&self.resource)?,
             decision: serde_json::from_str::<AuditDecision>(&self.decision)?,
-            session_ref: parse_optional_uuid(self.session_ref)?,
+            session_ref: parse_optional_session_id(self.session_ref)?,
             notes: self.notes,
             policy_id: self.policy_id,
             evaluation_trace: self.evaluation_trace,
@@ -168,11 +168,8 @@ fn serialize_json<T: Serialize>(value: &T) -> Result<String, StoreError> {
     serde_json::to_string(value).map_err(Into::into)
 }
 
-fn parse_optional_uuid(value: Option<String>) -> Result<Option<Uuid>, StoreError> {
-    value
-        .map(|id| Uuid::parse_str(&id))
-        .transpose()
-        .map_err(Into::into)
+fn parse_optional_session_id(value: Option<String>) -> Result<Option<SessionId>, StoreError> {
+    value.map(|id| id.parse()).transpose().map_err(Into::into)
 }
 
 async fn query_audit_rows(

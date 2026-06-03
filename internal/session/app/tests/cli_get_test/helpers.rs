@@ -25,7 +25,12 @@ pub(crate) fn assert_success(command: &str, output: &std::process::Output) {
 pub(crate) fn assert_table_contains(stdout: &[u8], id: &str) {
     let stdout = String::from_utf8_lossy(stdout);
     assert_header_fields(&stdout, &["ID", "RUNTIME"]);
-    assert!(stdout.contains(id));
+    assert!(stdout.contains(short_id(id)));
+    assert!(!stdout.contains(id));
+}
+
+pub(crate) fn short_id(id: &str) -> &str {
+    &id[..7]
 }
 
 pub(crate) fn assert_header_fields(stdout: &str, expected: &[&str]) {

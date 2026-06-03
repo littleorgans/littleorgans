@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
 
 use super::TargetError;
@@ -48,7 +49,7 @@ pub struct LogsResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CaptureRequest {
-    pub session_id: uuid::Uuid,
+    pub session_id: SessionId,
     #[serde(default)]
     pub scrollback_lines: Option<u32>,
 }

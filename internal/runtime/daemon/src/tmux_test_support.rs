@@ -14,7 +14,7 @@ impl TmuxSession {
         if !available() {
             return None;
         }
-        let id = Uuid::now_v7().simple();
+        let id = Uuid::new_v4().simple();
         let name = format!("{prefix}-{id}");
         let server_label = name.clone();
         let session = Self { name, server_label };

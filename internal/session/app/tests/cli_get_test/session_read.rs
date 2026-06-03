@@ -1,5 +1,7 @@
 use crate::common::{self, OrPanic as _};
-use crate::{assert_header_fields, assert_success, assert_table_contains, first_field, stdout};
+use crate::{
+    assert_header_fields, assert_success, assert_table_contains, first_field, short_id, stdout,
+};
 use serde_json::Value;
 
 #[test]
@@ -106,7 +108,8 @@ pub(crate) fn session_resources_list_and_get_by_id() {
         .or_panic("sm get session <id> executes");
     assert_success("sm get session <id>", &single);
     let single_stdout = String::from_utf8_lossy(&single.stdout);
-    assert!(single_stdout.contains(&id));
+    assert!(single_stdout.contains(short_id(&id)));
+    assert!(!single_stdout.contains(&id));
     assert!(!single_stdout.contains("area=get"));
     assert!(!single_stdout.starts_with("ID RUNTIME"));
 
@@ -117,7 +120,8 @@ pub(crate) fn session_resources_list_and_get_by_id() {
         .or_panic("sm get session <id> --show-labels executes");
     assert_success("sm get session <id> --show-labels", &labeled_single);
     let labeled_single_stdout = stdout(&labeled_single);
-    assert!(labeled_single_stdout.contains(&id));
+    assert!(labeled_single_stdout.contains(short_id(&id)));
+    assert!(!labeled_single_stdout.contains(&id));
     assert!(labeled_single_stdout.contains("area=get"));
 }
 

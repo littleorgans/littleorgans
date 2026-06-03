@@ -6,7 +6,6 @@ use lilo_rm_core::{
     IsolationPolicy, Lifecycle, LifecycleCounts, LifecycleState, LostEvidence, RecentLostEvent,
     RuntimeExit, RuntimeKind, TmuxAddress,
 };
-use uuid::Uuid;
 
 const STATE_FORKING: &str = "Forking";
 pub(super) const STATE_RUNNING: &str = "Running";
@@ -83,7 +82,7 @@ impl TryFrom<LifecycleRow> for Lifecycle {
 
     fn try_from(row: LifecycleRow) -> Result<Self> {
         Ok(Self {
-            session_id: Uuid::parse_str(&row.session_id)?,
+            session_id: row.session_id.parse()?,
             runtime: RuntimeKind::from_str(&row.runtime)?,
             isolation: IsolationPolicy::from_str(&row.isolation)?,
             state: decode_state(&row)?,
@@ -101,7 +100,7 @@ impl TryFrom<RecentLostRow> for RecentLostEvent {
 
     fn try_from(row: RecentLostRow) -> Result<Self> {
         Ok(Self {
-            session_id: Uuid::parse_str(&row.session_id)?,
+            session_id: row.session_id.parse()?,
             evidence: decode_lost(row.lost_evidence.as_deref())?,
             occurred_at: parse_time(&row.updated_at)?,
         })

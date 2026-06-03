@@ -10,6 +10,7 @@ use common::{
     status_pid, terminate_process, unused_pid, wait_for_events, wait_for_headless_runtime_ready,
     wait_for_json_status, wait_for_status, wait_for_status_timeout, wait_until_not_alive,
 };
+use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 #[test]
@@ -77,7 +78,7 @@ fn rtmd_restart_reconciles_dead_sessions_lost() {
 #[test]
 fn resume_gap_reconciliation_does_not_wait_for_full_sweep_interval() {
     let harness = RtmHarness::start_with_fast_resume_probe();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     persist_running(harness.db_path(), session_id, unused_pid());
 
     let status = wait_for_status_timeout(

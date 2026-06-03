@@ -134,7 +134,7 @@ sm mcp
 
 Grammar:
   all
-  <uuid>
+  <uuid-or-prefix>
   id:<uuid>
   role:<name>
   namespace:<slug>
@@ -144,6 +144,7 @@ Grammar:
 Examples:
   all
   019e44f9-...
+  019e44f
   role:engineer
   namespace:default
   dir:/tmp/project

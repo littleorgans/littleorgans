@@ -8,12 +8,13 @@ use common::{
     RtmHarness, output_stdout, persist_running, spawn_ok, unused_pid, wait_for_events,
     wait_for_status_timeout,
 };
+use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 #[test]
 fn pass7_periodic_reconciliation_marks_lost_and_doctor_reports_it() {
     let harness = RtmHarness::start_with_fast_periodic_probe();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let runtime_pid = unused_pid();
     persist_running(harness.db_path(), session_id, runtime_pid);
 
@@ -53,7 +54,7 @@ fn pass7_periodic_reconciliation_marks_lost_and_doctor_reports_it() {
 #[test]
 fn raw_runtime_spawn_does_not_write_session_tables() {
     let harness = RtmHarness::start();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
 
     spawn_ok(&harness, &session_id.to_string(), "claude");
 
@@ -71,7 +72,7 @@ struct SessionTableCounts {
     lifecycles: i64,
 }
 
-fn session_table_counts(path: &std::path::Path, session_id: Uuid) -> SessionTableCounts {
+fn session_table_counts(path: &std::path::Path, session_id: SessionId) -> SessionTableCounts {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async move {
         let db = lilo_db::LiloDb::open_path(path).await.expect("open db");

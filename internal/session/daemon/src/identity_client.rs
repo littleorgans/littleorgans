@@ -4,10 +4,10 @@ use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_session_core::{RuntimeKind, SpawnRequest};
 use sqlx::SqliteConnection;
-use uuid::Uuid;
 
 pub type IdentityPortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
@@ -31,7 +31,7 @@ pub trait IdentityPort: Send + Sync {
         &'a self,
         principal: &'a Principal,
         action: Action,
-        session_id: Uuid,
+        session_id: SessionId,
     ) -> IdentityPortFuture<'a, ()> {
         Box::pin(async move {
             let resource = session_resource(session_id);
@@ -66,7 +66,7 @@ impl IdentityPort for IdentityClient {
 #[derive(Debug, Clone)]
 pub struct RequestContext {
     pub principal: Principal,
-    pub caller_session_id: Option<Uuid>,
+    pub caller_session_id: Option<SessionId>,
 }
 
 impl RequestContext {
@@ -78,18 +78,18 @@ impl RequestContext {
     }
 
     #[must_use]
-    pub fn with_caller_session_id(mut self, id: Uuid) -> Self {
+    pub fn with_caller_session_id(mut self, id: SessionId) -> Self {
         self.caller_session_id = Some(id);
         self
     }
 
     #[must_use]
-    pub fn with_mcp_caller_session_id(self, id: Uuid) -> Self {
+    pub fn with_mcp_caller_session_id(self, id: SessionId) -> Self {
         self.with_caller_session_id(id)
     }
 }
 
-pub fn spawn_resource(request: &SpawnRequest, session_id: Uuid) -> ResourceSpec {
+pub fn spawn_resource(request: &SpawnRequest, session_id: SessionId) -> ResourceSpec {
     ResourceSpec {
         workspace: Some(request.workspace.clone()),
         role: Some(request.role.clone()),
@@ -103,7 +103,7 @@ pub fn spawn_resource(request: &SpawnRequest, session_id: Uuid) -> ResourceSpec 
     }
 }
 
-pub fn session_resource(session_id: Uuid) -> ResourceSpec {
+pub fn session_resource(session_id: SessionId) -> ResourceSpec {
     ResourceSpec::session(session_id)
 }
 

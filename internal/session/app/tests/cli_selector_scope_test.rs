@@ -60,7 +60,7 @@ fn assert_get_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm get sessions executes");
     assert_success("sm get sessions", &default_scoped);
-    assert_contains_only(&default_scoped, alpha_id, beta_id);
+    assert_contains_only_short_id(&default_scoped, alpha_id, beta_id);
 
     let explicit_namespace = daemon
         .command()
@@ -69,7 +69,7 @@ fn assert_get_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm get sessions --namespace executes");
     assert_success("sm get sessions --namespace beta", &explicit_namespace);
-    assert_contains_only(&explicit_namespace, beta_id, alpha_id);
+    assert_contains_only_short_id(&explicit_namespace, beta_id, alpha_id);
 
     let all_namespaces = daemon
         .command()
@@ -78,8 +78,8 @@ fn assert_get_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm get sessions -A executes");
     assert_success("sm get sessions -A", &all_namespaces);
-    assert_contains(&all_namespaces, alpha_id);
-    assert_contains(&all_namespaces, beta_id);
+    assert_contains_short_id(&all_namespaces, alpha_id);
+    assert_contains_short_id(&all_namespaces, beta_id);
 
     let namespace_selector = daemon
         .command()
@@ -91,7 +91,7 @@ fn assert_get_scope(fixture: &ScopeFixture) {
         "sm get sessions --selector namespace:beta -A",
         &namespace_selector,
     );
-    assert_contains_only(&namespace_selector, beta_id, alpha_id);
+    assert_contains_only_short_id(&namespace_selector, beta_id, alpha_id);
 }
 
 fn assert_namespace_selector_scope(fixture: &ScopeFixture) {
@@ -161,7 +161,7 @@ fn assert_namespace_selector_scope(fixture: &ScopeFixture) {
         .output()
         .or_panic("sm get sessions dir selector executes");
     assert_success("sm get sessions --selector dir -A", &dir_selector);
-    assert_contains_only(&dir_selector, beta_id, alpha_id);
+    assert_contains_only_short_id(&dir_selector, beta_id, alpha_id);
 }
 
 fn assert_mail_and_nudge_scope(fixture: &ScopeFixture) {
@@ -295,10 +295,33 @@ fn assert_contains_only(output: &std::process::Output, present: &str, absent: &s
     );
 }
 
+fn assert_contains_only_short_id(output: &std::process::Output, present: &str, absent: &str) {
+    assert_contains_short_id(output, present);
+    let stdout = stdout(output);
+    assert!(
+        !stdout.contains(absent) && !stdout.contains(short_id(absent)),
+        "expected output not to contain {absent}\nstdout:\n{stdout}"
+    );
+}
+
 fn assert_contains(output: &std::process::Output, needle: &str) {
     assert!(
         stdout(output).contains(needle),
         "expected output to contain {needle}\nstdout:\n{}",
+        stdout(output)
+    );
+}
+
+fn assert_contains_short_id(output: &std::process::Output, id: &str) {
+    let short = short_id(id);
+    assert!(
+        stdout(output).contains(short),
+        "expected output to contain {short}\nstdout:\n{}",
+        stdout(output)
+    );
+    assert!(
+        !stdout(output).contains(id),
+        "expected output not to contain full id {id}\nstdout:\n{}",
         stdout(output)
     );
 }
@@ -333,6 +356,10 @@ fn nonempty_line_count(bytes: &[u8]) -> usize {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .count()
+}
+
+fn short_id(id: &str) -> &str {
+    &id[..7]
 }
 
 fn canonical(path: &Path) -> String {

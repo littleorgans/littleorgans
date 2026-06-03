@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
@@ -40,7 +40,7 @@ impl LogsUnavailableReason {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CaptureRequest {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scrollback_lines: Option<u32>,
 }

@@ -1,9 +1,9 @@
 use anyhow::{Result, bail};
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, RuntimeResponse, RuntimeRpc,
 };
-use uuid::Uuid;
 
 use crate::cli::output;
 
@@ -12,7 +12,7 @@ pub struct NudgeArgs {
     #[command(flatten)]
     output: output::OutputArgs,
     #[arg(value_name = "SESSION_ID")]
-    session_id: Uuid,
+    session_id: SessionId,
     #[arg(long)]
     content: String,
     #[arg(
@@ -61,7 +61,7 @@ pub async fn run(args: NudgeArgs) -> Result<()> {
     Ok(())
 }
 
-fn nudge_failed_message(reason: NudgeFailureReason, session_id: Uuid) -> String {
+fn nudge_failed_message(reason: NudgeFailureReason, session_id: SessionId) -> String {
     match reason {
         NudgeFailureReason::SessionEnded => format!(
             "nudge failed; reason={} session_id={} detail=session is no longer running",

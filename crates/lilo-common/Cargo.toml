@@ -12,16 +12,23 @@ publish = true
 name = "lilo_common"
 path = "src/lib.rs"
 
+[features]
+default = []
+sqlx = ["dep:sqlx"]
+
 [dependencies]
 anyhow.workspace = true
 lilo-paths.workspace = true
 serde.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

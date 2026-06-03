@@ -1,8 +1,8 @@
 use std::fmt::{self, Write};
 use std::path::Path;
 
+use lilo_common::id::SessionId;
 use serde::Serialize;
-use uuid::Uuid;
 
 use crate::{
     DoctorResponse, EventsPayload, KillByPidResponse, KillOutcome, KilledPayload, Lifecycle,
@@ -16,7 +16,7 @@ pub trait CliOutput: Serialize {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Ack {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
 }
 
 impl CliOutput for Ack {

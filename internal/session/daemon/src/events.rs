@@ -118,6 +118,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use chrono::Utc;
+    use lilo_common::id::SessionId;
     use lilo_db::LiloDb;
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
@@ -134,7 +135,6 @@ mod tests {
         SpawnLaunch, SpawnedProcess,
     };
     use lilo_session_store::SqliteStore;
-    use uuid::Uuid;
 
     use crate::identity_client::IdentityClient;
 
@@ -386,7 +386,7 @@ mod tests {
             .or_panic("runtime lifecycle updates");
     }
 
-    async fn insert_session(state: &DaemonState, session_state: SessionState) -> Uuid {
+    async fn insert_session(state: &DaemonState, session_state: SessionState) -> SessionId {
         let session = test_session(session_state);
         let session_id = session.id;
         state
@@ -397,7 +397,7 @@ mod tests {
         session_id
     }
 
-    async fn session_state(state: &DaemonState, session_id: Uuid) -> SessionState {
+    async fn session_state(state: &DaemonState, session_id: SessionId) -> SessionState {
         state
             .store
             .get_session(&session_id)
@@ -436,7 +436,7 @@ mod tests {
     fn test_session(state: SessionState) -> Session {
         let now = Utc::now();
         Session {
-            id: Uuid::now_v7(),
+            id: SessionId::from_uuid(uuid::Uuid::now_v7()),
             runtime: SmRuntimeKind::Claude,
             role: "engineer".to_string(),
             workspace: "test".to_string(),

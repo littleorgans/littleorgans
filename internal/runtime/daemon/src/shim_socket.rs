@@ -1,5 +1,6 @@
 use crate::error::RuntimeFailure;
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     LaunchEnv, LaunchSpec, RuntimeResponse, RuntimeRpc, ShimExit, ShimLaunchRequest, ShimReady,
     SpawnRequest, SpawnTarget, TmuxAddress, TmuxSpawnTarget, read_json_line,
@@ -106,7 +107,7 @@ async fn launch_headless_shim(
     Ok(paths)
 }
 
-fn spawn_log_copy<R>(session_id: uuid::Uuid, stream: &'static str, reader: R, file: File)
+fn spawn_log_copy<R>(session_id: SessionId, stream: &'static str, reader: R, file: File)
 where
     R: AsyncRead + Send + Unpin + 'static,
 {
@@ -272,7 +273,9 @@ mod tests {
 
     #[test]
     fn session_log_paths_are_config_owned() {
-        let session_id = uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let session_id = SessionId::from_uuid(
+            uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
+        );
         let paths = test_config().session_log_paths(session_id);
 
         assert_eq!(
@@ -298,7 +301,7 @@ mod tests {
         let Err(error) = launch_shim(
             &config,
             &SpawnRequest {
-                session_id: uuid::Uuid::now_v7(),
+                session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
                 runtime: RuntimeKind::Claude,
                 isolation: lilo_rm_core::IsolationPolicy::default(),
                 image: None,

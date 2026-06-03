@@ -1,8 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{RuntimeResponse, StatusFilter};
-use uuid::Uuid;
 
 use crate::cli::output;
 
@@ -11,7 +11,7 @@ pub struct StatusArgs {
     #[command(flatten)]
     output: output::OutputArgs,
     #[arg(long = "session-id", value_name = "UUID")]
-    session_ids: Vec<Uuid>,
+    session_ids: Vec<SessionId>,
     #[arg(long, value_parser = parse_updated_since)]
     updated_since: Option<DateTime<Utc>>,
     #[arg(long)]

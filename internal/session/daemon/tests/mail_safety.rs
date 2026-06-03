@@ -10,6 +10,7 @@ use common::{
     LOCAL_UID, RecordingIdentityPort, TestDaemon, local_context, mail_count, mail_request,
     spawn_test_session,
 };
+use lilo_common::id::{MessageId, SessionId};
 use lilo_im_core::Action;
 use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
 use lilo_session_core::{
@@ -23,7 +24,6 @@ use lilo_session_driver::{
     CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnLaunch, SpawnedProcess,
 };
 use tokio::time::timeout;
-use uuid::Uuid;
 
 type TestRuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
@@ -428,7 +428,7 @@ async fn read_mail(
 async fn peek_mail(
     state: &DaemonState,
     context: lilo_session_daemon::identity_client::RequestContext,
-    recipient_id: uuid::Uuid,
+    recipient_id: SessionId,
 ) -> lilo_session_core::MailPeekResponse {
     let peek = state
         .handle(
@@ -451,7 +451,7 @@ async fn peek_mail(
     response
 }
 
-fn message_id(response: &MailSendResponse) -> Uuid {
+fn message_id(response: &MailSendResponse) -> MessageId {
     message_id_from_view(
         response.results[0]
             .message
@@ -460,7 +460,7 @@ fn message_id(response: &MailSendResponse) -> Uuid {
     )
 }
 
-fn message_id_from_view(message: &MessageView) -> Uuid {
+fn message_id_from_view(message: &MessageView) -> MessageId {
     message.id
 }
 

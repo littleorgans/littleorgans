@@ -24,6 +24,7 @@ thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+lilo-common.workspace = true
 lilo-rm-core.workspace = true
 lilo-paths.workspace = true
 lilo-runtime-daemon.workspace = true

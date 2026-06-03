@@ -34,7 +34,7 @@ pub(crate) use help::{
 #[allow(unused_imports)]
 pub(crate) use helpers::{
     assert_header_fields, assert_success, assert_table_contains, canonical_display, first_field,
-    get_session_json, stderr, stdout,
+    get_session_json, short_id, stderr, stdout,
 };
 #[allow(unused_imports)]
 pub(crate) use run_resolution::{

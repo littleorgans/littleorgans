@@ -4,13 +4,13 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, IsolationProfile, LaunchEnv, LaunchSpec, Lifecycle,
     MountSpec, RuntimeKind, ShimReady, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     TmuxSpawnTarget, WatcherCounts,
 };
 use lilo_runtime_store::{LifecycleStore, StoreConfig};
-use uuid::Uuid;
 
 use super::*;
 use crate::docker_preflight::DockerPreflightConfig;

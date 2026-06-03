@@ -231,10 +231,10 @@ struct DockerPlatform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lilo_common::id::SessionId;
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationPolicy, RuntimeKind, ShellResume, SpawnTarget,
     };
-    use uuid::Uuid;
 
     #[test]
     fn request_image_overrides_env_default() {
@@ -318,7 +318,7 @@ mod tests {
 
     fn spawn_request() -> SpawnRequest {
         SpawnRequest {
-            session_id: Uuid::nil(),
+            session_id: SessionId::from_uuid(uuid::Uuid::nil()),
             runtime: RuntimeKind::Claude,
             isolation: IsolationPolicy::Docker(lilo_rm_core::IsolationProfile::default()),
             image: None,

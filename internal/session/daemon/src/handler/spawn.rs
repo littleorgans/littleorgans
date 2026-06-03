@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
+use lilo_common::id::{IntentId, SessionId};
 use lilo_db::{begin_immediate_tx, finish_immediate_tx};
 use lilo_im_core::Action;
 use lilo_rm_core::{
@@ -13,7 +14,6 @@ use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnR
 use lilo_session_driver::{RuntimeError, RuntimeFault, SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
 use sqlx::{Sqlite, pool::PoolConnection};
-use uuid::Uuid;
 
 use crate::agent_config::{ResolvedAgentConfig, resolve_agent_config};
 use crate::identity_client::{RequestContext, spawn_resource};
@@ -27,7 +27,7 @@ impl DaemonState {
         context: &RequestContext,
         mut request: SpawnRequest,
     ) -> Result<RpcResponse> {
-        let id = Uuid::now_v7();
+        let id = SessionId::new();
         let location = {
             let store = self.store();
             normalize_spawn_request(&mut request, store).await?
@@ -63,7 +63,7 @@ impl DaemonState {
             updated_at: draft_created_at,
         };
         let intent = PendingSpawnIntent::new(
-            Uuid::now_v7(),
+            IntentId::new(),
             runtime_request.clone(),
             SessionDraft::new(&draft_session),
         );
@@ -215,7 +215,7 @@ impl DaemonState {
         Ok(session)
     }
 
-    async fn abort_running_spawn(&self, session_id: Uuid, reason: &str) -> Result<()> {
+    async fn abort_running_spawn(&self, session_id: SessionId, reason: &str) -> Result<()> {
         let session_id_string = session_id.to_string();
         match self
             .runtime
@@ -240,7 +240,7 @@ impl DaemonState {
         self.abort_spawn_intent(session_id, reason).await
     }
 
-    async fn abort_spawn_intent(&self, session_id: Uuid, reason: &str) -> Result<()> {
+    async fn abort_spawn_intent(&self, session_id: SessionId, reason: &str) -> Result<()> {
         let lifecycle_store = self.lifecycle_store();
         let mut conn = self
             .begin_spawn_tx(
@@ -378,7 +378,7 @@ fn runtime_spawn_failure(error: &RuntimeError) -> String {
 }
 
 fn spawn_launch(
-    id: Uuid,
+    id: SessionId,
     request: &SpawnRequest,
     agent_config: Option<&ResolvedAgentConfig>,
 ) -> SpawnLaunch {

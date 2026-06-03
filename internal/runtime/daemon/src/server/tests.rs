@@ -1,4 +1,5 @@
 use super::*;
+use lilo_common::id::SessionId;
 
 #[tokio::test]
 async fn nudge_terminal_tmux_session_returns_typed_failure() {
@@ -12,7 +13,7 @@ async fn nudge_lost_tmux_session_returns_terminal_failure() {
 
 async fn assert_terminal_tmux_nudge_returns_session_ended(terminal_state: TerminalState) {
     let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     persist_terminal_tmux(&state.server, session_id, terminal_state).await;
 
     let response = state
@@ -33,7 +34,7 @@ async fn assert_terminal_tmux_nudge_returns_session_ended(terminal_state: Termin
 #[tokio::test]
 async fn nudge_headless_terminal_session_remains_headless_unsupported() {
     let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, lilo_rm_core::RuntimeKind::Claude);
     state
         .server
@@ -67,7 +68,7 @@ async fn nudge_headless_terminal_session_remains_headless_unsupported() {
 #[tokio::test]
 async fn nudge_running_tmux_session_with_dead_pane_returns_typed_failure() {
     let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     persist_running_tmux(&state.server, session_id).await;
 
     let response = state
@@ -88,7 +89,7 @@ async fn nudge_running_tmux_session_with_dead_pane_returns_typed_failure() {
 #[tokio::test]
 async fn capture_running_tmux_session_with_dead_pane_returns_pane_unavailable() {
     let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     persist_running_tmux(&state.server, session_id).await;
 
     let response = state
@@ -109,7 +110,7 @@ async fn capture_running_tmux_session_with_dead_pane_returns_pane_unavailable() 
 #[tokio::test]
 async fn status_marks_dead_tmux_pane_logs_unavailable() {
     let state = TestState::new().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     persist_running_tmux(&state.server, session_id).await;
 
     let lifecycles = state
@@ -132,7 +133,7 @@ async fn status_marks_dead_tmux_pane_logs_unavailable() {
 async fn kill_unknown_session_returns_not_found() {
     let state = TestState::new().await;
     let request = KillRequest {
-        session_id: Uuid::now_v7(),
+        session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         signal: RuntimeSignal::Term,
         grace_secs: 0,
     };
@@ -187,7 +188,7 @@ impl TestState {
 
 async fn persist_terminal_tmux(
     state: &ServerState,
-    session_id: Uuid,
+    session_id: SessionId,
     terminal_state: TerminalState,
 ) {
     let mut lifecycle = persist_running_tmux(state, session_id).await;
@@ -206,7 +207,7 @@ async fn persist_terminal_tmux(
         .expect("terminal");
 }
 
-async fn persist_running_tmux(state: &ServerState, session_id: Uuid) -> Lifecycle {
+async fn persist_running_tmux(state: &ServerState, session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, lilo_rm_core::RuntimeKind::Claude);
     state
         .store()
@@ -228,7 +229,7 @@ async fn persist_running_tmux(state: &ServerState, session_id: Uuid) -> Lifecycl
     lifecycle
 }
 
-fn nudge_request(session_id: Uuid) -> NudgeRequest {
+fn nudge_request(session_id: SessionId) -> NudgeRequest {
     NudgeRequest {
         session_id,
         content: "wake up".to_owned(),

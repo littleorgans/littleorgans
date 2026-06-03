@@ -14,6 +14,7 @@ use claude::CLAUDE;
 pub use claude::ClaudeLauncher;
 use codex::CODEX;
 pub use codex::CodexLauncher;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, LauncherError, RuntimeKind, RuntimeLauncher,
     SpawnRequest, SpawnTarget, upsert_launch_env,
@@ -70,7 +71,7 @@ pub fn registered_launchers() -> [&'static dyn RuntimeLauncher; 2] {
 pub fn warm_registry() -> Result<(), LauncherError> {
     for launcher in registered_launchers() {
         let request = SpawnRequest {
-            session_id: uuid::Uuid::nil(),
+            session_id: SessionId::from_uuid(uuid::Uuid::nil()),
             runtime: launcher.kind(),
             isolation: IsolationPolicy::default(),
             image: None,

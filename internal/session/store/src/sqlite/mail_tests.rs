@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
+use lilo_common::id::{MessageId, SessionId};
 use lilo_session_core::{LostEvidence, Mail, MailIntent, MailStatus, SenderRef};
-use uuid::Uuid;
 
 use super::{MailRowError, SqliteStore};
 use crate::test_support::OrPanic as _;
@@ -9,8 +9,8 @@ use crate::test_support::OrPanic as _;
 async fn mail_round_trip_marks_read() {
     let (_dir, store) = SqliteStore::open_temp().await;
     let mail = test_mail(
-        SenderRef::session(Uuid::now_v7()),
-        Uuid::now_v7(),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
         "review the spec",
         "review-thread",
         None,
@@ -45,8 +45,8 @@ async fn mail_round_trip_marks_read() {
 async fn peek_keeps_mail_unread() {
     let (_dir, store) = SqliteStore::open_temp().await;
     let mail = test_mail(
-        SenderRef::session(Uuid::now_v7()),
-        Uuid::now_v7(),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
         "review the spec",
         "review-thread",
         None,
@@ -71,8 +71,11 @@ async fn peek_keeps_mail_unread() {
 #[tokio::test]
 async fn idempotent_retry_collapses_to_existing_message() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let sender = SenderRef::session(Uuid::now_v7());
-    let recipient_ids = [Uuid::now_v7(), Uuid::now_v7()];
+    let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
+    let recipient_ids = [
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
+    ];
     let mail = test_mail(
         sender.clone(),
         recipient_ids[0],
@@ -86,7 +89,7 @@ async fn idempotent_retry_collapses_to_existing_message() {
         .await
         .or_panic("first send inserts");
     let replay = Mail {
-        id: Uuid::now_v7(),
+        id: MessageId::from_uuid(uuid::Uuid::now_v7()),
         sender,
         recipient_id: recipient_ids[0],
         sent_at: Utc::now() + Duration::seconds(1),
@@ -108,9 +111,9 @@ async fn idempotent_retry_collapses_to_existing_message() {
 #[tokio::test]
 async fn idempotent_retry_with_different_recipients_conflicts() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let sender = SenderRef::session(Uuid::now_v7());
-    let first_recipient = Uuid::now_v7();
-    let second_recipient = Uuid::now_v7();
+    let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
+    let first_recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let second_recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mail = test_mail(
         sender.clone(),
         first_recipient,
@@ -124,7 +127,7 @@ async fn idempotent_retry_with_different_recipients_conflicts() {
         .await
         .or_panic("first send inserts");
     let replay = Mail {
-        id: Uuid::now_v7(),
+        id: MessageId::from_uuid(uuid::Uuid::now_v7()),
         sender,
         recipient_id: second_recipient,
         ..mail
@@ -141,16 +144,16 @@ async fn idempotent_retry_with_different_recipients_conflicts() {
 #[tokio::test]
 async fn unread_reads_order_by_sent_at_then_message_id() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let recipient_id = Uuid::now_v7();
-    let sender = SenderRef::session(Uuid::now_v7());
+    let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let sent_at = Utc::now();
     let first = Mail {
-        id: Uuid::from_u128(1),
+        id: MessageId::from_uuid(uuid::Uuid::from_u128(1)),
         sent_at,
         ..test_mail(sender.clone(), recipient_id, "first", "order-thread", None)
     };
     let second = Mail {
-        id: Uuid::from_u128(2),
+        id: MessageId::from_uuid(uuid::Uuid::from_u128(2)),
         sent_at,
         ..test_mail(sender, recipient_id, "second", "order-thread", None)
     };
@@ -173,8 +176,8 @@ async fn unread_reads_order_by_sent_at_then_message_id() {
 #[tokio::test]
 async fn read_side_decode_error_does_not_mark_read() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let message_id = Uuid::now_v7();
-    let recipient_id = Uuid::now_v7();
+    let message_id = MessageId::from_uuid(uuid::Uuid::now_v7());
+    let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     sqlx::query(
         "INSERT INTO messages
          (message_id, sender_ref, context_id, intent, idempotency_key, content, sent_at)
@@ -218,8 +221,8 @@ async fn read_side_decode_error_does_not_mark_read() {
 #[tokio::test]
 async fn breaker_counts_exclude_receipts() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let sender = SenderRef::session(Uuid::now_v7());
-    let recipient_id = Uuid::now_v7();
+    let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
+    let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let since = Utc::now() - Duration::seconds(1);
     let request = test_mail(
         sender.clone(),
@@ -229,7 +232,7 @@ async fn breaker_counts_exclude_receipts() {
         None,
     );
     let receipt = Mail {
-        id: Uuid::now_v7(),
+        id: MessageId::from_uuid(uuid::Uuid::now_v7()),
         intent: MailIntent::Receipt,
         ..test_mail(
             sender.clone(),
@@ -268,11 +271,11 @@ async fn breaker_counts_exclude_receipts() {
 #[tokio::test]
 async fn terminating_recipient_marks_unread_mail_undeliverable() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let recipient = Uuid::now_v7();
-    let other = Uuid::now_v7();
+    let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let other = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     let pending = test_mail(
-        SenderRef::session(Uuid::now_v7()),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         recipient,
         "what are we working on?",
         "testing",
@@ -283,7 +286,7 @@ async fn terminating_recipient_marks_unread_mail_undeliverable() {
         .await
         .or_panic("pending inserts");
     let live = test_mail(
-        SenderRef::session(Uuid::now_v7()),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         other,
         "still here",
         "testing",
@@ -325,9 +328,9 @@ async fn terminating_recipient_marks_unread_mail_undeliverable() {
 #[tokio::test]
 async fn terminating_recipient_leaves_read_mail_read() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let recipient = Uuid::now_v7();
+    let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mail = test_mail(
-        SenderRef::session(Uuid::now_v7()),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         recipient,
         "seen it",
         "testing",
@@ -355,9 +358,9 @@ async fn terminating_recipient_leaves_read_mail_read() {
 #[tokio::test]
 async fn losing_recipient_marks_unread_mail_undeliverable() {
     let (_dir, store) = SqliteStore::open_temp().await;
-    let recipient = Uuid::now_v7();
+    let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mail = test_mail(
-        SenderRef::session(Uuid::now_v7()),
+        SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         recipient,
         "are you there?",
         "testing",
@@ -387,13 +390,13 @@ async fn losing_recipient_marks_unread_mail_undeliverable() {
 
 fn test_mail(
     sender: SenderRef,
-    recipient_id: Uuid,
+    recipient_id: SessionId,
     content: &str,
     context_id: &str,
     idempotency_key: Option<&str>,
 ) -> Mail {
     Mail {
-        id: Uuid::now_v7(),
+        id: MessageId::from_uuid(uuid::Uuid::now_v7()),
         sender,
         recipient_id,
         content: content.to_string(),

@@ -64,7 +64,7 @@ async fn test_state() -> Arc<ServerState> {
 async fn test_state_with_docker_config(
     docker_preflight: DockerPreflightConfig,
 ) -> Arc<ServerState> {
-    let temp = std::env::temp_dir().join(format!("rtm-preflight-{}", Uuid::now_v7()));
+    let temp = std::env::temp_dir().join(format!("rtm-preflight-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp).expect("tempdir");
     let db = lilo_db::LiloDb::open_path(temp.join("rtm.sqlite"))
         .await
@@ -89,7 +89,7 @@ async fn test_state_with_docker_config(
     )
 }
 
-async fn insert_running_tmux(state: &Arc<ServerState>, session_id: Uuid, runtime_pid: u32) {
+async fn insert_running_tmux(state: &Arc<ServerState>, session_id: SessionId, runtime_pid: u32) {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     state
         .store()
@@ -110,7 +110,7 @@ async fn insert_running_tmux(state: &Arc<ServerState>, session_id: Uuid, runtime
         .expect("running");
 }
 
-fn headless_request(session_id: Uuid, force: bool) -> SpawnRequest {
+fn headless_request(session_id: SessionId, force: bool) -> SpawnRequest {
     SpawnRequest {
         session_id,
         runtime: RuntimeKind::Claude,
@@ -125,7 +125,7 @@ fn headless_request(session_id: Uuid, force: bool) -> SpawnRequest {
     }
 }
 
-fn tmux_request(session_id: Uuid, force: bool) -> SpawnRequest {
+fn tmux_request(session_id: SessionId, force: bool) -> SpawnRequest {
     SpawnRequest {
         target: SpawnTarget::Tmux(TmuxSpawnTarget {
             address: tmux_address(),
@@ -146,7 +146,7 @@ fn docker_profile(name: Option<&str>) -> IsolationPolicy {
 
 async fn assert_docker_profile_rejected(profile: &str, message: &str) {
     let state = test_state().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(Some(profile));
 
@@ -164,7 +164,7 @@ async fn assert_docker_profile_rejected(profile: &str, message: &str) {
 
 async fn assert_docker_image_user_rejected(user: Option<&'static str>) {
     let state = test_state().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
 
@@ -198,7 +198,7 @@ async fn assert_arm64_manifest_success(
         false,
     ))
     .await;
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(None);
 
     validate_docker_image_metadata_on_arch(
@@ -228,7 +228,7 @@ async fn assert_arm64_manifest_failure_with_architecture(
         false,
     ))
     .await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
 
@@ -258,7 +258,7 @@ async fn assert_arm64_manifest_failure(arm64_manifest: Result<bool, &'static str
         false,
     ))
     .await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
 
@@ -309,7 +309,7 @@ fn docker_profile_ref(request: &SpawnRequest) -> &IsolationProfile {
     profile
 }
 
-async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: Uuid) {
+async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: SessionId) {
     assert!(
         state
             .store()
@@ -329,7 +329,7 @@ async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: Uu
     );
 }
 
-fn assert_conflict(payload: &SpawnConflictPayload, kind: SpawnConflictKind, session_id: Uuid) {
+fn assert_conflict(payload: &SpawnConflictPayload, kind: SpawnConflictKind, session_id: SessionId) {
     assert_eq!(payload.kind, kind);
     assert_eq!(payload.lifecycle.session_id, session_id);
 }

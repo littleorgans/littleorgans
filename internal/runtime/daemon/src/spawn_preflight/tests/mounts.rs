@@ -344,7 +344,7 @@ async fn docker_mount_sources_are_canonicalized_before_docker_argv() {
 #[tokio::test]
 async fn host_isolation_mounts_do_not_reject_direct_rpc_requests() {
     let state = test_state().await;
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.env.push(LaunchEnv::new("CLAUDE_CONFIG_DIR", "/host/path"));
     request.mounts.push(MountSpec {
         source: "missing-source".into(),
@@ -377,7 +377,7 @@ impl MountLayout {
 }
 
 fn docker_request(cwd: &Path) -> SpawnRequest {
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(None);
     request.cwd = cwd.to_path_buf();
     request

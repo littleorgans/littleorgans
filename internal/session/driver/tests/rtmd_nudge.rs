@@ -1,6 +1,7 @@
 mod common;
 
 use common::OrPanic as _;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     NudgeFailureReason, NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse,
     RuntimeResponse, RuntimeRpc, read_json_line, write_json_line,
@@ -9,11 +10,10 @@ use lilo_session_driver::RtmdDriver;
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::task::JoinHandle;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn rtmd_nudge_maps_delivered_outcome() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let (driver, server) = mock_rtmd_nudge(session_id, NudgeOutcome::Delivered);
 
     let result = driver
@@ -28,7 +28,7 @@ async fn rtmd_nudge_maps_delivered_outcome() {
 
 #[tokio::test]
 async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let (driver, server) = mock_rtmd_nudge(
         session_id,
         NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead),
@@ -44,7 +44,7 @@ async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
     server.await.or_panic("server task");
 }
 
-fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> (RtmdDriver, JoinHandle<()>) {
+fn mock_rtmd_nudge(session_id: SessionId, outcome: NudgeOutcome) -> (RtmdDriver, JoinHandle<()>) {
     common::mock_rtmd_server(move |stream| async move {
         let (read_half, mut write_half) = stream.into_split();
         let mut reader = BufReader::new(read_half);

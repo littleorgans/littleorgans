@@ -2,13 +2,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use lilo_session_core::{
-    LabelOp, LostEvidence, Namespace, RuntimeKind, Selector, Session, SessionState,
+    LabelOp, LostEvidence, MIN_SELECTOR_PREFIX_LEN, Namespace, RuntimeKind, Selector, Session,
+    SessionState,
 };
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection};
 use thiserror::Error;
-use uuid::Uuid;
 
 use super::SqliteStore;
 use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
@@ -28,6 +29,15 @@ pub enum SessionRowError {
     Namespace(#[from] lilo_session_core::NamespaceError),
     #[error("{field} out of range: {value}")]
     IntegerOutOfRange { field: &'static str, value: i64 },
+    #[error("session id prefix too short: {prefix} (minimum {min} characters)")]
+    PrefixTooShort { prefix: String, min: usize },
+    #[error("invalid session id prefix: {prefix} (expected lowercase hex or hyphen)")]
+    InvalidPrefix { prefix: String },
+    #[error("ambiguous session id prefix {prefix}: {candidates:?}")]
+    Ambiguous {
+        prefix: String,
+        candidates: Vec<String>,
+    },
 }
 
 impl SqliteStore {
@@ -49,7 +59,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub async fn get_session(&self, id: &Uuid) -> Result<Option<Session>, SessionRowError> {
+    pub async fn get_session(&self, id: &SessionId) -> Result<Option<Session>, SessionRowError> {
         let id = id.to_string();
         Ok(self
             .query_sessions("SELECT * FROM session_sessions WHERE id = ?", [id])
@@ -60,7 +70,7 @@ impl SqliteStore {
 
     pub async fn list_sessions_by_ids(
         &self,
-        ids: &[Uuid],
+        ids: &[SessionId],
     ) -> Result<Vec<Session>, SessionRowError> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -71,14 +81,14 @@ impl SqliteStore {
              WHERE id IN ({placeholders})
              ORDER BY created_at"
         );
-        let params = ids.iter().map(Uuid::to_string);
+        let params = ids.iter().map(ToString::to_string);
         self.query_sessions(&sql, params).await
     }
 
     pub async fn list_sessions(&self, id: Option<&str>) -> Result<Vec<Session>, SessionRowError> {
         match id {
             Some(id) => {
-                let id = Uuid::parse_str(id)?;
+                let id: SessionId = id.parse()?;
                 self.list_sessions_by_selector(&Selector::Id { id }).await
             }
             None => self.list_sessions_by_selector(&Selector::All).await,
@@ -104,6 +114,7 @@ impl SqliteStore {
                 )
                 .await
             }
+            Selector::Prefix { prefix } => self.query_prefix_sessions(prefix).await,
             Selector::Role { name } => {
                 self.query_sessions(
                     "SELECT * FROM session_sessions WHERE role = ? ORDER BY created_at",
@@ -147,6 +158,28 @@ impl SqliteStore {
         }
     }
 
+    async fn query_prefix_sessions(&self, prefix: &str) -> Result<Vec<Session>, SessionRowError> {
+        validate_session_id_prefix(prefix)?;
+        let sessions = self
+            .query_sessions(
+                "SELECT * FROM session_sessions
+                 WHERE id LIKE ? || '%'
+                 ORDER BY created_at",
+                [prefix.to_string()],
+            )
+            .await?;
+        if sessions.len() <= 1 {
+            return Ok(sessions);
+        }
+        Err(SessionRowError::Ambiguous {
+            prefix: prefix.to_string(),
+            candidates: sessions
+                .iter()
+                .map(|session| session.id.to_string())
+                .collect(),
+        })
+    }
+
     async fn query_label_in_sessions(
         &self,
         key: &str,
@@ -176,12 +209,21 @@ impl SqliteStore {
         &self,
         selectors: &[Selector],
     ) -> Result<Vec<Session>, SessionRowError> {
-        let mut sessions = self
-            .query_sessions(
+        let mut prefix_sessions = Vec::new();
+        collect_prefix_selectors(selectors, &mut prefix_sessions);
+        let mut sessions = if let Some((first, rest)) = prefix_sessions.split_first() {
+            let sessions = self.query_prefix_sessions(first).await?;
+            for prefix in rest {
+                self.query_prefix_sessions(prefix).await?;
+            }
+            sessions
+        } else {
+            self.query_sessions(
                 "SELECT * FROM session_sessions ORDER BY created_at",
                 std::iter::empty::<String>(),
             )
-            .await?;
+            .await?
+        };
         for selector in selectors {
             sessions.retain(|session| session_matches_selector(session, selector));
         }
@@ -210,7 +252,7 @@ impl SqliteStore {
 
     pub async fn mark_session_terminated(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         exit_code: Option<i32>,
         terminated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -234,7 +276,7 @@ impl SqliteStore {
 
     pub async fn mark_session_lost(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         evidence: LostEvidence,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -257,7 +299,7 @@ impl SqliteStore {
 
     pub async fn record_transcript_path(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         transcript_path: &std::path::Path,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -324,6 +366,7 @@ fn session_matches_selector(session: &Session, selector: &Selector) -> bool {
     match selector {
         Selector::All => true,
         Selector::Id { id } => session.id == *id,
+        Selector::Prefix { prefix } => session.id.to_string().starts_with(prefix),
         Selector::Role { name } => session.role == *name,
         Selector::Namespace { namespace } => session.namespace == *namespace,
         Selector::Dir { path } => session.dir == *path,
@@ -347,13 +390,41 @@ fn session_matches_selector(session: &Session, selector: &Selector) -> bool {
     }
 }
 
+fn collect_prefix_selectors<'a>(selectors: &'a [Selector], prefixes: &mut Vec<&'a str>) {
+    for selector in selectors {
+        match selector {
+            Selector::Prefix { prefix } => prefixes.push(prefix),
+            Selector::And { selectors } => collect_prefix_selectors(selectors, prefixes),
+            _ => {}
+        }
+    }
+}
+
+fn validate_session_id_prefix(prefix: &str) -> Result<(), SessionRowError> {
+    if prefix.len() < MIN_SELECTOR_PREFIX_LEN {
+        return Err(SessionRowError::PrefixTooShort {
+            prefix: prefix.to_string(),
+            min: MIN_SELECTOR_PREFIX_LEN,
+        });
+    }
+    if !prefix
+        .chars()
+        .all(|ch| matches!(ch, '0'..='9' | 'a'..='f' | '-'))
+    {
+        return Err(SessionRowError::InvalidPrefix {
+            prefix: prefix.to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn session_from_row(row: &SqliteRow) -> Result<Session, SessionRowError> {
     let runtime_pid = row.try_get::<i64, _>("runtime_pid")?;
     let runtime_pid =
         u32::try_from(runtime_pid).map_err(|_| integer_out_of_range("runtime_pid", runtime_pid))?;
 
     Ok(Session {
-        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        id: row.try_get::<String, _>("id")?.parse()?,
         runtime: RuntimeKind::from_str(&row.try_get::<String, _>("runtime")?)?,
         role: row.try_get("role")?,
         workspace: row.try_get("workspace")?,

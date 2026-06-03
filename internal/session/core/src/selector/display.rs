@@ -7,6 +7,7 @@ impl fmt::Display for Selector {
         match self {
             Self::All => f.write_str("all"),
             Self::Id { id } => write!(f, "id:{id}"),
+            Self::Prefix { prefix } => f.write_str(prefix),
             Self::Role { name } => write!(f, "role:{name}"),
             Self::Namespace { namespace } => write!(f, "namespace:{namespace}"),
             Self::Dir { path } => write!(f, "dir:{}", path.display()),

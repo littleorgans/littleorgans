@@ -21,6 +21,7 @@ name = "sm"
 path = "src/main.rs"
 
 [dependencies]
+lilo-common.workspace = true
 lilo-db.workspace = true
 lilo-im-core.workspace = true
 tokio-util.workspace = true

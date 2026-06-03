@@ -134,6 +134,7 @@ mod tests {
 
     const TEST_DAEMON_VERSION: &str = "test-daemon";
     use chrono::Utc;
+    use lilo_common::id::{IntentId, SessionId};
     use lilo_db::LiloDb;
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
@@ -145,7 +146,6 @@ mod tests {
     use lilo_session_core::{Namespace, RuntimeKind, Session, SessionState};
     use lilo_session_store::{PendingSpawnIntent, SessionDraft, SqliteStore};
     use std::sync::Arc;
-    use uuid::Uuid;
 
     #[tokio::test]
     async fn build_preserves_session_paths_for_later_composition() {
@@ -187,11 +187,11 @@ mod tests {
         );
         let session_store = SqliteStore::open(&db);
         let lifecycle_store = LifecycleStore::open(&db);
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let draft = SessionDraft::new(&draft_session(session_id));
         session_store
             .insert_pending_spawn_intent(&PendingSpawnIntent::new(
-                Uuid::now_v7(),
+                IntentId::from_uuid(uuid::Uuid::now_v7()),
                 runtime_request(session_id),
                 draft,
             ))
@@ -237,7 +237,7 @@ mod tests {
         );
     }
 
-    fn draft_session(id: Uuid) -> Session {
+    fn draft_session(id: SessionId) -> Session {
         let now = Utc::now();
         Session {
             id,
@@ -261,7 +261,7 @@ mod tests {
         }
     }
 
-    fn runtime_request(session_id: Uuid) -> RuntimeSpawnRequest {
+    fn runtime_request(session_id: SessionId) -> RuntimeSpawnRequest {
         RuntimeSpawnRequest {
             session_id,
             runtime: RuntimeRuntimeKind::Claude,
@@ -276,7 +276,7 @@ mod tests {
         }
     }
 
-    fn running_lifecycle(session_id: Uuid) -> Lifecycle {
+    fn running_lifecycle(session_id: SessionId) -> Lifecycle {
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
         assert!(lifecycle.mark_running(ShimReady {
             session_id,

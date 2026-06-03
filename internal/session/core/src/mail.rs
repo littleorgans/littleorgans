@@ -2,10 +2,10 @@ use std::fmt;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::{MessageId, SessionId};
 use lilo_rm_core::NudgeMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::label::Label;
 use crate::namespace::Namespace;
@@ -137,13 +137,13 @@ impl From<MailNotifyMode> for NudgeMode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SenderRef {
-    Session { session_id: Uuid },
+    Session { session_id: SessionId },
     Operator { principal: Value },
     System,
 }
 
 impl SenderRef {
-    pub fn session(session_id: Uuid) -> Self {
+    pub fn session(session_id: SessionId) -> Self {
         Self::Session { session_id }
     }
 
@@ -156,7 +156,7 @@ impl SenderRef {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SenderView {
     Session {
-        session_id: Uuid,
+        session_id: SessionId,
         role: String,
         display_label: String,
         labels: Vec<Label>,
@@ -190,7 +190,7 @@ impl SenderView {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RecipientSummary {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub role: String,
     pub display_label: String,
     pub namespace: Namespace,
@@ -209,7 +209,7 @@ impl RecipientSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MessageView {
-    pub id: Uuid,
+    pub id: MessageId,
     pub content: String,
     pub sent_at: DateTime<Utc>,
     pub read_at: Option<DateTime<Utc>>,
@@ -281,7 +281,7 @@ pub struct MailSendResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailCountView {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub role: String,
     pub display_label: String,
     pub namespace: Namespace,
@@ -302,9 +302,9 @@ impl MailCountView {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Mail {
-    pub id: Uuid,
+    pub id: MessageId,
     pub sender: SenderRef,
-    pub recipient_id: Uuid,
+    pub recipient_id: SessionId,
     pub content: String,
     pub sent_at: DateTime<Utc>,
     pub read_at: Option<DateTime<Utc>>,

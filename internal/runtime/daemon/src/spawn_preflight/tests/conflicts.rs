@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn session_id_conflict_includes_terminal_lifecycle() {
     let state = test_state().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     state
         .store()
@@ -27,10 +27,10 @@ async fn session_id_conflict_includes_terminal_lifecycle() {
 #[tokio::test]
 async fn tmux_occupant_conflict_is_typed_without_force() {
     let state = test_state().await;
-    let occupant = Uuid::now_v7();
+    let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
     insert_running_tmux(&state, occupant, 60_000).await;
 
-    let mut request = tmux_request(Uuid::now_v7(), false);
+    let mut request = tmux_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     let response = check(&state, &mut request)
         .await
         .expect("preflight")
@@ -43,10 +43,10 @@ async fn tmux_occupant_conflict_is_typed_without_force() {
 async fn force_kills_tmux_occupant_and_allows_spawn() {
     let state = test_state().await;
     let mut child = Command::new("sleep").arg("60").spawn().expect("sleep");
-    let occupant = Uuid::now_v7();
+    let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
     insert_running_tmux(&state, occupant, child.id()).await;
 
-    let mut request = tmux_request(Uuid::now_v7(), true);
+    let mut request = tmux_request(SessionId::from_uuid(uuid::Uuid::now_v7()), true);
     let response = check(&state, &mut request)
         .await
         .expect("preflight");

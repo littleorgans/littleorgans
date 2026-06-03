@@ -7,6 +7,7 @@ use std::process::{Command, Output, Stdio};
 use std::time::Duration;
 
 use common::{RtmHarness, output_stdout, wait_until};
+use lilo_common::id::SessionId;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ fn real_docker_spawn_lifecycle_is_opt_in() {
         return;
     }
 
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let container = format!("rtm-{session_id}");
     let temp = TempDir::new().expect("temp dir");
     let images = DockerImages::new(session_id);
@@ -56,7 +57,7 @@ fn real_docker_spawn_remaps_workdir_when_mount_covers_cwd() {
         return;
     }
 
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let container = format!("rtm-{session_id}");
     let temp = TempDir::new().expect("temp dir");
     let mount_source = temp.path().join("helioy");
@@ -148,7 +149,7 @@ USER rtm
     )
 }
 
-fn spawn_docker_runtime(harness: &RtmHarness, session_id: &Uuid, image: &str, cwd: &Path) {
+fn spawn_docker_runtime(harness: &RtmHarness, session_id: &SessionId, image: &str, cwd: &Path) {
     let session_id = session_id.to_string();
     let output = harness
         .rtm_command()
@@ -163,7 +164,7 @@ fn spawn_docker_runtime(harness: &RtmHarness, session_id: &Uuid, image: &str, cw
 
 fn spawn_docker_runtime_with_mount(
     harness: &RtmHarness,
-    session_id: &Uuid,
+    session_id: &SessionId,
     image: &str,
     cwd: &Path,
     mount_source: &Path,
@@ -236,7 +237,7 @@ fn docker_workdir(container: &str) -> String {
     assert_success(output, "docker inspect").trim().to_owned()
 }
 
-fn kill_runtime(harness: &RtmHarness, session_id: &Uuid) {
+fn kill_runtime(harness: &RtmHarness, session_id: &SessionId) {
     let output = harness
         .rtm_command()
         .args(["kill", &session_id.to_string()])
@@ -261,7 +262,7 @@ struct DockerImages {
 }
 
 impl DockerImages {
-    fn new(session_id: Uuid) -> Self {
+    fn new(session_id: SessionId) -> Self {
         Self {
             base: format!("runtime-matters-claude:e2e-{session_id}-base"),
             e2e: format!("runtime-matters-claude:e2e-{session_id}"),

@@ -1,12 +1,12 @@
 use anyhow::{Context, Result, bail};
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_rm_client::RuntimeClient;
 use lilo_rm_core::{
     IsolationPolicy, LaunchEnv, MountSpec, RuntimeKind, RuntimeResponse, SpawnRequest, SpawnTarget,
     ensure_mounts_allowed_for_isolation, upsert_launch_env,
 };
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 
 use crate::cli::output;
 
@@ -17,7 +17,7 @@ pub struct SpawnArgs {
     #[arg(long)]
     runtime: RuntimeKind,
     #[arg(long)]
-    session_id: Uuid,
+    session_id: SessionId,
     #[arg(long, value_name = "headless|tmux:SESSION:WINDOW.PANE")]
     target: SpawnTarget,
     #[arg(long, default_value_t = IsolationPolicy::Host, value_name = "host|docker[:PROFILE]")]

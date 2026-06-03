@@ -1,6 +1,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
+use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 use super::RtmHarness;
@@ -13,7 +14,7 @@ pub fn write_fake_cli(dir: &Path) {
     std::fs::set_permissions(&path, permissions).expect("permissions");
 }
 
-pub fn container_pid(harness: &RtmHarness, session_id: Uuid) -> u32 {
+pub fn container_pid(harness: &RtmHarness, session_id: SessionId) -> u32 {
     let path = harness
         .temp_path()
         .join("fake-docker-state")
@@ -25,7 +26,7 @@ pub fn container_pid(harness: &RtmHarness, session_id: Uuid) -> u32 {
         .expect("fake container pid")
 }
 
-pub fn container_env(harness: &RtmHarness, session_id: Uuid) -> Vec<String> {
+pub fn container_env(harness: &RtmHarness, session_id: SessionId) -> Vec<String> {
     let path = harness
         .temp_path()
         .join("fake-docker-state")
@@ -37,7 +38,7 @@ pub fn container_env(harness: &RtmHarness, session_id: Uuid) -> Vec<String> {
         .collect()
 }
 
-pub fn container_image(harness: &RtmHarness, session_id: Uuid) -> String {
+pub fn container_image(harness: &RtmHarness, session_id: SessionId) -> String {
     let path = harness
         .temp_path()
         .join("fake-docker-state")
@@ -45,7 +46,7 @@ pub fn container_image(harness: &RtmHarness, session_id: Uuid) -> String {
     std::fs::read_to_string(&path).unwrap_or_default()
 }
 
-pub fn container_output(harness: &RtmHarness, session_id: Uuid) -> String {
+pub fn container_output(harness: &RtmHarness, session_id: SessionId) -> String {
     let path = harness
         .temp_path()
         .join("fake-docker-state")

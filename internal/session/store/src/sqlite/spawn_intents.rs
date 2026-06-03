@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
+use lilo_common::id::{IntentId, SessionId};
 use lilo_rm_core::{Lifecycle, LifecycleState, SpawnRequest as RuntimeSpawnRequest};
 use lilo_session_core::{
     Label, Namespace, RuntimeKind, Session, SessionState, paths::lifecycle_transcript_path,
@@ -9,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection};
 use thiserror::Error;
-use uuid::Uuid;
 
 use super::SqliteStore;
 
@@ -26,9 +26,9 @@ pub enum SpawnIntentError {
     #[error("unknown spawn intent status: {0}")]
     UnknownStatus(String),
     #[error("running lifecycle missing runtime pid for session {0}")]
-    MissingRuntimePid(Uuid),
+    MissingRuntimePid(SessionId),
     #[error("running lifecycle expected for session {0}")]
-    NotRunning(Uuid),
+    NotRunning(SessionId),
     #[error("timestamp out of range: {0}")]
     TimestampOutOfRange(i64),
 }
@@ -65,7 +65,7 @@ impl SpawnIntentStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionDraft {
-    pub id: Uuid,
+    pub id: SessionId,
     pub runtime: RuntimeKind,
     pub role: String,
     pub workspace: String,
@@ -129,8 +129,8 @@ impl SessionDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingSpawnIntent {
-    pub session_id: Uuid,
-    pub operation_id: String,
+    pub session_id: SessionId,
+    pub operation_id: IntentId,
     pub spawn_request: RuntimeSpawnRequest,
     pub session_draft: SessionDraft,
     pub created_at: i64,
@@ -139,13 +139,13 @@ pub struct PendingSpawnIntent {
 impl PendingSpawnIntent {
     #[must_use]
     pub fn new(
-        operation_id: Uuid,
+        operation_id: IntentId,
         spawn_request: RuntimeSpawnRequest,
         session_draft: SessionDraft,
     ) -> Self {
         Self {
             session_id: session_draft.id,
-            operation_id: operation_id.to_string(),
+            operation_id,
             spawn_request,
             session_draft,
             created_at: Utc::now().timestamp_millis(),
@@ -155,8 +155,8 @@ impl PendingSpawnIntent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionSpawnIntent {
-    pub session_id: Uuid,
-    pub operation_id: String,
+    pub session_id: SessionId,
+    pub operation_id: IntentId,
     pub status: SpawnIntentStatus,
     pub spawn_request: RuntimeSpawnRequest,
     pub session_draft: SessionDraft,
@@ -210,21 +210,24 @@ impl SqliteStore {
         insert_pending_spawn_intent_with(conn, intent).await
     }
 
-    pub async fn resolve_spawn_intent(&self, session_id: Uuid) -> Result<(), SpawnIntentError> {
+    pub async fn resolve_spawn_intent(
+        &self,
+        session_id: SessionId,
+    ) -> Result<(), SpawnIntentError> {
         resolve_spawn_intent_with(&self.pool, session_id, Utc::now().timestamp_millis()).await
     }
 
     pub async fn resolve_spawn_intent_in(
         &self,
         conn: &mut SqliteConnection,
-        session_id: Uuid,
+        session_id: SessionId,
     ) -> Result<(), SpawnIntentError> {
         resolve_spawn_intent_with(conn, session_id, Utc::now().timestamp_millis()).await
     }
 
     pub async fn abort_spawn_intent(
         &self,
-        session_id: Uuid,
+        session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
         abort_spawn_intent_with(
@@ -239,7 +242,7 @@ impl SqliteStore {
     pub async fn abort_spawn_intent_in(
         &self,
         conn: &mut SqliteConnection,
-        session_id: Uuid,
+        session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
         abort_spawn_intent_with(conn, session_id, reason, Utc::now().timestamp_millis()).await
@@ -278,7 +281,7 @@ where
          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
     )
     .bind(intent.session_id.to_string())
-    .bind(&intent.operation_id)
+    .bind(intent.operation_id.to_string())
     .bind(SpawnIntentStatus::Pending.as_str())
     .bind(spawn_request_json)
     .bind(session_draft_json)
@@ -291,7 +294,7 @@ where
 
 async fn resolve_spawn_intent_with<'e, E>(
     executor: E,
-    session_id: Uuid,
+    session_id: SessionId,
     now_ms: i64,
 ) -> Result<(), SpawnIntentError>
 where
@@ -308,7 +311,7 @@ where
 
 async fn abort_spawn_intent_with<'e, E>(
     executor: E,
-    session_id: Uuid,
+    session_id: SessionId,
     reason: &str,
     now_ms: i64,
 ) -> Result<(), SpawnIntentError>
@@ -326,7 +329,7 @@ where
 
 async fn update_spawn_intent_status_with<'e, E>(
     executor: E,
-    session_id: Uuid,
+    session_id: SessionId,
     now_ms: i64,
     update: SpawnIntentStatusUpdate<'_>,
 ) -> Result<(), SpawnIntentError>
@@ -351,8 +354,8 @@ where
 
 fn intent_from_row(row: &SqliteRow) -> Result<SessionSpawnIntent, SpawnIntentError> {
     Ok(SessionSpawnIntent {
-        session_id: Uuid::parse_str(&row.try_get::<String, _>("session_id")?)?,
-        operation_id: row.try_get("operation_id")?,
+        session_id: row.try_get::<String, _>("session_id")?.parse()?,
+        operation_id: row.try_get::<String, _>("operation_id")?.parse()?,
         status: SpawnIntentStatus::parse(row.try_get("status")?)?,
         spawn_request: serde_json::from_str(&row.try_get::<String, _>("spawn_request_json")?)?,
         session_draft: serde_json::from_str(&row.try_get::<String, _>("session_draft_json")?)?,
@@ -444,7 +447,7 @@ mod tests {
     }
 
     fn test_intent() -> PendingSpawnIntent {
-        let id = Uuid::now_v7();
+        let id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let now = Utc::now();
         let session = Session {
             id,
@@ -467,7 +470,7 @@ mod tests {
             updated_at: now,
         };
         PendingSpawnIntent::new(
-            Uuid::now_v7(),
+            IntentId::from_uuid(uuid::Uuid::now_v7()),
             RuntimeSpawnRequest {
                 session_id: id,
                 runtime: RuntimeRuntimeKind::Claude,

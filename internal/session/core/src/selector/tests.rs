@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use uuid::Uuid;
+use lilo_common::id::SessionId;
 
 use crate::namespace::Namespace;
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
@@ -10,7 +10,7 @@ use super::{LabelOp, NamespaceScope, Selector};
 
 #[test]
 fn selector_parser_covers_closed_grammar() {
-    let id = Uuid::now_v7();
+    let id = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     assert_eq!(
         Selector::from_str("all").or_panic("expected value"),
@@ -23,6 +23,12 @@ fn selector_parser_covers_closed_grammar() {
     assert_eq!(
         Selector::from_str(&id.to_string()).or_panic("expected value"),
         Selector::Id { id }
+    );
+    assert_eq!(
+        Selector::from_str("1234abcd").or_panic("expected value"),
+        Selector::Prefix {
+            prefix: "1234abcd".to_string()
+        }
     );
     assert_eq!(
         Selector::from_str("role:engineer").or_panic("expected value"),
@@ -64,10 +70,13 @@ fn selector_parser_covers_closed_grammar() {
 
 #[test]
 fn selector_display_round_trips_through_from_str() {
-    let id = Uuid::now_v7();
+    let id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let cases = vec![
         Selector::All,
         Selector::Id { id },
+        Selector::Prefix {
+            prefix: "1234abcd".to_string(),
+        },
         Selector::Role {
             name: "engineer".to_string(),
         },
@@ -143,6 +152,11 @@ fn selector_rejects_legacy_workspace_and_invalid_new_selectors() {
         .err_or_panic("expected error")
         .to_string();
     assert_eq!(dir, "dir selector is empty");
+
+    let prefix = Selector::from_str("abc")
+        .err_or_panic("expected error")
+        .to_string();
+    assert!(prefix.contains("session id prefix must be at least 4 characters"));
 }
 
 #[test]

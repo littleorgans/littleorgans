@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
-use crate::test_support::OrPanic as _;
+use crate::test_support::{ErrOrPanic as _, OrPanic as _};
 
 use super::*;
 
@@ -12,7 +13,7 @@ async fn inserts_and_lists_sessions() {
     let (_dir, store) = SqliteStore::open_temp().await;
     let now = Utc::now();
     let session = Session {
-        id: Uuid::now_v7(),
+        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
         role: "general".to_string(),
         workspace: "test".to_string(),
@@ -241,6 +242,89 @@ async fn selector_queries_filter_by_namespace_dir_and_scope() {
 }
 
 #[tokio::test]
+async fn selector_prefix_resolves_unique_and_none() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let first = test_session_with_id(
+        "12345678-1234-4234-9234-123456789abc",
+        "engineer",
+        "/tmp/first",
+    );
+    let second = test_session_with_id("22345678-1234-4234-9234-123456789abc", "pm", "/tmp/second");
+    for session in [&first, &second] {
+        store
+            .insert_session(session)
+            .await
+            .or_panic("session inserts");
+    }
+
+    let matched = store
+        .list_sessions_by_selector(&Selector::Prefix {
+            prefix: "1234".to_string(),
+        })
+        .await
+        .or_panic("prefix selector resolves");
+    assert_eq!(session_ids(&matched), vec![first.id]);
+
+    let missing = store
+        .list_sessions_by_selector(&Selector::Prefix {
+            prefix: "ffff".to_string(),
+        })
+        .await
+        .or_panic("missing prefix resolves");
+    assert!(missing.is_empty());
+}
+
+#[tokio::test]
+async fn selector_prefix_rejects_ambiguous_and_invalid_prefixes() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let first = test_session_with_id(
+        "12345678-1234-4234-9234-123456789abc",
+        "engineer",
+        "/tmp/first",
+    );
+    let second = test_session_with_id("12345679-1234-4234-9234-123456789abc", "pm", "/tmp/second");
+    for session in [&first, &second] {
+        store
+            .insert_session(session)
+            .await
+            .or_panic("session inserts");
+    }
+
+    let ambiguous = store
+        .list_sessions_by_selector(&Selector::Prefix {
+            prefix: "1234567".to_string(),
+        })
+        .await
+        .err_or_panic("ambiguous prefix fails");
+    match ambiguous {
+        SessionRowError::Ambiguous { prefix, candidates } => {
+            assert_eq!(prefix, "1234567");
+            assert_eq!(
+                candidates,
+                vec![first.id.to_string(), second.id.to_string()]
+            );
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+
+    let too_short = store
+        .list_sessions_by_selector(&Selector::Prefix {
+            prefix: "123".to_string(),
+        })
+        .await
+        .err_or_panic("short prefix fails");
+    assert!(matches!(too_short, SessionRowError::PrefixTooShort { .. }));
+
+    let invalid = store
+        .list_sessions_by_selector(&Selector::Prefix {
+            prefix: "%".repeat(4),
+        })
+        .await
+        .err_or_panic("wildcard prefix fails");
+    assert!(matches!(invalid, SessionRowError::InvalidPrefix { .. }));
+}
+
+#[tokio::test]
 async fn persists_sessions_across_reopen() {
     let dir = tempfile::tempdir().or_panic("tempdir creates");
     let path = dir.path().join("lilo.db");
@@ -266,7 +350,7 @@ async fn persists_sessions_across_reopen() {
 fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
     let now = Utc::now();
     Session {
-        id: Uuid::now_v7(),
+        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
         role: role.to_string(),
         workspace: workspace.to_string(),
@@ -287,6 +371,12 @@ fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
     }
 }
 
-fn session_ids(sessions: &[Session]) -> Vec<Uuid> {
+fn test_session_with_id(id: &str, role: &str, workspace: &str) -> Session {
+    let mut session = test_session(role, workspace, Vec::new());
+    session.id = SessionId::from_uuid(uuid::Uuid::parse_str(id).or_panic("uuid parses"));
+    session
+}
+
+fn session_ids(sessions: &[Session]) -> Vec<SessionId> {
     sessions.iter().map(|session| session.id).collect()
 }

@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{DateTime, TimeZone};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationPolicy, IsolationProfile, LifecycleState, RuntimeKind, ShimReady};
 use lilo_runtime_store::{LifecycleStore, StoreConfig};
-use uuid::Uuid;
 
 use super::*;
 use crate::server::DaemonConfig;
@@ -205,7 +205,7 @@ fn resume_gap_threshold_detects_wall_clock_jump() {
     assert!(wall_now - last_wall_tick > RESUME_GAP_THRESHOLD);
 }
 
-async fn assert_lost(store: &LifecycleStore, session_id: Uuid, evidence: LostEvidence) {
+async fn assert_lost(store: &LifecycleStore, session_id: SessionId, evidence: LostEvidence) {
     let lifecycle = store
         .get(session_id)
         .await
@@ -246,7 +246,7 @@ async fn persist_docker_running(store: &LifecycleStore, pid: u32) -> Lifecycle {
 }
 
 fn forking_lifecycle() -> Lifecycle {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     Lifecycle::forking(session_id, RuntimeKind::Claude)
 }
 

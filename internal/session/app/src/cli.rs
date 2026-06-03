@@ -15,6 +15,7 @@ pub mod nudge;
 pub mod output;
 pub mod run;
 pub mod selector_scope;
+pub mod short_ids;
 pub mod wait;
 
 use anyhow::Result;

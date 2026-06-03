@@ -22,6 +22,7 @@ name = "rtm"
 path = "src/main.rs"
 
 [dependencies]
+lilo-common.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 clap.workspace = true

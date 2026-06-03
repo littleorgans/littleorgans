@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
+use lilo_common::id::{MessageId, SessionId};
 use lilo_im_core::Action;
 use lilo_rm_core::NudgeMode;
 use lilo_session_core::{
@@ -11,7 +12,6 @@ use lilo_session_core::{
     NudgeDelivery, NudgeRequest, NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef,
     Session, SessionState, TargetError,
 };
-use uuid::Uuid;
 
 use crate::identity_client::RequestContext;
 
@@ -159,7 +159,7 @@ impl DaemonState {
     async fn nudge_one(
         &self,
         context: &RequestContext,
-        recipient_id: Uuid,
+        recipient_id: SessionId,
         message: &str,
         mode: NudgeMode,
     ) -> Result<NudgeDelivery> {
@@ -184,7 +184,7 @@ impl DaemonState {
         context: &RequestContext,
         recipients: Vec<Session>,
         response: &mut MailSendResponse,
-    ) -> Vec<(Uuid, RecipientSummary)> {
+    ) -> Vec<(SessionId, RecipientSummary)> {
         let mut deliverable = Vec::new();
         for recipient in recipients {
             if recipient.state != SessionState::Running {
@@ -213,7 +213,7 @@ impl DaemonState {
     async fn append_idempotent_mail(
         &self,
         mail: &Mail,
-        recipient_ids: &[Uuid],
+        recipient_ids: &[SessionId],
         response: &mut MailSendResponse,
     ) -> Result<bool> {
         let Some(mail) = self
@@ -241,8 +241,8 @@ impl DaemonState {
         context: &RequestContext,
         request: &MailSendRequest,
         mail: &Mail,
-        recipient_ids: &[Uuid],
-        deliverable: Vec<(Uuid, RecipientSummary)>,
+        recipient_ids: &[SessionId],
+        deliverable: Vec<(SessionId, RecipientSummary)>,
         response: &mut MailSendResponse,
     ) -> Result<()> {
         match self
@@ -348,7 +348,7 @@ impl DaemonState {
         &self,
         context: &RequestContext,
         request: &MailSendRequest,
-        recipient_id: Uuid,
+        recipient_id: SessionId,
     ) -> NotifyResult {
         let Some(mode) = request.notify else {
             return NotifyResult::skipped();
@@ -385,7 +385,7 @@ impl DaemonState {
                 bail!("drained message {} did not include read_at", item.id);
             };
             let receipt = Mail {
-                id: Uuid::now_v7(),
+                id: MessageId::new(),
                 sender: SenderRef::System,
                 recipient_id: *session_id,
                 content: read_receipt_content(reader, item, read_at),
@@ -413,7 +413,7 @@ impl DaemonState {
         }
     }
 
-    async fn unread_mail_count(&self, recipient_id: &Uuid) -> Result<usize> {
+    async fn unread_mail_count(&self, recipient_id: &SessionId) -> Result<usize> {
         self.require_session(recipient_id, "recipient").await?;
         self.store()
             .count_unread_mail(recipient_id)
@@ -462,9 +462,13 @@ fn empty_send_response() -> MailSendResponse {
     }
 }
 
-fn mail_from_request(request: &MailSendRequest, sender: SenderRef, recipient_id: Uuid) -> Mail {
+fn mail_from_request(
+    request: &MailSendRequest,
+    sender: SenderRef,
+    recipient_id: SessionId,
+) -> Mail {
     Mail {
-        id: Uuid::now_v7(),
+        id: MessageId::new(),
         sender,
         recipient_id,
         content: request.content.clone(),

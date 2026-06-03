@@ -2,11 +2,11 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::{MessageId, SessionId};
 use lilo_session_core::{Mail, MailIntent, MailStatus, SenderRef, SmError};
 use sqlx::sqlite::SqliteRow;
 use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
 use thiserror::Error;
-use uuid::Uuid;
 
 use super::SqliteStore;
 use super::time::{parse_optional_timestamp, parse_timestamp};
@@ -40,7 +40,7 @@ impl SqliteStore {
     pub async fn insert_mail_for_recipients(
         &self,
         mail: &Mail,
-        recipient_ids: &[Uuid],
+        recipient_ids: &[SessionId],
     ) -> Result<Vec<Mail>, MailRowError> {
         Ok(self
             .insert_mail_for_recipients_with_outcome(mail, recipient_ids)
@@ -51,7 +51,7 @@ impl SqliteStore {
     pub async fn insert_mail_for_recipients_with_outcome(
         &self,
         mail: &Mail,
-        recipient_ids: &[Uuid],
+        recipient_ids: &[SessionId],
     ) -> Result<MailWriteOutcome, MailRowError> {
         if recipient_ids.is_empty() {
             return Ok(MailWriteOutcome {
@@ -83,7 +83,7 @@ impl SqliteStore {
     pub async fn idempotent_mail_for_recipients(
         &self,
         mail: &Mail,
-        recipient_ids: &[Uuid],
+        recipient_ids: &[SessionId],
     ) -> Result<Option<Vec<Mail>>, MailRowError> {
         if recipient_ids.is_empty() || mail.idempotency_key.is_none() {
             return Ok(None);
@@ -96,7 +96,7 @@ impl SqliteStore {
         Ok(replay)
     }
 
-    pub async fn count_unread_mail(&self, recipient_id: &Uuid) -> Result<usize, MailRowError> {
+    pub async fn count_unread_mail(&self, recipient_id: &SessionId) -> Result<usize, MailRowError> {
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*)
              FROM message_deliveries
@@ -111,7 +111,7 @@ impl SqliteStore {
 
     pub async fn read_unread_mail(
         &self,
-        recipient_id: &Uuid,
+        recipient_id: &SessionId,
         read_at: DateTime<Utc>,
         peek: bool,
     ) -> Result<Vec<Mail>, MailRowError> {
@@ -176,13 +176,13 @@ impl SqliteStore {
     pub async fn list_message_log(
         &self,
         context_id: Option<&str>,
-        participant_ids: Option<&[Uuid]>,
-        recipient_ids: Option<&[Uuid]>,
+        participant_ids: Option<&[SessionId]>,
+        recipient_ids: Option<&[SessionId]>,
         include_system: bool,
-        after: Option<(&DateTime<Utc>, &Uuid)>,
+        after: Option<(&DateTime<Utc>, &MessageId)>,
     ) -> Result<Vec<Mail>, MailRowError> {
-        if participant_ids.is_some_and(<[Uuid]>::is_empty)
-            || recipient_ids.is_some_and(<[Uuid]>::is_empty)
+        if participant_ids.is_some_and(<[SessionId]>::is_empty)
+            || recipient_ids.is_some_and(<[SessionId]>::is_empty)
         {
             return Ok(Vec::new());
         }
@@ -198,14 +198,14 @@ impl SqliteStore {
         }
         if let Some(participant_ids) = participant_ids {
             query.push(" AND (d.recipient_session_id IN (");
-            push_uuid_binds(&mut query, participant_ids);
+            push_session_id_binds(&mut query, participant_ids);
             query.push(") OR m.sender_ref IN (");
             push_string_binds(&mut query, &sender_refs);
             query.push("))");
         }
         if let Some(recipient_ids) = recipient_ids {
             query.push(" AND d.recipient_session_id IN (");
-            push_uuid_binds(&mut query, recipient_ids);
+            push_session_id_binds(&mut query, recipient_ids);
             query.push(")");
         }
         if let Some((sent_at, message_id)) = after {
@@ -255,7 +255,7 @@ async fn insert_message(
 async fn insert_deliveries(
     transaction: &mut Transaction<'_, Sqlite>,
     mail: &Mail,
-    recipient_ids: &[Uuid],
+    recipient_ids: &[SessionId],
 ) -> Result<(), MailRowError> {
     for recipient_id in recipient_ids {
         sqlx::query(
@@ -275,9 +275,9 @@ async fn insert_deliveries(
 
 fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
     Ok(Mail {
-        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        id: row.try_get::<String, _>("id")?.parse()?,
         sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
-        recipient_id: Uuid::parse_str(&row.try_get::<String, _>("recipient_id")?)?,
+        recipient_id: row.try_get::<String, _>("recipient_id")?.parse()?,
         content: row.try_get("content")?,
         sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
         read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
@@ -290,7 +290,7 @@ fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
 
 #[derive(Clone)]
 struct StoredMessage {
-    id: Uuid,
+    id: MessageId,
     sender: SenderRef,
     content: String,
     sent_at: DateTime<Utc>,
@@ -302,7 +302,7 @@ struct StoredMessage {
 impl StoredMessage {
     fn to_mail(
         &self,
-        recipient_id: Uuid,
+        recipient_id: SessionId,
         read_at: Option<DateTime<Utc>>,
         status: MailStatus,
     ) -> Mail {
@@ -325,7 +325,7 @@ async fn load_idempotent_replay(
     transaction: &mut Transaction<'_, Sqlite>,
     sender_ref: &str,
     mail: &Mail,
-    recipient_ids: &[Uuid],
+    recipient_ids: &[SessionId],
 ) -> Result<Option<Vec<Mail>>, MailRowError> {
     let Some(key) = &mail.idempotency_key else {
         return Ok(None);
@@ -362,7 +362,7 @@ async fn validate_idempotent_replay(
     transaction: &mut Transaction<'_, Sqlite>,
     existing: &StoredMessage,
     mail: &Mail,
-    recipient_ids: &[Uuid],
+    recipient_ids: &[SessionId],
 ) -> Result<(), MailRowError> {
     let key = mail.idempotency_key.clone().unwrap_or_default();
     let matches_message = existing.sender == mail.sender
@@ -382,7 +382,7 @@ async fn validate_idempotent_replay(
 
 async fn recipient_set_for_message(
     transaction: &mut Transaction<'_, Sqlite>,
-    message_id: &Uuid,
+    message_id: &MessageId,
 ) -> Result<BTreeSet<String>, MailRowError> {
     let rows = sqlx::query_scalar::<_, String>(
         "SELECT recipient_session_id
@@ -395,14 +395,14 @@ async fn recipient_set_for_message(
     Ok(rows.into_iter().collect())
 }
 
-fn recipient_set(recipient_ids: &[Uuid]) -> BTreeSet<String> {
-    recipient_ids.iter().map(Uuid::to_string).collect()
+fn recipient_set(recipient_ids: &[SessionId]) -> BTreeSet<String> {
+    recipient_ids.iter().map(ToString::to_string).collect()
 }
 
 async fn load_message_deliveries(
     transaction: &mut Transaction<'_, Sqlite>,
     message: &StoredMessage,
-    recipient_ids: &[Uuid],
+    recipient_ids: &[SessionId],
 ) -> Result<Vec<Mail>, MailRowError> {
     let mut mail = Vec::new();
     for recipient_id in recipient_ids {
@@ -423,7 +423,7 @@ async fn load_message_deliveries(
     Ok(mail)
 }
 
-fn mail_for_recipients(mail: &Mail, recipient_ids: &[Uuid]) -> Vec<Mail> {
+fn mail_for_recipients(mail: &Mail, recipient_ids: &[SessionId]) -> Vec<Mail> {
     recipient_ids
         .iter()
         .map(|recipient_id| Mail {
@@ -440,7 +440,7 @@ fn mail_for_recipients(mail: &Mail, recipient_ids: &[Uuid]) -> Vec<Mail> {
 /// left untouched.
 pub(super) async fn mark_unread_undeliverable<'e, E>(
     executor: E,
-    recipient_id: &Uuid,
+    recipient_id: &SessionId,
 ) -> Result<(), sqlx::Error>
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
@@ -457,7 +457,10 @@ where
     Ok(())
 }
 
-async fn fetch_unread<'e, E>(executor: E, recipient_id: &Uuid) -> Result<Vec<Mail>, MailRowError>
+async fn fetch_unread<'e, E>(
+    executor: E,
+    recipient_id: &SessionId,
+) -> Result<Vec<Mail>, MailRowError>
 where
     E: sqlx::Executor<'e, Database = Sqlite>,
 {
@@ -504,7 +507,7 @@ const MESSAGE_LOG_SELECT_SQL: &str = "
 
 fn stored_message_from_row(row: &SqliteRow) -> Result<StoredMessage, MailRowError> {
     Ok(StoredMessage {
-        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        id: row.try_get::<String, _>("id")?.parse()?,
         sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
         content: row.try_get("content")?,
         sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
@@ -532,7 +535,9 @@ fn integer_out_of_range(field: &'static str, value: i64) -> MailRowError {
     MailRowError::IntegerOutOfRange { field, value }
 }
 
-fn participant_sender_refs(participant_ids: Option<&[Uuid]>) -> Result<Vec<String>, MailRowError> {
+fn participant_sender_refs(
+    participant_ids: Option<&[SessionId]>,
+) -> Result<Vec<String>, MailRowError> {
     participant_ids
         .unwrap_or_default()
         .iter()
@@ -540,7 +545,7 @@ fn participant_sender_refs(participant_ids: Option<&[Uuid]>) -> Result<Vec<Strin
         .collect()
 }
 
-fn push_uuid_binds(query: &mut QueryBuilder<'_, Sqlite>, ids: &[Uuid]) {
+fn push_session_id_binds(query: &mut QueryBuilder<'_, Sqlite>, ids: &[SessionId]) {
     let mut separated = query.separated(", ");
     for id in ids {
         separated.push_bind(id.to_string());

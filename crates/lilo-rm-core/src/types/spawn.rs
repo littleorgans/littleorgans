@@ -2,8 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uuid::Uuid;
 
 use crate::string_serde::{deserialize_string_parsed, serialize_display};
 use crate::{IsolationPolicy, LaunchEnv, RuntimeKind, RuntimeSignal, ShellResume};
@@ -204,7 +204,7 @@ pub fn expand_mount_source(source: &str) -> Result<PathBuf, MountSpecParseError>
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SpawnRequest {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub runtime: RuntimeKind,
     #[serde(default)]
     pub isolation: IsolationPolicy,
@@ -274,7 +274,7 @@ pub struct HeadlessSpawnTarget {}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct KillRequest {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub signal: RuntimeSignal,
     pub grace_secs: u64,
 }

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow};
+use lilo_common::id::SessionId;
 use lilo_session_core::{Label, MountSpec, Namespace, NamespaceScope, RpcResponse, Selector};
 use serde_json::Value;
 
@@ -93,7 +94,7 @@ pub(super) fn optional_selector(arguments: &Value, field: &str) -> Result<Option
 
 pub(super) fn selector_from_id(id: &str) -> Result<Selector> {
     Ok(Selector::Id {
-        id: uuid::Uuid::parse_str(id)?,
+        id: id.parse::<SessionId>()?,
     })
 }
 

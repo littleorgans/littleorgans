@@ -2,6 +2,7 @@ use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
+use lilo_common::id::SessionId;
 use lilo_rm_core::ensure_mounts_allowed_for_isolation;
 use lilo_session_core::{
     CaptureRequest, DeleteRequest, IsolationPolicy, LabelMutation, LabelRequest, ListRequest,
@@ -119,7 +120,7 @@ pub(crate) async fn agent_get(
 ) -> Result<Value> {
     let id = required_string(arguments, "id")?.to_string();
     let selector = Selector::Id {
-        id: uuid::Uuid::parse_str(&id)?,
+        id: id.parse::<SessionId>()?,
     };
     let selector = scoped_required_selector(state, context, arguments, selector).await?;
     let response = state

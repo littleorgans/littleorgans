@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
+use lilo_common::id::{AuditId, SessionId};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::error::AuditError;
 use crate::types::{Action, Principal, ResourceSpec};
@@ -38,13 +38,13 @@ impl AuditDecision {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditRow {
-    pub id: Uuid,
+    pub id: AuditId,
     pub timestamp: DateTime<Utc>,
     pub principal: Principal,
     pub action: Action,
     pub resource: ResourceSpec,
     pub decision: AuditDecision,
-    pub session_ref: Option<Uuid>,
+    pub session_ref: Option<SessionId>,
     pub notes: Option<String>,
     pub policy_id: Option<String>,
     pub evaluation_trace: Option<String>,
@@ -65,7 +65,7 @@ impl AuditRow {
         };
 
         Self {
-            id: Uuid::now_v7(),
+            id: AuditId::new(),
             timestamp: Utc::now(),
             principal,
             action,

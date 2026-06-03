@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
-use lilo_common::sql::WhereClause;
+use lilo_common::{id::SessionId, sql::WhereClause};
 use lilo_db::LiloDb;
 use lilo_rm_core::{
     Lifecycle, LifecycleCounts, LifecycleState, MigrationState, RecentLostEvent, StatusFilter,
@@ -9,7 +9,6 @@ use sqlx::{
     Executor, QueryBuilder, Sqlite, SqliteConnection, SqlitePool, query::Query,
     sqlite::SqliteArguments,
 };
-use uuid::Uuid;
 
 use crate::schema;
 
@@ -94,7 +93,7 @@ impl LifecycleStore {
         update_lifecycle_with(conn, lifecycle).await
     }
 
-    pub async fn delete(&self, session_id: Uuid) -> Result<()> {
+    pub async fn delete(&self, session_id: SessionId) -> Result<()> {
         sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
             .bind(session_id.to_string())
             .execute(&self.pool)
@@ -103,7 +102,11 @@ impl LifecycleStore {
         Ok(())
     }
 
-    pub async fn delete_in(&self, conn: &mut SqliteConnection, session_id: Uuid) -> Result<()> {
+    pub async fn delete_in(
+        &self,
+        conn: &mut SqliteConnection,
+        session_id: SessionId,
+    ) -> Result<()> {
         sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
             .bind(session_id.to_string())
             .execute(conn)
@@ -112,7 +115,7 @@ impl LifecycleStore {
         Ok(())
     }
 
-    pub async fn get(&self, session_id: Uuid) -> Result<Option<Lifecycle>> {
+    pub async fn get(&self, session_id: SessionId) -> Result<Option<Lifecycle>> {
         let mut query = lifecycle_rows_query();
         query
             .push(" WHERE session_id = ")
@@ -156,7 +159,7 @@ impl LifecycleStore {
             query.push("updated_at >= ");
             query.push_bind(updated_since.to_rfc3339());
         }
-        query.push(" ORDER BY session_id");
+        query.push(" ORDER BY spawned_at, session_id");
 
         let rows = query
             .build_query_as::<LifecycleRow>()

@@ -1,20 +1,20 @@
 use std::path::Path;
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationProfile, LaunchEnv, LaunchSpec, MountSpec, SpawnTarget};
-use uuid::Uuid;
 
 use crate::docker_mount_plan;
 
 const LILO_DOCKER_CONTAINER_PREFIX: &str = "rtm";
 const LILO_DOCKER_SESSION_LABEL: &str = "com.littleorgans.runtime.session";
 
-pub(crate) fn container_name(session_id: Uuid) -> String {
+pub(crate) fn container_name(session_id: SessionId) -> String {
     format!("{LILO_DOCKER_CONTAINER_PREFIX}-{session_id}")
 }
 
 pub(crate) fn docker_run_launch(
-    session_id: Uuid,
+    session_id: SessionId,
     profile: &IsolationProfile,
     image: &str,
     launch: &LaunchSpec,
@@ -45,7 +45,7 @@ pub(crate) fn docker_run_launch(
 }
 
 fn docker_run_argv(
-    session_id: Uuid,
+    session_id: SessionId,
     profile: &IsolationProfile,
     image: &str,
     launch: &LaunchSpec,
@@ -64,7 +64,7 @@ fn docker_run_argv(
 }
 
 fn docker_run_base_argv(
-    session_id: Uuid,
+    session_id: SessionId,
     cwd: &Path,
     mounts: &[MountSpec],
     tty: bool,
@@ -143,10 +143,10 @@ mod tests {
     use std::path::PathBuf;
 
     use anyhow::Result;
+    use lilo_common::id::SessionId;
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationProfile, LaunchEnv, LaunchSpec, MountSpec, SpawnTarget,
     };
-    use uuid::Uuid;
 
     use super::{container_name, docker_run_launch};
 
@@ -154,7 +154,9 @@ mod tests {
 
     #[test]
     fn docker_run_launch_wraps_runtime_without_losing_launcher_env() {
-        let session_id = Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let session_id = SessionId::from_uuid(
+            uuid::Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
+        );
         let launch = launch_spec(
             &["claude", "--print"],
             vec![LaunchEnv::new("CLAUDE_CODE", "1")],
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn own_init_profile_does_not_add_docker_init() {
-        let session_id = Uuid::nil();
+        let session_id = SessionId::from_uuid(uuid::Uuid::nil());
         let launch = launch_spec(&["codex"], vec![LaunchEnv::new("CODEX", "1")]);
 
         let spec = docker_run_launch(
@@ -238,7 +240,9 @@ mod tests {
 
     #[test]
     fn tmux_launch_uses_direct_attached_docker_run() {
-        let session_id = Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+        let session_id = SessionId::from_uuid(
+            uuid::Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
+        );
         let launch = launch_spec(
             &["claude", "--dangerously-skip"],
             vec![LaunchEnv::new("CLAUDE_CODE", "1")],
@@ -283,7 +287,7 @@ mod tests {
         );
 
         let spec = docker_run_launch(
-            Uuid::nil(),
+            SessionId::from_uuid(uuid::Uuid::nil()),
             &IsolationProfile::default(),
             TEST_IMAGE,
             &launch,
@@ -462,7 +466,7 @@ mod tests {
 
     fn headless_docker_launch(launch: &LaunchSpec, mounts: &[MountSpec]) -> Result<LaunchSpec> {
         docker_run_launch(
-            Uuid::nil(),
+            SessionId::from_uuid(uuid::Uuid::nil()),
             &IsolationProfile::default(),
             TEST_IMAGE,
             launch,

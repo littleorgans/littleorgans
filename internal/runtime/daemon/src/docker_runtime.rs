@@ -2,18 +2,18 @@ use std::path::Path;
 use std::process::{Command as StdCommand, Output};
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     IsolationProfile, KillOutcome, LaunchSpec, MountSpec, RuntimeSignal, SpawnTarget,
 };
 use tokio::process::Command;
-use uuid::Uuid;
 
 use crate::docker_argv::{self, container_name};
 use crate::docker_command::stderr_or;
 use crate::error::RuntimeFailure;
 
 pub(crate) fn docker_run_launch(
-    session_id: Uuid,
+    session_id: SessionId,
     profile: &IsolationProfile,
     image: &str,
     launch: &LaunchSpec,
@@ -50,7 +50,7 @@ fn is_executable(path: &Path) -> bool {
 pub(crate) struct DockerCliRuntime;
 
 impl DockerCliRuntime {
-    pub(crate) async fn running(&self, session_id: Uuid) -> Result<bool> {
+    pub(crate) async fn running(&self, session_id: SessionId) -> Result<bool> {
         let output = Command::new("docker")
             .args(container_running_args(session_id))
             .output()
@@ -61,7 +61,7 @@ impl DockerCliRuntime {
     }
 }
 
-pub(crate) fn container_running_blocking(session_id: Uuid) -> Result<bool> {
+pub(crate) fn container_running_blocking(session_id: SessionId) -> Result<bool> {
     let output = StdCommand::new("docker")
         .args(container_running_args(session_id))
         .output()
@@ -70,7 +70,7 @@ pub(crate) fn container_running_blocking(session_id: Uuid) -> Result<bool> {
     Ok(container_running_from_output(&output))
 }
 
-fn container_running_args(session_id: Uuid) -> [String; 5] {
+fn container_running_args(session_id: SessionId) -> [String; 5] {
     [
         "container".to_owned(),
         "inspect".to_owned(),
@@ -84,7 +84,10 @@ fn container_running_from_output(output: &Output) -> bool {
     output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "true"
 }
 
-pub(crate) async fn kill_container(session_id: Uuid, signal: RuntimeSignal) -> Result<KillOutcome> {
+pub(crate) async fn kill_container(
+    session_id: SessionId,
+    signal: RuntimeSignal,
+) -> Result<KillOutcome> {
     let mut command = Command::new("docker");
     command.arg("kill");
     command

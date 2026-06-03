@@ -3,8 +3,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::time::{Duration, Instant};
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use lilo_common::id::SessionId;
 use lilo_session_core::{MailCheckRequest, RpcResponse, Selector, SessionRpc};
-use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
@@ -53,7 +53,7 @@ where
     );
 }
 
-fn run_mail_check(daemon: &common::DaemonFixture, session_id: &Uuid) -> usize {
+fn run_mail_check(daemon: &common::DaemonFixture, session_id: &SessionId) -> usize {
     let output = daemon
         .command()
         .args(["mail", "check", "--selector", &session_id.to_string()])
@@ -72,7 +72,7 @@ fn run_mail_check(daemon: &common::DaemonFixture, session_id: &Uuid) -> usize {
 fn run_rpc_round_trip(
     runtime: &tokio::runtime::Runtime,
     daemon: &common::DaemonFixture,
-    session_id: Uuid,
+    session_id: SessionId,
 ) -> usize {
     let request = SessionRpc::MailCheck {
         request: MailCheckRequest {
@@ -89,7 +89,7 @@ fn run_rpc_round_trip(
     }
 }
 
-fn spawn_bench_agent(daemon: &common::DaemonFixture) -> Uuid {
+fn spawn_bench_agent(daemon: &common::DaemonFixture) -> SessionId {
     let output = daemon
         .command()
         .args(["run", "codex", "--role", "bench", "--dir", "bench"])
@@ -105,7 +105,7 @@ fn spawn_bench_agent(daemon: &common::DaemonFixture) -> Uuid {
         .split_whitespace()
         .next()
         .or_panic("session id is printed");
-    Uuid::parse_str(id).or_panic("session id is a uuid")
+    id.parse().or_panic("session id is a session id")
 }
 
 fn fake_runtime_dir() -> tempfile::TempDir {

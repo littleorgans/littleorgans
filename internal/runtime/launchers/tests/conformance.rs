@@ -1,7 +1,7 @@
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, RuntimeKind, RuntimeLauncher, SpawnRequest, SpawnTarget,
 };
-use uuid::Uuid;
 
 #[test]
 fn registered_launchers_return_argv_and_env() {
@@ -53,7 +53,7 @@ fn assert_launcher_conforms(launcher: &'static dyn RuntimeLauncher) {
 
 fn probe_request(runtime: RuntimeKind) -> SpawnRequest {
     SpawnRequest {
-        session_id: Uuid::now_v7(),
+        session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime,
         isolation: IsolationPolicy::default(),
         image: None,

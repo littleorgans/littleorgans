@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     EventBatch, EventsRequest, IsolationPolicy, Lifecycle, NudgeMode,
     RuntimeKind as RuntimeRuntimeKind, ShimReady, StatusFilter,
@@ -15,7 +16,6 @@ use lilo_session_driver::{
     SpawnedProcess,
 };
 use lilo_session_store::SqliteStore;
-use uuid::Uuid;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_request};
 
@@ -117,8 +117,8 @@ enum SpawnFault {
 struct FaultingRuntimePort {
     store: SqliteStore,
     fault: SpawnFault,
-    spawned_session_id: Mutex<Option<Uuid>>,
-    terminated_session_ids: Mutex<Vec<Uuid>>,
+    spawned_session_id: Mutex<Option<SessionId>>,
+    terminated_session_ids: Mutex<Vec<SessionId>>,
 }
 
 impl FaultingRuntimePort {
@@ -131,14 +131,14 @@ impl FaultingRuntimePort {
         }
     }
 
-    fn spawned_session_id(&self) -> Uuid {
+    fn spawned_session_id(&self) -> SessionId {
         self.spawned_session_id
             .lock()
             .or_panic("spawned id lock succeeds")
             .or_panic("runtime spawn was attempted")
     }
 
-    fn terminated(&self, session_id: Uuid) -> bool {
+    fn terminated(&self, session_id: SessionId) -> bool {
         self.terminated_session_ids
             .lock()
             .or_panic("terminated ids lock succeeds")
@@ -245,13 +245,14 @@ fn unsupported<T: Send + 'static>(operation: &'static str) -> PortFuture<'static
     })
 }
 
-fn parse_session_id(session_id: &str) -> Result<Uuid, RuntimeError> {
-    Uuid::parse_str(session_id)
+fn parse_session_id(session_id: &str) -> Result<SessionId, RuntimeError> {
+    session_id
+        .parse()
         .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
 }
 
 fn spawned_process(
-    session_id: Uuid,
+    session_id: SessionId,
     runtime: RuntimeKind,
     isolation: IsolationPolicy,
 ) -> SpawnedProcess {
@@ -283,7 +284,7 @@ fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
 
 async fn install_tx_b_resolve_failure(
     store: &SqliteStore,
-    session_id: Uuid,
+    session_id: SessionId,
 ) -> Result<(), RuntimeError> {
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS ws5_forced_resolve_failures (
@@ -320,7 +321,7 @@ async fn install_tx_b_resolve_failure(
     Ok(())
 }
 
-async fn spawn_intent_status(store: &SqliteStore, session_id: Uuid) -> Option<String> {
+async fn spawn_intent_status(store: &SqliteStore, session_id: SessionId) -> Option<String> {
     sqlx::query_scalar("SELECT status FROM session_spawn_intents WHERE session_id = ?")
         .bind(session_id.to_string())
         .fetch_optional(store.pool())
@@ -328,7 +329,7 @@ async fn spawn_intent_status(store: &SqliteStore, session_id: Uuid) -> Option<St
         .or_panic("spawn intent status query succeeds")
 }
 
-async fn session_row_count(store: &SqliteStore, session_id: Uuid) -> i64 {
+async fn session_row_count(store: &SqliteStore, session_id: SessionId) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM session_sessions WHERE id = ?")
         .bind(session_id.to_string())
         .fetch_one(store.pool())
@@ -336,7 +337,7 @@ async fn session_row_count(store: &SqliteStore, session_id: Uuid) -> i64 {
         .or_panic("session row count query succeeds")
 }
 
-async fn assert_no_lifecycle(store: &SqliteStore, session_id: Uuid) {
+async fn assert_no_lifecycle(store: &SqliteStore, session_id: SessionId) {
     let lifecycle = LifecycleStore::from_pool(store.pool().clone())
         .get(session_id)
         .await

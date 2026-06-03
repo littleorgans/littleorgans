@@ -13,6 +13,7 @@ use common::{
     output_stderr, output_stdout, spawn_ok, spawn_output_ok, wait_for_log, wait_for_log_contains,
     wait_for_status,
 };
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     ErrorCode, IsolationPolicy, IsolationProfile, LaunchEnv, MountSpec, NudgeFailureReason,
     NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeResponse,
@@ -68,7 +69,7 @@ fn explicit_headless_spawn_records_no_tmux_pane_and_rejects_nudge() {
 #[test]
 fn missing_session_nudge_uses_structured_error_code() {
     let harness = RtmHarness::start();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
 
     let response = request_raw(
         &harness,
@@ -94,7 +95,7 @@ fn missing_session_nudge_uses_structured_error_code() {
 #[test]
 fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
     let harness = RtmHarness::start_outside_tmux();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let response = tokio::runtime::Runtime::new()
         .expect("tokio runtime")
         .block_on(lilo_runtime_app::shared::request(
@@ -206,7 +207,7 @@ fn headless_spawn_env_flag_forwards_caller_explicit_duplicate_and_empty_values()
 
 #[test]
 fn docker_spawn_mount_flag_forwards_mounts_in_declaration_order() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let mut command = spawn_capture_command(session_id);
     command
         .arg("--isolation")
@@ -249,7 +250,7 @@ fn docker_spawn_mount_flag_forwards_mounts_in_declaration_order() {
 
 #[test]
 fn docker_spawn_mount_flag_expands_leading_tilde_source() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let mut command = spawn_capture_command(session_id);
     command
         .arg("--isolation")
@@ -274,7 +275,7 @@ fn docker_spawn_mount_flag_expands_leading_tilde_source() {
 #[test]
 fn docker_spawn_env_flag_reaches_container_and_runtime() {
     let harness = RtmHarness::start_outside_tmux();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let token = format!("token-{}", Uuid::now_v7().simple());
     let output = harness
         .spawn_command(&session_id.to_string(), "claude", "headless", true)
@@ -339,7 +340,7 @@ fn docker_spawn_env_flag_reaches_container_and_runtime() {
 #[test]
 fn docker_spawn_image_flag_overrides_daemon_default() {
     let harness = RtmHarness::start_with_docker_image("daemon-default:latest");
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let output = harness
         .spawn_command(&session_id.to_string(), "claude", "headless", true)
         .arg("--isolation")
@@ -498,7 +499,7 @@ fn assert_spawn_conflict(
     assert!(stderr.contains(identity), "{stderr}");
 }
 
-fn spawn_capture_command(session_id: Uuid) -> Command {
+fn spawn_capture_command(session_id: SessionId) -> Command {
     headless_spawn_command(session_id)
 }
 

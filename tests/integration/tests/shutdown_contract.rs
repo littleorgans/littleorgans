@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_integration_tests::{IntegrationFixture, count_all, draft_session, running_lifecycle};
 use lilo_paths::DaemonEndpoint;
@@ -17,7 +18,6 @@ use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
 use tokio::sync::{Notify, mpsc};
-use uuid::Uuid;
 
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const REAPER_TICK: Duration = Duration::from_millis(200);
@@ -131,14 +131,14 @@ fn signal_self(signal: libc::c_int) {
 async fn assert_reaper_drives_seeded_terminal_lifecycle(
     fixture: &IntegrationFixture,
 ) -> Result<()> {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     seed_session(fixture, session_id, SessionState::Running).await?;
     seed_terminal_runtime_lifecycle(fixture, session_id, Some(42)).await?;
     wait_for_session_state(fixture, session_id, SessionState::Terminated).await
 }
 
 async fn assert_reaper_is_quiesced_at_db_close(fixture: &IntegrationFixture) -> Result<()> {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     seed_session(fixture, session_id, SessionState::Running).await?;
     seed_terminal_runtime_lifecycle(fixture, session_id, Some(43)).await?;
     tokio::time::sleep(REAPER_TICK + Duration::from_millis(150)).await;
@@ -147,7 +147,7 @@ async fn assert_reaper_is_quiesced_at_db_close(fixture: &IntegrationFixture) -> 
 
 async fn seed_session(
     fixture: &IntegrationFixture,
-    session_id: Uuid,
+    session_id: SessionId,
     state: SessionState,
 ) -> Result<()> {
     let store = SqliteStore::open(&fixture.db);
@@ -161,7 +161,7 @@ async fn seed_session(
 
 async fn seed_terminal_runtime_lifecycle(
     fixture: &IntegrationFixture,
-    session_id: Uuid,
+    session_id: SessionId,
     exit_code: Option<i32>,
 ) -> Result<()> {
     let store = LifecycleStore::open(&fixture.db);
@@ -176,7 +176,7 @@ async fn seed_terminal_runtime_lifecycle(
 
 async fn wait_for_session_state(
     fixture: &IntegrationFixture,
-    session_id: Uuid,
+    session_id: SessionId,
     expected: SessionState,
 ) -> Result<()> {
     let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
@@ -191,7 +191,7 @@ async fn wait_for_session_state(
 
 async fn assert_session_state(
     fixture: &IntegrationFixture,
-    session_id: Uuid,
+    session_id: SessionId,
     expected: SessionState,
 ) -> Result<()> {
     let actual = session_state(fixture, session_id).await?;
@@ -199,7 +199,10 @@ async fn assert_session_state(
     Ok(())
 }
 
-async fn session_state(fixture: &IntegrationFixture, session_id: Uuid) -> Result<SessionState> {
+async fn session_state(
+    fixture: &IntegrationFixture,
+    session_id: SessionId,
+) -> Result<SessionState> {
     let store = SqliteStore::open(&fixture.db);
     Ok(store
         .get_session(&session_id)

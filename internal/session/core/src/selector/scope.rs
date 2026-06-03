@@ -61,6 +61,7 @@ impl Selector {
                 state
             }
             Self::Id { .. }
+            | Self::Prefix { .. }
             | Self::Label { .. }
             | Self::Dir { .. }
             | Self::Role { .. }

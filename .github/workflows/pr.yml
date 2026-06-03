@@ -55,6 +55,11 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
+      # The committed .cargo/config.toml sets -fuse-ld=mold for
+      # x86_64-unknown-linux-gnu, so the linker must be on PATH before any build.
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
+
       # Single CI gate: moon ci runs fmt-check, clippy, build, nextest test,
       # and the LOC/provenance checks (all runInCI tasks in moon.yml).
       - name: Moon CI

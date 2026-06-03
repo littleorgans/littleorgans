@@ -1,4 +1,5 @@
 use crate::common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
+use lilo_common::id::SessionId;
 use lilo_session_core::{
     DeleteRequest, Label, LabelMutation, LabelRequest, RpcResponse, Selector, SessionRpc,
     SessionState,
@@ -35,7 +36,7 @@ pub(crate) async fn drives_session_through_delete_lifecycle() {
 #[tokio::test]
 pub(crate) async fn delete_unknown_id_uses_session_noun() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
-    let id = uuid::Uuid::nil();
+    let id = SessionId::from_uuid(uuid::Uuid::nil());
 
     let deleted = daemon
         .state

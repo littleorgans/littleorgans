@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_db::{begin_immediate_tx, finish_immediate_tx};
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
@@ -63,7 +64,7 @@ async fn authorize_runtime_spawn(
 async fn authorize_shim_callback(
     identity: &IdentityClient,
     principal: &Principal,
-    session_id: uuid::Uuid,
+    session_id: SessionId,
 ) -> Result<()> {
     // Shim callbacks are local control-plane continuations from a process this
     // daemon launched on the same host. They are accepted only for local peer

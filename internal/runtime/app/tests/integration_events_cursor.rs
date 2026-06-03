@@ -14,6 +14,7 @@ use common::{
     terminate_process, wait_for_event_waiters_at_least, wait_for_event_waiters_at_most,
     wait_for_rpc_events, wait_for_rpc_events_at_least,
 };
+use lilo_common::id::SessionId;
 use lilo_rm_core::{CursorExpiredPayload, RuntimeEvent, RuntimeResponse};
 use serde_json::json;
 use uuid::Uuid;
@@ -37,7 +38,8 @@ fn events_resume_after_daemon_restart_without_duplication() {
         panic!("expected events response");
     };
     let events = payload.events;
-    let second_session = Uuid::parse_str(SECOND_SESSION).expect("second session id");
+    let second_session =
+        SessionId::from_uuid(Uuid::parse_str(SECOND_SESSION).expect("second session id"));
     assert!(
         events.iter().any(|event| matches!(
             event,
@@ -103,7 +105,7 @@ fn cli_events_human_appends_resume_cursor() {
 #[test]
 fn events_since_cursor_returns_terminal_lifecycle_event() {
     let harness = RtmHarness::start();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     spawn_ok(&harness, &session_id.to_string(), "claude");
     let cursor = wait_for_rpc_events(&harness, None, 1).cursor();
     let runtime_pid = status_pid(&harness, &session_id.to_string(), "pid");

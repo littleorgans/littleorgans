@@ -2,20 +2,20 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow, bail};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     KillByPidRequest, KillByPidResponse, KillOutcome, Lifecycle, LifecycleState, LostEvidence,
     RuntimeEvent, RuntimeExit, RuntimeSignal, ShimExit, TerminationEvidence,
 };
 use lilo_runtime_store::LifecycleStore;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 use crate::{error::RuntimeFailure, event_channel};
 
 use super::ServerState;
 
 pub(super) struct TerminationCoordinator {
-    terminated_events: Mutex<HashSet<Uuid>>,
+    terminated_events: Mutex<HashSet<SessionId>>,
 }
 
 impl TerminationCoordinator {
@@ -77,7 +77,7 @@ impl TerminationCoordinator {
         .await
     }
 
-    pub(super) async fn is_terminal(&self, store: &LifecycleStore, session_id: Uuid) -> bool {
+    pub(super) async fn is_terminal(&self, store: &LifecycleStore, session_id: SessionId) -> bool {
         store
             .get(session_id)
             .await
@@ -94,7 +94,7 @@ impl TerminationCoordinator {
     pub(super) async fn watcher_evidence(
         &self,
         store: &LifecycleStore,
-        session_id: Uuid,
+        session_id: SessionId,
     ) -> Result<TerminationEvidence> {
         let shim_pid = store
             .get(session_id)
@@ -113,7 +113,7 @@ impl TerminationCoordinator {
     pub(super) async fn record_exited(
         &self,
         state: &ServerState,
-        session_id: Uuid,
+        session_id: SessionId,
         exit: RuntimeExit,
         evidence: TerminationEvidence,
     ) -> Result<Option<RuntimeEvent>> {
@@ -126,7 +126,7 @@ impl TerminationCoordinator {
     async fn record_terminal<F>(
         &self,
         state: &ServerState,
-        session_id: Uuid,
+        session_id: SessionId,
         evidence: TerminationEvidence,
         mark_terminal: F,
     ) -> Result<Option<RuntimeEvent>>
@@ -149,7 +149,7 @@ impl TerminationCoordinator {
     pub(super) async fn record_lost(
         &self,
         state: &ServerState,
-        session_id: Uuid,
+        session_id: SessionId,
         evidence: LostEvidence,
     ) -> Result<Option<RuntimeEvent>> {
         self.record_terminal(
@@ -164,7 +164,7 @@ impl TerminationCoordinator {
     async fn finish_terminal(
         &self,
         state: &ServerState,
-        session_id: Uuid,
+        session_id: SessionId,
         lifecycle: &Lifecycle,
         evidence: TerminationEvidence,
     ) -> Result<Option<RuntimeEvent>> {

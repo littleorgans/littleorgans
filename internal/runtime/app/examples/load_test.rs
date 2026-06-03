@@ -9,6 +9,7 @@ use std::process::Command;
 
 use anyhow::{Result, ensure};
 use clap::Parser;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{Lifecycle, RuntimeKind, RuntimeResponse, SpawnTarget};
 
 const DEFAULT_SESSIONS: usize = 50;
@@ -79,7 +80,7 @@ fn spawn_one(
     let response = runtime
         .block_on(spawn_support::spawn_runtime(
             harness.socket_path(),
-            uuid::Uuid::now_v7(),
+            SessionId::new(),
             RuntimeKind::Claude,
             target,
         ))

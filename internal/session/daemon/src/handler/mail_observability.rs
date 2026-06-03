@@ -1,11 +1,11 @@
 use anyhow::{Context, Result, bail};
+use lilo_common::id::SessionId;
 use lilo_im_core::Action;
 use lilo_session_core::{
     MailLogCursor, MailLogFilter, MailPeekRequest, MailPeekResponse, MailTailRequest,
     MailTailResponse, MessageView, RpcResponse, Selector,
 };
 use tokio::sync::broadcast;
-use uuid::Uuid;
 
 use crate::identity_client::RequestContext;
 
@@ -96,7 +96,7 @@ impl DaemonState {
         message_view::message_views(self, mail).await
     }
 
-    async fn filter_ids(&self, selector: Option<&Selector>) -> Result<Option<Vec<Uuid>>> {
+    async fn filter_ids(&self, selector: Option<&Selector>) -> Result<Option<Vec<SessionId>>> {
         let Some(selector) = selector else {
             return Ok(None);
         };
