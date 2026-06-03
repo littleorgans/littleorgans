@@ -1,6 +1,6 @@
 set shell := ["bash", "-cu"]
 
-LILO_LOCAL_BIN := env("LILO_LOCAL_BIN", env("HOME") / ".cargo/bin/lilo")
+LILO_DEV_BIN := env("LILO_DEV_BIN", env("HOME") / ".cargo/bin/lilo")
 BASE_REF := env("BASE_REF", "main")
 
 default:
@@ -76,7 +76,7 @@ install-release: build-install-release
 _install-bin src:
     @set -eu; \
     src="$(pwd)/{{src}}"; \
-    dest="{{LILO_LOCAL_BIN}}"; \
+    dest="{{LILO_DEV_BIN}}"; \
     case "$dest" in /*) ;; *) dest="$(pwd)/$dest";; esac; \
     if [ "$src" = "$dest" ]; then \
         echo "Built $src"; \

@@ -46,7 +46,7 @@ pub fn headless_spawn_command(session_id: impl Display) -> Command {
 }
 
 pub fn bench_sample_count(default_samples: usize) -> usize {
-    std::env::var("LILO_BENCH_SAMPLES")
+    std::env::var("LILO_TEST_BENCH_SAMPLES")
         .ok()
         .and_then(|value| value.parse().ok())
         .filter(|value| *value > 0)

@@ -180,7 +180,7 @@ impl Drop for McpFixture {
 }
 
 pub fn sm_bin() -> PathBuf {
-    if let Some(path) = std::env::var_os("LILO_BENCH_BIN") {
+    if let Some(path) = std::env::var_os("LILO_TEST_BENCH_BIN") {
         return PathBuf::from(path);
     }
     assert_cmd::cargo::cargo_bin("sm")

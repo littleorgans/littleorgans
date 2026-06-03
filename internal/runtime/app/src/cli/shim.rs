@@ -313,7 +313,7 @@ mod tests {
     fn shell_resume_command_clears_pre_existing_env() {
         let resume = ShellResume {
             argv: vec!["/usr/bin/env".to_owned()],
-            env: vec![LaunchEnv::new("SHELL_RESUME_SENTINEL", "present")],
+            env: vec![LaunchEnv::new("LILO_TEST_SHELL_RESUME_SENTINEL", "present")],
             cwd: PathBuf::from("/tmp"),
         };
 
@@ -325,7 +325,7 @@ mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         assert!(
-            stdout.contains("SHELL_RESUME_SENTINEL=present"),
+            stdout.contains("LILO_TEST_SHELL_RESUME_SENTINEL=present"),
             "shell resume env was not delivered:\n{stdout}"
         );
         assert!(
