@@ -1392,6 +1392,7 @@ name = "lilo-session-store"
 version = "0.8.0"
 dependencies = [
  "chrono",
+ "lilo-common",
  "lilo-db",
  "lilo-rm-core",
  "lilo-session-core",

@@ -2,13 +2,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use lilo_session_core::{
     LabelOp, LostEvidence, Namespace, RuntimeKind, Selector, Session, SessionState,
 };
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection};
 use thiserror::Error;
-use uuid::Uuid;
 
 use super::SqliteStore;
 use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
@@ -49,7 +49,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub async fn get_session(&self, id: &Uuid) -> Result<Option<Session>, SessionRowError> {
+    pub async fn get_session(&self, id: &SessionId) -> Result<Option<Session>, SessionRowError> {
         let id = id.to_string();
         Ok(self
             .query_sessions("SELECT * FROM session_sessions WHERE id = ?", [id])
@@ -60,7 +60,7 @@ impl SqliteStore {
 
     pub async fn list_sessions_by_ids(
         &self,
-        ids: &[Uuid],
+        ids: &[SessionId],
     ) -> Result<Vec<Session>, SessionRowError> {
         if ids.is_empty() {
             return Ok(Vec::new());
@@ -71,14 +71,14 @@ impl SqliteStore {
              WHERE id IN ({placeholders})
              ORDER BY created_at"
         );
-        let params = ids.iter().map(Uuid::to_string);
+        let params = ids.iter().map(ToString::to_string);
         self.query_sessions(&sql, params).await
     }
 
     pub async fn list_sessions(&self, id: Option<&str>) -> Result<Vec<Session>, SessionRowError> {
         match id {
             Some(id) => {
-                let id = Uuid::parse_str(id)?;
+                let id: SessionId = id.parse()?;
                 self.list_sessions_by_selector(&Selector::Id { id }).await
             }
             None => self.list_sessions_by_selector(&Selector::All).await,
@@ -210,7 +210,7 @@ impl SqliteStore {
 
     pub async fn mark_session_terminated(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         exit_code: Option<i32>,
         terminated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -234,7 +234,7 @@ impl SqliteStore {
 
     pub async fn mark_session_lost(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         evidence: LostEvidence,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -257,7 +257,7 @@ impl SqliteStore {
 
     pub async fn record_transcript_path(
         &self,
-        id: &Uuid,
+        id: &SessionId,
         transcript_path: &std::path::Path,
         updated_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRowError> {
@@ -353,7 +353,7 @@ fn session_from_row(row: &SqliteRow) -> Result<Session, SessionRowError> {
         u32::try_from(runtime_pid).map_err(|_| integer_out_of_range("runtime_pid", runtime_pid))?;
 
     Ok(Session {
-        id: Uuid::parse_str(&row.try_get::<String, _>("id")?)?,
+        id: row.try_get::<String, _>("id")?.parse()?,
         runtime: RuntimeKind::from_str(&row.try_get::<String, _>("runtime")?)?,
         role: row.try_get("role")?,
         workspace: row.try_get("workspace")?,

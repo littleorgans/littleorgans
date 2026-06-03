@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use lilo_session_core::{Namespace, Selector, SenderRef};
 use sqlx::Row;
 use thiserror::Error;
-use uuid::Uuid;
 
 use super::SqliteStore;
 use super::time::parse_timestamp;
@@ -78,12 +78,12 @@ impl SqliteStore {
             })
             .await?
             .into_iter()
-            .map(|session| session.id.to_string())
+            .map(|session| session.id)
             .collect::<Vec<_>>();
         let mut transaction = self.pool.begin().await?;
         for id in &session_ids {
             sqlx::query("DELETE FROM session_labels WHERE session_id = ?")
-                .bind(id)
+                .bind(id.to_string())
                 .execute(&mut *transaction)
                 .await?;
             delete_recipient_deliveries(&mut transaction, id).await?;
@@ -129,7 +129,7 @@ impl SqliteStore {
 
     pub async fn get_session_namespace(
         &self,
-        id: &Uuid,
+        id: &SessionId,
     ) -> Result<Option<SessionNamespace>, NamespaceRowError> {
         let raw = sqlx::query("SELECT namespace, dir FROM session_sessions WHERE id = ?")
             .bind(id.to_string())
@@ -154,10 +154,10 @@ impl SqliteStore {
 
 async fn delete_recipient_deliveries(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<(), NamespaceRowError> {
     sqlx::query("DELETE FROM message_deliveries WHERE recipient_session_id = ?")
-        .bind(session_id)
+        .bind(session_id.to_string())
         .execute(&mut **transaction)
         .await?;
     Ok(())
@@ -165,9 +165,9 @@ async fn delete_recipient_deliveries(
 
 async fn gc_session_sender_messages(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    session_id: &str,
+    session_id: &SessionId,
 ) -> Result<(), NamespaceRowError> {
-    let sender_ref = serde_json::to_string(&SenderRef::session(Uuid::parse_str(session_id)?))?;
+    let sender_ref = serde_json::to_string(&SenderRef::session(*session_id))?;
     sqlx::query(
         "DELETE FROM messages
          WHERE sender_ref = ?
@@ -188,6 +188,7 @@ mod tests {
     use super::super::test_support::running_session;
     use super::*;
     use crate::test_support::OrPanic as _;
+    use lilo_common::id::MessageId;
     use lilo_session_core::{DEFAULT_NAMESPACE, Mail, MailIntent, MailStatus};
     use serde_json::json;
 
@@ -324,9 +325,9 @@ mod tests {
         assert!(message_exists(&store, operator.id).await);
     }
 
-    fn mail_from(sender: SenderRef, recipient_id: Uuid, content: &str) -> Mail {
+    fn mail_from(sender: SenderRef, recipient_id: SessionId, content: &str) -> Mail {
         Mail {
-            id: Uuid::now_v7(),
+            id: MessageId::from_uuid(uuid::Uuid::now_v7()),
             sender,
             recipient_id,
             content: content.to_string(),
@@ -339,7 +340,7 @@ mod tests {
         }
     }
 
-    async fn delivery_count_for(store: &SqliteStore, recipient_id: Uuid) -> i64 {
+    async fn delivery_count_for(store: &SqliteStore, recipient_id: SessionId) -> i64 {
         sqlx::query_scalar(
             "SELECT COUNT(*)
              FROM message_deliveries
@@ -351,7 +352,7 @@ mod tests {
         .or_panic("delivery count")
     }
 
-    async fn message_exists(store: &SqliteStore, message_id: Uuid) -> bool {
+    async fn message_exists(store: &SqliteStore, message_id: MessageId) -> bool {
         sqlx::query_scalar::<_, i64>(
             "SELECT EXISTS(
                 SELECT 1

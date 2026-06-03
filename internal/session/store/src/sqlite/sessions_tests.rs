@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
 use crate::test_support::OrPanic as _;
@@ -12,7 +13,7 @@ async fn inserts_and_lists_sessions() {
     let (_dir, store) = SqliteStore::open_temp().await;
     let now = Utc::now();
     let session = Session {
-        id: Uuid::now_v7(),
+        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
         role: "general".to_string(),
         workspace: "test".to_string(),
@@ -266,7 +267,7 @@ async fn persists_sessions_across_reopen() {
 fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
     let now = Utc::now();
     Session {
-        id: Uuid::now_v7(),
+        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
         role: role.to_string(),
         workspace: workspace.to_string(),
@@ -287,6 +288,6 @@ fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
     }
 }
 
-fn session_ids(sessions: &[Session]) -> Vec<Uuid> {
+fn session_ids(sessions: &[Session]) -> Vec<SessionId> {
     sessions.iter().map(|session| session.id).collect()
 }

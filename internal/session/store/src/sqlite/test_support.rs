@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
-use uuid::Uuid;
 
 pub(crate) fn running_session(role: &str, workspace: &str) -> Session {
     let now = Utc::now();
     Session {
-        id: Uuid::now_v7(),
+        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
         role: role.to_string(),
         workspace: workspace.to_string(),
