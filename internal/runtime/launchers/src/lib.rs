@@ -103,14 +103,6 @@ pub(crate) fn runtime_env(request: &SpawnRequest) -> Vec<LaunchEnv> {
         &mut env,
         LaunchEnv::new("LILO_AGENT_RUNTIME", request.runtime.to_string()),
     );
-    upsert_launch_env(
-        &mut env,
-        LaunchEnv::new("RTM_SESSION_ID", request.session_id.to_string()),
-    );
-    upsert_launch_env(
-        &mut env,
-        LaunchEnv::new("RTM_RUNTIME_KIND", request.runtime.to_string()),
-    );
     env
 }
 

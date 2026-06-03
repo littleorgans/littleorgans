@@ -7,14 +7,7 @@ use crate::{LaunchEnv, ShellResume};
 ///
 /// These either name the calling process's parent context (so forwarding lies to the spawned
 /// runtime about who its parent is) or are daemon/test internals the daemon re-sets correctly.
-pub const CALLER_ENV_DENYLIST: &[&str] = &[
-    "CLAUDECODE",
-    "TMUX",
-    "TMUX_PANE",
-    "LILO_SOCKET_PATH",
-    "RTM_SESSION_ID",
-    "RTM_RUNTIME_KIND",
-];
+pub const CALLER_ENV_DENYLIST: &[&str] = &["CLAUDECODE", "TMUX", "TMUX_PANE", "LILO_SOCKET_PATH"];
 
 /// Prefixes dropped when forwarding caller env. Used for variable families
 /// like `CLAUDE_CODE_*` and `CLAUDE_PLUGIN_*` that describe the calling claude
@@ -151,8 +144,6 @@ mod tests {
             ("LILO_AGENT_RUNTIME", "claude"),
             ("LILO_AGENT_ROLE", "worker"),
             ("LILO_AGENT_WORKSPACE", "/work"),
-            ("RTM_SESSION_ID", "session"),
-            ("RTM_RUNTIME_KIND", "claude"),
             ("LILO_GITHUB_PAT", "ghp_secret"),
             ("ANTHROPIC_API_KEY", "sk-secret"),
         ]);
@@ -209,7 +200,10 @@ mod tests {
             (OsString::from("HOME"), OsString::from("/Users/test")),
             (OsString::from("PATH"), OsString::from("/usr/bin")),
             (OsString::from("TERM"), OsString::from("xterm-256color")),
-            (OsString::from("RTM_SESSION_ID"), OsString::from("secret")),
+            (
+                OsString::from("LILO_AGENT_SESSION_ID"),
+                OsString::from("secret"),
+            ),
             (
                 OsString::from("ANTHROPIC_API_KEY"),
                 OsString::from("secret"),
