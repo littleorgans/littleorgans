@@ -120,8 +120,28 @@ All local state lives under `~/.lilo/` unless `LILO_HOME` overrides the root.
 The derived tree includes config, run files, one SQLite database at
 `data/lilo.db`, event JSONL, logs, cache, and tmp directories.
 
+littleorgans owns exactly one environment prefix: `LILO_`. The authoritative
+owned name set is the `lilo_paths::env` const registry, and
+`scripts/check-env.sh --check` rejects unregistered owned names.
+
+The audience model is:
+
+- Bare operator variables: `LILO_HOME`, `LILO_SOCKET_PATH`, `LILO_LOG`,
+  `LILO_LOG_FORMAT`, `LILO_DOCKER_IMAGE`,
+  `LILO_DOCKER_ALLOW_ROOT_IMAGE_USER`,
+  `LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE`,
+  `LILO_PROBE_SWEEP_INTERVAL_MS`, `LILO_RESUME_POLL_INTERVAL_MS`,
+  `LILO_RESUME_GAP_THRESHOLD_MS`, and `LILO_TMUX_SERVER_LABEL`.
+- Agent-injected variables: `LILO_AGENT_SESSION_ID`, `LILO_AGENT_RUNTIME`,
+  `LILO_AGENT_ROLE`, and `LILO_AGENT_WORKSPACE`.
+- Build/release variables: `LILO_CLI_VERSION`, `LILO_GIT_SHA`, and
+  `LILO_VERSION_INCLUDE_GIT_SHA`.
+- Secret passthrough: `LILO_GITHUB_PAT`.
+- Internal test/dev variables: `LILO_TEST_*` and `LILO_DEV_*`.
+
 `LILO_SOCKET_PATH` overrides only the daemon socket. `LILO_LOG` controls the
-tracing filter. `LILO_DB_PATH` does not exist, and legacy `RTM_*`, `SM_*`, and
+tracing filter. `LILO_LOG_FORMAT` accepts `auto`, `pretty`, `json`, and
+`compact`. `LILO_DB_PATH` does not exist, and legacy `RTM_*`, `SM_*`, and
 `AGM_*` variables are not honored.
 
 No automatic migration is promised from old local roots. Release notes may
