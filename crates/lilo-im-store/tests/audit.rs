@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
+use lilo_common::id::{AuditId, SessionId};
 use lilo_im_core::{
     Action, AuditDecision, AuditRow, AuditSink, Authorizer, AuthzError, Principal, ResourceSpec,
     RuntimeKind,
@@ -9,7 +10,6 @@ use lilo_im_store::schema::{AUDIT_TABLE, RESERVED_AUDIT_COLUMNS};
 use lilo_im_store::{AuditFilters, AuditTableColumn, SqliteAuditSink, query_audit};
 use lilo_im_stub::StubAuthorizer;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn sqlite_sink_persists_authorizer_audit_rows() {
@@ -59,7 +59,7 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
         assert_eq!(row.session_ref, resource.session_id);
         assert!(row.timestamp >= started_at);
         assert!(row.timestamp <= Utc::now());
-        assert_uuid_v7(row.id);
+        assert_uuid_v4(row.id);
     }
 
     let denial = authorizer
@@ -82,7 +82,7 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
         }
     );
     assert_eq!(denied.denial_reason.as_deref(), Some("non-local uid"));
-    assert_uuid_v7(denied.id);
+    assert_uuid_v4(denied.id);
 }
 
 #[tokio::test]
@@ -92,7 +92,7 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
 
     let local_uid = nix::unistd::getuid().as_raw();
     let other_uid = different_uid(local_uid);
-    let session = Uuid::now_v7();
+    let session = SessionId::from_uuid(uuid::Uuid::now_v7());
     let old_timestamp = Utc::now() - Duration::minutes(10);
     let recent_timestamp = Utc::now();
 
@@ -195,7 +195,7 @@ fn resource() -> ResourceSpec {
         workspace: Some("identity-matters".to_owned()),
         role: Some("worker".to_owned()),
         runtime: Some(RuntimeKind::Codex),
-        session_id: Some(Uuid::now_v7()),
+        session_id: Some(SessionId::from_uuid(uuid::Uuid::now_v7())),
         labels: HashMap::from([("issue".to_owned(), "ALP-2457".to_owned())]),
     }
 }
@@ -204,11 +204,11 @@ fn audit_row(
     principal: Principal,
     action: Action,
     decision: AuditDecision,
-    session_id: Option<Uuid>,
+    session_id: Option<SessionId>,
     timestamp: chrono::DateTime<Utc>,
 ) -> AuditRow {
     AuditRow {
-        id: Uuid::now_v7(),
+        id: AuditId::new(),
         timestamp,
         principal,
         action,
@@ -258,8 +258,8 @@ fn audit_column<'a>(columns: &'a [AuditTableColumn], name: &str) -> &'a AuditTab
         .unwrap_or_else(|| panic!("missing audit column {name}"))
 }
 
-fn assert_uuid_v7(id: Uuid) {
-    assert_eq!(id.to_string().chars().nth(14), Some('7'));
+fn assert_uuid_v4(id: AuditId) {
+    assert_eq!(id.as_uuid().get_version_num(), 4);
 }
 
 fn different_uid(uid: u32) -> u32 {

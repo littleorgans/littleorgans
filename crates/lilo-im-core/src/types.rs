@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use lilo_common::id::SessionId;
 use serde::de::{self, MapAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uuid::Uuid;
 
 /// IAM subject on the v1 wire boundary.
 ///
@@ -172,13 +172,13 @@ pub struct ResourceSpec {
     pub workspace: Option<String>,
     pub role: Option<String>,
     pub runtime: Option<RuntimeKind>,
-    pub session_id: Option<Uuid>,
+    pub session_id: Option<SessionId>,
     pub labels: HashMap<String, String>,
 }
 
 impl ResourceSpec {
     #[must_use]
-    pub fn session(session_id: Uuid) -> Self {
+    pub fn session(session_id: SessionId) -> Self {
         Self {
             session_id: Some(session_id),
             ..Self::default()
@@ -201,9 +201,9 @@ pub struct Authorized {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use uuid::Uuid;
 
     use super::{Principal, ResourceSpec};
+    use lilo_common::id::SessionId;
 
     #[test]
     fn serializes_local_principal_with_stable_kind_tag() {
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn session_resource_spec_sets_only_session_id() {
-        let session_id = Uuid::nil();
+        let session_id = SessionId::from_uuid(uuid::Uuid::nil());
 
         assert_eq!(
             ResourceSpec::session(session_id),

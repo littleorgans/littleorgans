@@ -1089,6 +1089,7 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "insta",
+ "lilo-common",
  "lilo-sys",
  "serde",
  "serde_json",
