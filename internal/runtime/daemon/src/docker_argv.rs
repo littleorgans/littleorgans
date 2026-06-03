@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 use crate::docker_mount_plan;
 
-const RTM_DOCKER_CONTAINER_PREFIX: &str = "rtm";
-const RTM_DOCKER_SESSION_LABEL: &str = "io.helioy.runtime-matters.session";
+const LILO_DOCKER_CONTAINER_PREFIX: &str = "rtm";
+const LILO_DOCKER_SESSION_LABEL: &str = "com.littleorgans.runtime.session";
 
 pub(crate) fn container_name(session_id: Uuid) -> String {
-    format!("{RTM_DOCKER_CONTAINER_PREFIX}-{session_id}")
+    format!("{LILO_DOCKER_CONTAINER_PREFIX}-{session_id}")
 }
 
 pub(crate) fn docker_run_launch(
@@ -79,7 +79,7 @@ fn docker_run_base_argv(
         "--name".to_owned(),
         container_name(session_id),
         "--label".to_owned(),
-        format!("{RTM_DOCKER_SESSION_LABEL}={session_id}"),
+        format!("{LILO_DOCKER_SESSION_LABEL}={session_id}"),
     ];
     if cwd_plan.auto_mount_cwd {
         argv.push("--mount".to_owned());

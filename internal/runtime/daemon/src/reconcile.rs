@@ -24,13 +24,13 @@ pub struct ReconcileConfig {
 impl ReconcileConfig {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            sweep_interval: duration_env("RTM_PROBE_SWEEP_INTERVAL_MS", PROBE_SWEEP_INTERVAL)?,
+            sweep_interval: duration_env("LILO_PROBE_SWEEP_INTERVAL_MS", PROBE_SWEEP_INTERVAL)?,
             resume_poll_interval: duration_env(
-                "RTM_RESUME_POLL_INTERVAL_MS",
+                "LILO_RESUME_POLL_INTERVAL_MS",
                 RESUME_POLL_INTERVAL,
             )?,
             resume_gap_threshold: chrono_duration_env(
-                "RTM_RESUME_GAP_THRESHOLD_MS",
+                "LILO_RESUME_GAP_THRESHOLD_MS",
                 RESUME_GAP_THRESHOLD,
             )?,
         })

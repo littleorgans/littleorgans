@@ -47,15 +47,15 @@ impl RtmHarness {
     }
 
     pub fn start_with_docker_image(image: &str) -> Self {
-        Self::start_with_options(vec![("RTM_DOCKER_IMAGE", image.to_owned())], true)
+        Self::start_with_options(vec![("LILO_DOCKER_IMAGE", image.to_owned())], true)
     }
 
     pub fn start_with_fast_resume_probe() -> Self {
         Self::start_with_options(
             vec![
-                ("RTM_PROBE_SWEEP_INTERVAL_MS", "30000".to_owned()),
-                ("RTM_RESUME_POLL_INTERVAL_MS", "25".to_owned()),
-                ("RTM_RESUME_GAP_THRESHOLD_MS", "1".to_owned()),
+                ("LILO_PROBE_SWEEP_INTERVAL_MS", "30000".to_owned()),
+                ("LILO_RESUME_POLL_INTERVAL_MS", "25".to_owned()),
+                ("LILO_RESUME_GAP_THRESHOLD_MS", "1".to_owned()),
             ],
             false,
         )
@@ -63,7 +63,7 @@ impl RtmHarness {
 
     pub fn start_with_fast_periodic_probe() -> Self {
         Self::start_with_options(
-            vec![("RTM_PROBE_SWEEP_INTERVAL_MS", "25".to_owned())],
+            vec![("LILO_PROBE_SWEEP_INTERVAL_MS", "25".to_owned())],
             false,
         )
     }
