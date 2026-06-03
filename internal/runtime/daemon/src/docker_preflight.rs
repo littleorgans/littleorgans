@@ -1,14 +1,13 @@
 use anyhow::Result;
+use lilo_paths::env::{
+    LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE, LILO_DOCKER_ALLOW_ROOT_IMAGE_USER, LILO_DOCKER_IMAGE,
+};
 use lilo_rm_core::SpawnRequest;
 use serde::Deserialize;
 use tokio::process::Command;
 
 use crate::docker_command::stderr_or;
 use crate::error::RuntimeFailure;
-
-const LILO_DOCKER_IMAGE: &str = "LILO_DOCKER_IMAGE";
-const LILO_DOCKER_ALLOW_ROOT_IMAGE_USER: &str = "LILO_DOCKER_ALLOW_ROOT_IMAGE_USER";
-const LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE: &str = "LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE";
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct DockerPreflightConfig {

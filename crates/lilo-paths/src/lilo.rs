@@ -1,12 +1,10 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::env::env_path;
+use crate::env::{LILO_HOME, LILO_SOCKET_PATH, env_path};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const LILO_HOME_ENV: &str = "LILO_HOME";
-pub(crate) const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
 const HOME_ENV: &str = "HOME";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -16,7 +14,7 @@ pub struct LiloHome {
 
 impl LiloHome {
     pub fn from_env() -> Result<Self, LiloPathError> {
-        if let Some(path) = env_path(LILO_HOME_ENV) {
+        if let Some(path) = env_path(LILO_HOME) {
             return Self::from_path(path);
         }
 
@@ -95,7 +93,7 @@ impl LiloPaths {
     }
 
     pub fn socket_path(&self) -> PathBuf {
-        env_path(LILO_SOCKET_PATH_ENV).unwrap_or_else(|| self.run_root().join("lilod.sock"))
+        env_path(LILO_SOCKET_PATH).unwrap_or_else(|| self.run_root().join("lilod.sock"))
     }
 
     pub fn pid_path(&self) -> PathBuf {
@@ -175,8 +173,8 @@ mod tests {
     #[test]
     fn lilo_home_env_roots_every_path() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", None),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, None),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -187,8 +185,8 @@ mod tests {
     #[test]
     fn home_env_fallback_roots_every_path_under_dot_lilo() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", None),
-            ("LILO_SOCKET_PATH", None),
+            (LILO_HOME, None),
+            (LILO_SOCKET_PATH, None),
             ("HOME", Some(FALLBACK_HOME)),
         ]);
 
@@ -199,8 +197,8 @@ mod tests {
     #[test]
     fn socket_override_wins_without_moving_other_paths() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", Some("/custom/sock")),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, Some("/custom/sock")),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -245,8 +243,8 @@ mod tests {
     #[test]
     fn endpoint_uses_paths_display_and_stable_json_string() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", Some("/custom/sock")),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, Some("/custom/sock")),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -265,7 +263,7 @@ mod tests {
 
     #[test]
     fn missing_home_errors_when_no_lilo_home_or_home_exist() {
-        let _env = EnvGuard::new(&[("LILO_HOME", None), ("HOME", None)]);
+        let _env = EnvGuard::new(&[(LILO_HOME, None), ("HOME", None)]);
 
         assert_eq!(LiloHome::from_env(), Err(LiloPathError::MissingHome));
     }

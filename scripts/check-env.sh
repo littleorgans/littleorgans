@@ -13,7 +13,11 @@ Two independent passes:
      file is the single authoritative home for the forbidden literals, so it
      EXCLUDES ITSELF from the scan (cf. scripts/check-seam.sh). Exit 1 on any hit.
 
-  2. INVENTORY (default): classify every LILO_/HELIOY_/foreign env-var literal by
+  2. OWNED NAME-SET GATE (--check): builds the owned LILO_ set from
+     crates/lilo-paths/src/env.rs and rejects owned-looking Rust literals whose
+     names are not registered there.
+
+  3. INVENTORY (default): classify every LILO_/HELIOY_/foreign env-var literal by
      audience for review. Best-effort; the gate, not the inventory, is the guard.
 
 Usage:
@@ -36,6 +40,7 @@ PRUNE = {"target", ".git", ".moon", ".nancy", "node_modules"}
 # allowlist). Fixtures, snapshots, code, and config are NOT exempt.
 EXCLUDE = {"scripts/check-env.sh", "CLAUDE.md", "AGENTS.md", "LESSONS.md"}
 SKIP_SUFFIX = {".db", ".db-shm", ".db-wal", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".lock"}
+REGISTRY = Path("crates/lilo-paths/src/env.rs")
 
 # --- forbidden tokens (the single literal definition lives only here) ---
 LEGACY_PREFIXED = re.compile(r"(?<![A-Za-z0-9_])(?:RTM|SM|AGM|HELIOY)_[A-Za-z0-9_]*")
@@ -43,6 +48,7 @@ LEGACY_BARE = re.compile(r"(?<![A-Za-z0-9_])(?:RTM|SM|AGM)(?![A-Za-z0-9_])")
 
 # --- inventory (secondary): env-var literals by ownership ---
 NAME = r'"([A-Z][A-Z0-9_]{2,})"'
+CONST_SITE = re.compile(r"const\s+\w+\s*:\s*&(?:'static\s+)?str\s*=\s*" + NAME)
 SITES = [
     re.compile(r"env::var(?:_os)?\s*\(\s*" + NAME),
     re.compile(r"env::(?:set|remove)_var\s*\(\s*" + NAME),
@@ -52,9 +58,9 @@ SITES = [
     re.compile(r"emit_cli_version\s*\(\s*" + NAME),
     re.compile(r"emit_git_sha_env\s*\(\s*" + NAME),
     re.compile(r"duration_env\s*\(\s*" + NAME),
-    re.compile(r"const\s+\w+\s*:\s*&(?:'static\s+)?str\s*=\s*" + NAME),
+    CONST_SITE,
 ]
-OWNED = "LILO_"
+OWNED_PREFIX = "LILO_"
 FOREIGN_PREFIX = ("CLAUDE", "ANTHROPIC_", "CARGO_", "GITHUB_")
 OS_EXACT = {"HOME", "SHELL", "PATH", "LANG", "LC_ALL", "TERM", "COLORTERM",
             "USER", "LOGNAME", "TMUX", "TMUX_PANE", "OUT_DIR", "CODEX"}
@@ -96,7 +102,7 @@ def legacy_hits(repo: Path):
 
 
 def classify(var: str) -> str:
-    if var.startswith(OWNED):
+    if var.startswith(OWNED_PREFIX):
         return "owned"
     if var.startswith("HELIOY_"):
         return "forbidden (HELIOY_)"
@@ -105,6 +111,21 @@ def classify(var: str) -> str:
     if any(var.startswith(p) for p in FOREIGN_PREFIX) or var in OS_EXACT:
         return "foreign"
     return "other"
+
+
+def registry_owned(repo: Path) -> set[str]:
+    lines = read_lines(repo / REGISTRY)
+    if lines is None:
+        return set()
+    names = set()
+    for line in lines:
+        if line.lstrip().startswith("//"):
+            continue
+        for match in CONST_SITE.finditer(line):
+            name = match.group(1)
+            if classify(name) == "owned":
+                names.add(name)
+    return names
 
 
 def inventory(repo: Path):
@@ -124,22 +145,57 @@ def inventory(repo: Path):
     return groups
 
 
+def unregistered_owned_hits(repo: Path, owned: set[str]):
+    hits = []
+    literal = re.compile(NAME)
+    for rel, path in iter_files(repo, exclude_self=True):
+        if path.suffix != ".rs":
+            continue
+        lines = read_lines(path)
+        if lines is None:
+            continue
+        for n, line in enumerate(lines, 1):
+            if line.lstrip().startswith("//"):
+                continue
+            for match in literal.finditer(line):
+                name = match.group(1)
+                if classify(name) == "owned" and name not in owned:
+                    hits.append((name, str(rel), n))
+    return hits
+
+
 def gate(repo: Path) -> int:
-    hits = legacy_hits(repo)
-    if not hits:
-        print("env gate: clean — no RTM_/SM_/AGM_/HELIOY_ tokens (gate self-excluded).")
+    legacy = legacy_hits(repo)
+    owned = registry_owned(repo)
+    unregistered = unregistered_owned_hits(repo, owned)
+    if not legacy and not unregistered:
+        print("env gate: clean: no forbidden tokens; all owned LILO_ names are registered.")
         return 0
     by_token = defaultdict(list)
-    for token, rel, n in hits:
+    for token, rel, n in legacy:
         by_token[token].append((rel, n))
-    print(f"env gate FAILED — {len(hits)} forbidden-token references "
-          f"({len(by_token)} distinct), outside the convention docs:", file=sys.stderr)
-    for token in sorted(by_token):
-        sites = by_token[token]
-        print(f"\n  {token}  [{len(sites)}]", file=sys.stderr)
-        for rel, n in sites:
-            print(f"    {rel}:{n}", file=sys.stderr)
-    print("\nRename to the LILO_ namespace (or move the literal into the gate).", file=sys.stderr)
+    if legacy:
+        print(f"env gate FAILED: {len(legacy)} forbidden-token references "
+              f"({len(by_token)} distinct), outside the convention docs:", file=sys.stderr)
+        for token in sorted(by_token):
+            sites = by_token[token]
+            print(f"\n  {token}  [{len(sites)}]", file=sys.stderr)
+            for rel, n in sites:
+                print(f"    {rel}:{n}", file=sys.stderr)
+        print("\nRename to the LILO_ namespace (or move the literal into the gate).", file=sys.stderr)
+
+    by_name = defaultdict(list)
+    for name, rel, n in unregistered:
+        by_name[name].append((rel, n))
+    if unregistered:
+        print(f"env gate FAILED: {len(unregistered)} unregistered owned LILO_ literals "
+              f"({len(by_name)} distinct); registry is {REGISTRY}:", file=sys.stderr)
+        for name in sorted(by_name):
+            sites = by_name[name]
+            print(f"\n  {name}  [{len(sites)}]", file=sys.stderr)
+            for rel, n in sites:
+                print(f"    {rel}:{n}", file=sys.stderr)
+        print(f"\nAdd the name to {REGISTRY} or remove the literal.", file=sys.stderr)
     return 1
 
 
@@ -153,9 +209,24 @@ def report(repo: Path) -> None:
     for token in sorted(by_token):
         print(f"  {token:<40} {len(by_token[token])} sites")
 
+    owned = registry_owned(repo)
+    print(f"\nOWNED registry ({REGISTRY}) [{len(owned)}]")
+    for name in sorted(owned):
+        print(f"  {name}")
+
+    unregistered = unregistered_owned_hits(repo, owned)
+    by_name = defaultdict(list)
+    for name, rel, n in unregistered:
+        by_name[name].append((rel, n))
+    if by_name:
+        print(f"\nUNREGISTERED owned LILO_ literals (.rs) [{len(by_name)}]")
+        for name in sorted(by_name):
+            print(f"  {name:<40} {len(by_name[name])} sites")
+
     print("\nINVENTORY by ownership (.rs env-var literals):")
+    groups = inventory(repo)
     for key in ("owned", "forbidden (HELIOY_)", "forbidden (legacy)", "foreign", "other"):
-        vars_ = inventory(repo).get(key)
+        vars_ = groups.get(key)
         if not vars_:
             continue
         print(f"\n  {key}  [{len(vars_)}]")
