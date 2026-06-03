@@ -148,26 +148,41 @@ No automatic migration is promised from old local roots. Release notes may
 tell Stuart how to stop old daemons and start fresh, but code should not carry
 legacy path fallbacks.
 
-## Identifier format (open decision, not yet executed)
+## Identifier format (locked rev01: typed id family + v4)
 
-Session, message, and event ids are `uuid::Uuid` v7 today: time-ordered and 36
-chars. Intent is to move id generation to uniform random (v4) so a short hex
-prefix discriminates like a git short SHA, letting commands reference a session
-by the shortest unambiguous prefix instead of the full 36 chars. This does not
-shrink the stored or wire key, which stays 128-bit and 36 chars; a physically
-shorter key would mean replacing the bare `Uuid` type with a compact
-`SessionId` newtype across the workspace (131 files reference `Uuid`, no newtype
-exists) and is out of scope for now.
+Decision locked 2026-06-03. Full design:
+`NOTES/typed-ids-and-v4-prefix.md`. Introduce a typed id family and move
+generation from UUIDv7 to UUIDv4. Not yet executed; the staged PR sequence and
+acceptance live in the note.
 
-Work when executed: swap the production `Uuid::now_v7()` sites (session
-`handler/spawn.rs`, `handler/messaging.rs`, `events.rs`, `service.rs`, store
-`spawn_intents.rs`/`namespaces.rs`, `driver/conv.rs`; runtime
-`shim_socket.rs`; im-core `audit.rs`) to `new_v4()`, flip the workspace `uuid`
-feature from `v7` to `v4`, replace any reliance on chronological id ordering
-with explicit `created_at`/`sent_at` sorts, update the `assert_uuid_v7` test,
-and revise the UUIDv7 wording in the parent `littleorgans/CLAUDE.md` join-key
-line and the transport-matters spawn-id note above. Pairs with the short-id
-display and prefix selector on `lilo mail peek` / `lilo get session`.
+`lilo-common` gains a `define_id!` macro and one newtype per id concept
+(`SessionId`, `MessageId`, `EventId`, `IntentId`, `NamespaceId`, `AuditId`),
+replacing bare `uuid::Uuid` at domain signatures across the workspace. The macro
+is the single source of truth for each id's behaviour, so the family stays DRY.
+The runtime "spawn id" is a `SessionId`, not a separate type. `Uuid` stays the
+inner 128-bit value; the wire and disk key stays 36 chars.
+
+Generation moves to v4 inside the constructor (`SessionId::new()` calls
+`Uuid::new_v4()`). The workspace `uuid` feature becomes additive (`v4` + `v7`),
+not a `v7 → v4` flip, so test fixtures keep `now_v7()` and snapshot ordering
+stays deterministic. v4's uniform entropy is what lets a git-style short prefix
+discriminate; v7 front-loads a timestamp, so recent ids collide on their leading
+hex exactly when a short prefix would be used.
+
+Representation is held invariant so the ~131-file sweep is mechanical and
+format-stable: `Display`/`FromStr` stay full 36-char, serde is
+`#[serde(transparent)]`, sqlx delegates to `Uuid` behind a `lilo-common/sqlx`
+feature. The short form is a separate `short()` accessor on human surfaces only
+(`lilo get session`, `lilo mail peek`), git-style adaptive with a 7-hex floor.
+Prefix *selection* extends the existing `internal/session/core` `Selector` with a
+prefix variant resolved by a store `WHERE id LIKE ? || '%'` query that errors
+with candidates on ambiguity.
+
+Old v7 rows coexist with new v4 ids; no DB migration. On execution, also flip the
+parent `littleorgans/CLAUDE.md` join-key line and the transport spawn-id note
+above from UUIDv7 to v4, update the `assert_uuid_v7` audit test to v4, and
+resolve the two ordering spots named in the note (`runtime store lifecycle.rs`
+bare `ORDER BY session_id`; `session store mail.rs` `message_id` tiebreak).
 
 ## Engineering standards
 
