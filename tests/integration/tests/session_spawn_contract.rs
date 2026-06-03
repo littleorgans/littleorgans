@@ -82,15 +82,17 @@ async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()>
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let stderr_before = daemon.stderr();
-    let doctor = daemon
-        .command(["doctor"])
-        .output()
-        .context("lilo doctor executes")?;
-    assert_success("lilo doctor", &doctor);
+    // Reachability is a steady-state invariant. The daemon answers `doctor` by
+    // running a reconcile pass, a runtime probe, and a session scan, and that
+    // first cold round-trip can exceed the client's 3s DOCTOR_RPC_TIMEOUT under
+    // the load of the whole integration suite running cold in parallel. Poll
+    // until the daemon answers rather than asserting the first shot lands inside
+    // the window (which made this test flake on cold first runs).
+    let doctor = wait_for_reachable_doctor(&daemon)?;
     let doctor_stdout = stdout(&doctor);
     assert!(
         doctor_stdout.contains("daemon: reachable"),
-        "doctor must keep daemon reachability output\nstdout:\n{doctor_stdout}"
+        "doctor must report daemon reachable within {DAEMON_TIMEOUT:?}\nstdout:\n{doctor_stdout}"
     );
     assert!(
         doctor_stdout.contains("warnings: none"),
@@ -528,6 +530,27 @@ fn wait_for_socket(socket: &Path, child: &mut Child, stderr: &Path) -> Result<()
         "daemon socket did not accept connections at {}; last error={last_error:?}",
         socket.display()
     )
+}
+
+/// Poll `lilo doctor` until it reports the daemon reachable. `doctor` exits 0
+/// even when the daemon RPC times out (it is a health report), so reachability
+/// lives in stdout, not the exit code. Bounded by DAEMON_TIMEOUT.
+fn wait_for_reachable_doctor(daemon: &LiloDaemon) -> Result<Output> {
+    let deadline = Instant::now() + DAEMON_TIMEOUT;
+    loop {
+        let doctor = daemon
+            .command(["doctor"])
+            .output()
+            .context("lilo doctor executes")?;
+        assert_success("lilo doctor", &doctor);
+        if stdout(&doctor).contains("daemon: reachable") {
+            return Ok(doctor);
+        }
+        if Instant::now() >= deadline {
+            return Ok(doctor);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn assert_success(command: &str, output: &Output) {
