@@ -49,6 +49,11 @@ FORBIDDEN = [
     ("libc::SIG", re.compile(r"\blibc::SIG[A-Z0-9_]+\b")),
 ]
 
+# Masking only ever removes matches, so a file with no raw forbidden token
+# cannot produce a post-mask hit. Prefilter on the union of the patterns and
+# skip the O(chars) mask_rust() for the common clean file (~7.5s -> <1s).
+ANY_FORBIDDEN = re.compile("|".join(f"(?:{pattern.pattern})" for _, pattern in FORBIDDEN))
+
 
 def blank_preserving_newlines(text: str) -> str:
     return "".join("\n" if char == "\n" else " " for char in text)
@@ -343,6 +348,8 @@ def apply_ranges(masked: str, ranges: list[tuple[int, int]]) -> str:
 
 def scan_file(path: Path) -> list[str]:
     original = path.read_text(encoding="utf-8")
+    if not ANY_FORBIDDEN.search(original):
+        return []
     masked = mask_rust(original)
     sanitized = apply_ranges(masked, test_ranges(masked))
     starts = line_starts(sanitized)

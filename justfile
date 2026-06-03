@@ -1,5 +1,23 @@
 set shell := ["bash", "-cu"]
 
+# sccache caches every dependency compilation once and serves it to all three
+# target dirs below (and across branch switches), so the per-tool split is cheap
+# to fill. Local only: CI has no sccache, so this stays out of .cargo/config.toml.
+export RUSTC_WRAPPER := "sccache"
+
+# Per-tool CARGO_TARGET_DIR. clippy runs the clippy-driver, a different rustc
+# fingerprint, so sharing target/ with build forces a full workspace recompile on
+# every clippy<->build alternation (measured ~3min vs ~20s). nextest gets its own
+# dir too: its dev-dep feature set differs from `cargo build`. CI never runs
+# through this justfile, so it keeps using the default target/.
+#
+# Absolute (via justfile_directory()): a relative target dir is resolved against
+# each cargo invocation's cwd, so a nested cargo run (e.g. an integration test
+# spawning cargo from a crate dir) would scatter stray crates/<x>/target trees.
+TARGET_CLIPPY := justfile_directory() / "target/clippy"
+TARGET_BUILD := justfile_directory() / "target/build"
+TARGET_NEXTEST := justfile_directory() / "target/nextest"
+
 LILO_DEV_BIN := env("LILO_DEV_BIN", env("HOME") / ".cargo/bin/lilo")
 BASE_REF := env("BASE_REF", "main")
 
@@ -16,6 +34,7 @@ default:
 build:
     #!/usr/bin/env bash
     set -euo pipefail
+    export CARGO_TARGET_DIR={{TARGET_BUILD}}
     flags="$(scripts/changed-crates.sh {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[build] no relevant changes vs {{BASE_REF}}; nothing to compile."
@@ -30,11 +49,12 @@ build:
     fi
 
 release-build:
-    cargo build --workspace --release
+    CARGO_TARGET_DIR={{TARGET_BUILD}} cargo build --workspace --release
 
 test *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
+    export CARGO_TARGET_DIR={{TARGET_NEXTEST}}
     flags="$(scripts/changed-crates.sh {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[test] no relevant changes vs {{BASE_REF}}; nothing to run."
@@ -49,29 +69,37 @@ test *ARGS:
     fi
 
 test-doc:
-    cargo test --workspace --doc
+    CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo test --workspace --doc
 
 lilo *ARGS:
-    cargo run -p lilo --bin lilo -- {{ARGS}}
+    CARGO_TARGET_DIR={{TARGET_BUILD}} cargo run -p lilo --bin lilo -- {{ARGS}}
 
 codegen *ARGS:
-    cargo run -p xtask -- codegen {{ARGS}}
+    CARGO_TARGET_DIR={{TARGET_BUILD}} cargo run -p xtask -- codegen {{ARGS}}
+
+# Reclaim disk. Removes every Cargo target dir at once: the per-tool
+# target/{build,clippy,nextest}, target/rust-analyzer, and the default target/
+# that CI, bare `cargo`, and rust-analyzer still use. `cargo clean` only knows one
+# CARGO_TARGET_DIR at a time, so it cannot do this. The next build/clippy/test
+# refills dependency compiles from the sccache cache (~15s), not a cold build.
+clean:
+    rm -rf target
 
 # Install
 
 install: install-release
 
 build-local:
-    LILO_VERSION_INCLUDE_GIT_SHA=1 cargo build -p lilo --bin lilo --profile install-local
+    CARGO_TARGET_DIR={{TARGET_BUILD}} LILO_VERSION_INCLUDE_GIT_SHA=1 cargo build -p lilo --bin lilo --profile install-local
 
 build-install-release:
-    LILO_VERSION_INCLUDE_GIT_SHA=0 cargo build -p lilo --bin lilo --release
+    CARGO_TARGET_DIR={{TARGET_BUILD}} LILO_VERSION_INCLUDE_GIT_SHA=0 cargo build -p lilo --bin lilo --release
 
 install-local: build-local
-    @just _install-bin target/install-local/lilo
+    @just _install-bin {{TARGET_BUILD}}/install-local/lilo
 
 install-release: build-install-release
-    @just _install-bin target/release/lilo
+    @just _install-bin {{TARGET_BUILD}}/release/lilo
 
 _install-bin src:
     @set -eu; \
@@ -98,10 +126,10 @@ fmt-check:
 # Workspace-wide clippy. Use only when changed-crates fallback fires or via
 # `just regression`. Individual gate runs go through `_clippy-incremental`.
 clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
+    CARGO_TARGET_DIR={{TARGET_CLIPPY}} cargo clippy --workspace --all-targets -- -D warnings
 
 clippy-fix:
-    cargo clippy --fix --workspace --all-targets --allow-dirty --allow-staged -- -D warnings
+    CARGO_TARGET_DIR={{TARGET_CLIPPY}} cargo clippy --fix --workspace --all-targets --allow-dirty --allow-staged -- -D warnings
 
 check-loc:
     bash scripts/check-loc-limit.sh
@@ -123,6 +151,7 @@ check-env:
 _clippy-incremental:
     #!/usr/bin/env bash
     set -euo pipefail
+    export CARGO_TARGET_DIR={{TARGET_CLIPPY}}
     flags="$(scripts/changed-crates.sh {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[clippy] no relevant changes vs {{BASE_REF}}; skipping."
@@ -157,9 +186,9 @@ check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam c
 # --all-targets && nextest run --workspace` chain.
 regression:
     cargo fmt --all -- --check
+    CARGO_TARGET_DIR={{TARGET_CLIPPY}} cargo clippy --workspace --all-targets -- -D warnings
+    CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo nextest run --workspace
     bash scripts/check-loc-limit.sh
     bash scripts/check-provenance.sh
     bash scripts/check-seam.sh
     python3 scripts/check-env.sh --check
-    cargo clippy --workspace --all-targets -- -D warnings
-    cargo nextest run --workspace

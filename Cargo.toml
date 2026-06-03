@@ -116,6 +116,9 @@ lto = true
 opt-level = 3
 strip = true
 
+[profile.dev.package."*"]
+debug = 0
+
 [profile.dist]
 inherits = "release"
 lto = "thin"

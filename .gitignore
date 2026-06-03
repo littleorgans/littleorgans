@@ -1,4 +1,6 @@
-/target/
+# Unanchored so nested target dirs (e.g. a stray crates/<x>/target from a cargo
+# run with a relative CARGO_TARGET_DIR) are ignored too, not just the root one.
+target/
 .moon/cache/
 
 # Cargo keeps the workspace lockfile committed for reproducible builds.
