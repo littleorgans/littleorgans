@@ -103,7 +103,7 @@ install-release: build-install-release
 
 _install-bin src:
     @set -eu; \
-    src="$(pwd)/{{src}}"; \
+    src="{{src}}"; case "$src" in /*) ;; *) src="$(pwd)/$src";; esac; \
     dest="{{LILO_DEV_BIN}}"; \
     case "$dest" in /*) ;; *) dest="$(pwd)/$dest";; esac; \
     if [ "$src" = "$dest" ]; then \
