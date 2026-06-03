@@ -3,13 +3,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use lilo_common::id::SessionId;
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
     CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeMode,
     NudgeRequest, StatusFilter,
 };
 use lilo_session_core::RuntimeDoctorReport;
-use uuid::Uuid;
 
 use crate::conv::{
     capture_result, kill_outcome_label, nudge_result, parse_runtime_signal, parse_session_id,
@@ -25,7 +25,7 @@ use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 pub struct RtmdDriver {
     client: RuntimeClient,
     socket_path: PathBuf,
-    terminal_sessions: Arc<Mutex<HashSet<Uuid>>>,
+    terminal_sessions: Arc<Mutex<HashSet<SessionId>>>,
 }
 
 impl RtmdDriver {
@@ -174,7 +174,7 @@ impl RtmdDriver {
 }
 
 impl RtmdDriver {
-    fn locked_terminal_sessions(&self) -> MutexGuard<'_, HashSet<Uuid>> {
+    fn locked_terminal_sessions(&self) -> MutexGuard<'_, HashSet<SessionId>> {
         self.terminal_sessions
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -255,7 +255,7 @@ mod tests {
 
     fn lifecycle(tmux_pane: Option<TmuxAddress>) -> Lifecycle {
         Lifecycle {
-            session_id: Uuid::nil(),
+            session_id: SessionId::from_uuid(uuid::Uuid::nil()),
             runtime: RtmdRuntimeKind::Claude,
             isolation: IsolationPolicy::default(),
             state: LifecycleState::Running,

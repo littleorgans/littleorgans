@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     CaptureResponse, DoctorResponse as RuntimeDoctorResponse, KillOutcome, Lifecycle,
     LifecycleState, NudgeFailureReason, NudgeOutcome, RUNTIME_PROTOCOL_VERSION,
@@ -13,14 +14,13 @@ use lilo_session_core::{
     RuntimeDoctorReport, RuntimeKind,
     paths::lifecycle_transcript_path as session_lifecycle_transcript_path,
 };
-use uuid::Uuid;
 
 use crate::driver::{
     CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, SpawnLaunch, SpawnedProcess,
 };
 
 pub fn runtime_spawn_request(
-    session_id: Uuid,
+    session_id: SessionId,
     launch: &SpawnLaunch,
 ) -> Result<RuntimeSpawnRequest, RuntimeError> {
     Ok(RuntimeSpawnRequest {
@@ -81,7 +81,7 @@ pub(crate) fn lifecycle_transcript_path(lifecycle: &Lifecycle) -> Option<PathBuf
     session_lifecycle_transcript_path(lifecycle)
 }
 
-pub(crate) fn status_session(session_id: Uuid) -> StatusFilter {
+pub(crate) fn status_session(session_id: SessionId) -> StatusFilter {
     StatusFilter::for_session(session_id)
 }
 
@@ -168,8 +168,9 @@ pub(crate) fn runtime_doctor_error(
     }
 }
 
-pub(crate) fn parse_session_id(session_id: &str) -> Result<Uuid, RuntimeError> {
-    Uuid::parse_str(session_id)
+pub(crate) fn parse_session_id(session_id: &str) -> Result<SessionId, RuntimeError> {
+    session_id
+        .parse()
         .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
 }
 
@@ -292,7 +293,7 @@ mod tests {
 
     #[test]
     fn spawn_mappers_preserve_lifecycle_for_both_adapters() {
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let start_time = chrono::Utc::now();
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
         lifecycle.isolation = IsolationPolicy::default();

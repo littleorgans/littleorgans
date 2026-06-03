@@ -1372,6 +1372,7 @@ name = "lilo-session-driver"
 version = "0.8.0"
 dependencies = [
  "chrono",
+ "lilo-common",
  "lilo-db",
  "lilo-paths",
  "lilo-port",

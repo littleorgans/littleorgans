@@ -3,6 +3,7 @@ mod common;
 use std::path::PathBuf;
 
 use common::OrPanic as _;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     IsolationPolicy, LaunchEnv, Lifecycle, LifecycleState, LostEvidence, MountSpec, RuntimeEvent,
     RuntimeKind, RuntimeResponse, RuntimeRpc, ShellResume, SpawnRequest, SpawnedPayload,
@@ -12,7 +13,6 @@ use lilo_session_core::RuntimeKind as SmRuntimeKind;
 use lilo_session_driver::SpawnLaunch;
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn rtmd_spawn_forwards_env_shell_resume_and_force_enabled() {
@@ -25,7 +25,7 @@ async fn rtmd_spawn_forwards_force_disabled() {
 }
 
 async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let shell_resume = ShellResume {
         argv: vec!["/bin/zsh".to_string()],
         env: vec![LaunchEnv::new("TERM", "xterm-256color")],

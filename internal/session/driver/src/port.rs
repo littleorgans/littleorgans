@@ -2,10 +2,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
 use lilo_session_core::RuntimeDoctorReport;
 use tokio::time::{Instant, sleep};
-use uuid::Uuid;
 
 use crate::conv::{status_session, terminal_child_exit};
 use crate::driver::{
@@ -55,7 +55,7 @@ pub trait RuntimePort: Send + Sync {
 
 pub async fn wait_for_terminal<P: RuntimePort + ?Sized>(
     port: &P,
-    session_id: Uuid,
+    session_id: SessionId,
     grace: Duration,
 ) -> Result<Option<ChildExit>, RuntimeError> {
     let timeout = grace.max(Duration::from_secs(1));

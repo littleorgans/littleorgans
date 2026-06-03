@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use common::OrPanic as _;
+use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_port::ParityProof;
@@ -24,11 +25,10 @@ use lilo_session_driver::{InProcessRuntime, RuntimeError, RuntimeFault, RuntimeP
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::task::JoinHandle;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn runtime_ports_map_nudge_headless_outcome_identically() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let socket = mock_rtmd_nudge(
         session_id,
@@ -59,7 +59,7 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
 
 #[tokio::test]
 async fn runtime_ports_map_capture_headless_response_identically() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let socket = mock_rtmd_capture(
         session_id,
@@ -79,7 +79,7 @@ async fn runtime_ports_map_capture_headless_response_identically() {
 
 #[tokio::test]
 async fn runtime_ports_status_shapes_match() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let filter = StatusFilter::for_session(session_id);
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
 
@@ -97,7 +97,7 @@ async fn runtime_ports_status_shapes_match() {
 
 #[tokio::test]
 async fn runtime_ports_poll_events_shapes_match() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let event = RuntimeEvent::Running {
         session_id,
@@ -125,7 +125,7 @@ async fn runtime_ports_poll_events_shapes_match() {
 
 #[tokio::test]
 async fn runtime_ports_doctor_shapes_match_on_stable_fields() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
 
     let direct = RuntimePort::doctor(&in_process.port)
@@ -153,7 +153,7 @@ async fn runtime_ports_doctor_shapes_match_on_stable_fields() {
 
 #[tokio::test]
 async fn runtime_ports_spawn_conflict_error_variant_matches() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let launch = spawn_launch(in_process.dir.path().to_path_buf());
 
@@ -177,7 +177,7 @@ async fn runtime_ports_spawn_conflict_error_variant_matches() {
 
 #[tokio::test]
 async fn runtime_ports_invalid_session_id_fault_matches() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
     let socket = unconnected_rtmd_driver(&socket_dir);
@@ -199,7 +199,7 @@ async fn runtime_ports_invalid_session_id_fault_matches() {
 
 #[tokio::test]
 async fn runtime_ports_invalid_signal_fault_matches() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
     let socket = unconnected_rtmd_driver(&socket_dir);
@@ -226,7 +226,7 @@ async fn runtime_ports_invalid_signal_fault_matches() {
 
 #[tokio::test]
 async fn runtime_ports_invalid_target_fault_matches() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
     let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
     let socket = unconnected_rtmd_driver(&socket_dir);
@@ -245,7 +245,7 @@ async fn runtime_ports_invalid_target_fault_matches() {
 
 #[tokio::test]
 async fn runtime_port_reap_exited_is_at_most_once() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(
         session_id,
         LifecycleState::Exited(lilo_rm_core::RuntimeExit::new(Some(0), None)),
@@ -266,7 +266,7 @@ async fn runtime_port_reap_exited_is_at_most_once() {
 
 #[tokio::test]
 async fn wait_for_terminal_filters_status_to_session_id() {
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let socket = mock_rtmd_kill_then_status(session_id);
 
     let exit = RuntimePort::terminate(
@@ -289,7 +289,7 @@ struct InProcessFixture {
     dir: tempfile::TempDir,
 }
 
-async fn in_process_fixture(session_id: Uuid, state: LifecycleState) -> InProcessFixture {
+async fn in_process_fixture(session_id: SessionId, state: LifecycleState) -> InProcessFixture {
     let dir = tempfile::tempdir().or_panic("tempdir");
     let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).or_panic("home"));
     let db = LiloDb::open(&paths).await.or_panic("db opens");
@@ -312,7 +312,7 @@ async fn in_process_fixture(session_id: Uuid, state: LifecycleState) -> InProces
     }
 }
 
-async fn persist_lifecycle(db: &LiloDb, session_id: Uuid, state: LifecycleState) {
+async fn persist_lifecycle(db: &LiloDb, session_id: SessionId, state: LifecycleState) {
     let store = LifecycleStore::open(db);
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     store
@@ -338,7 +338,7 @@ struct SocketFixture {
     server: JoinHandle<()>,
 }
 
-fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> SocketFixture {
+fn mock_rtmd_nudge(session_id: SessionId, outcome: NudgeOutcome) -> SocketFixture {
     mock_rtmd_once(
         RuntimeRpc::Nudge {
             request: NudgeRequest {
@@ -356,7 +356,7 @@ fn mock_rtmd_nudge(session_id: Uuid, outcome: NudgeOutcome) -> SocketFixture {
     )
 }
 
-fn mock_rtmd_capture(session_id: Uuid, response: CaptureResponse) -> SocketFixture {
+fn mock_rtmd_capture(session_id: SessionId, response: CaptureResponse) -> SocketFixture {
     mock_rtmd_once(
         RuntimeRpc::Capture {
             request: CaptureRequest {
@@ -426,7 +426,7 @@ fn event_batch_response(batch: EventBatch) -> RuntimeResponse {
     }
 }
 
-fn mock_rtmd_kill_then_status(session_id: Uuid) -> SocketFixture {
+fn mock_rtmd_kill_then_status(session_id: SessionId) -> SocketFixture {
     let tempdir = tempfile::tempdir().or_panic("tempdir");
     let socket_path = tempdir.path().join("rtmd.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path).or_panic("bind test socket");
@@ -441,7 +441,7 @@ fn mock_rtmd_kill_then_status(session_id: Uuid) -> SocketFixture {
     SocketFixture { driver, server }
 }
 
-async fn handle_kill(stream: tokio::net::UnixStream, session_id: Uuid) {
+async fn handle_kill(stream: tokio::net::UnixStream, session_id: SessionId) {
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
     let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read kill rpc");
@@ -465,7 +465,7 @@ async fn handle_kill(stream: tokio::net::UnixStream, session_id: Uuid) {
     .or_panic("write kill response");
 }
 
-async fn handle_status(stream: tokio::net::UnixStream, session_id: Uuid) {
+async fn handle_status(stream: tokio::net::UnixStream, session_id: SessionId) {
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
     let envelope: LilodRpc = read_json_line(&mut reader)
@@ -494,7 +494,7 @@ async fn handle_status(stream: tokio::net::UnixStream, session_id: Uuid) {
     .or_panic("write status response");
 }
 
-fn running_lifecycle(session_id: Uuid) -> Lifecycle {
+fn running_lifecycle(session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.mark_running(ShimReady {
         session_id,
@@ -520,7 +520,7 @@ fn spawn_launch(cwd: PathBuf) -> SpawnLaunch {
     }
 }
 
-fn spawn_request(session_id: Uuid, launch: &SpawnLaunch) -> SpawnRequest {
+fn spawn_request(session_id: SessionId, launch: &SpawnLaunch) -> SpawnRequest {
     SpawnRequest {
         session_id,
         runtime: RuntimeKind::Claude,
@@ -555,7 +555,7 @@ fn runtime_fault(adapter: &str, error: RuntimeError) -> RuntimeFault {
     fault
 }
 
-fn exited_lifecycle(session_id: Uuid) -> Lifecycle {
+fn exited_lifecycle(session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.mark_running(ShimReady {
         session_id,
