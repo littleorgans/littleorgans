@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     write_schema_outputs(&manifest_dir, &registry)?;
     write_docs_outputs(&manifest_dir, &registry)?;
-    lilo_build_support::emit_cli_version("SM_CLI_VERSION");
+    lilo_build_support::emit_cli_version("LILO_CLI_VERSION");
     Ok(())
 }
 

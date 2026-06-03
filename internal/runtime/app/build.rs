@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use lilo_rm_core::tool_contracts::{ToolContract, ToolRegistry, contract_registry};
 
 fn main() {
-    lilo_build_support::emit_cli_version("RTM_CLI_VERSION");
+    lilo_build_support::emit_cli_version("LILO_CLI_VERSION");
     println!("cargo:rerun-if-changed=../../../crates/lilo-rm-core/tools.toml");
 
     let manifest_dir = PathBuf::from(

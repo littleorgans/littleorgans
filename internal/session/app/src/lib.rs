@@ -15,7 +15,7 @@ use clap::Parser;
 
 use cli::cli_def::Cli;
 
-pub const VERSION: &str = env!("SM_CLI_VERSION");
+pub const VERSION: &str = env!("LILO_CLI_VERSION");
 
 pub async fn run() -> anyhow::Result<()> {
     if render_bare_leaf_help()? {
