@@ -2,10 +2,10 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
-use uuid::Uuid;
 
 use crate::{
     ErrorCode, KillByPidRequest, KillByPidResponse, KillRequest, LaunchSpec, Lifecycle,
@@ -48,9 +48,9 @@ pub const fn clamped_event_wait_ms(wait_ms: Option<u32>) -> u32 {
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
 pub struct StatusRequest {
-    pub session_id: Option<Uuid>,
+    pub session_id: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub session_ids: Vec<Uuid>,
+    pub session_ids: Vec<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_since: Option<DateTime<Utc>>,
     #[serde(default)]

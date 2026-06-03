@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 
 use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use super::{RuntimeKind, TmuxAddress};
 use crate::IsolationPolicy;
@@ -30,7 +30,7 @@ impl Display for LifecycleState {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ShimReady {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub shim_pid: u32,
     pub runtime_pid: u32,
     pub start_time: DateTime<Utc>,
@@ -40,18 +40,18 @@ pub struct ShimReady {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ShimLaunchRequest {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ShimExit {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub exit: RuntimeExit,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Lifecycle {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub runtime: RuntimeKind,
     #[serde(default, skip_serializing_if = "IsolationPolicy::is_host")]
     pub isolation: IsolationPolicy,
@@ -65,7 +65,7 @@ pub struct Lifecycle {
 }
 
 impl Lifecycle {
-    pub fn forking(session_id: Uuid, runtime: RuntimeKind) -> Self {
+    pub fn forking(session_id: SessionId, runtime: RuntimeKind) -> Self {
         Self {
             session_id,
             runtime,
@@ -187,18 +187,18 @@ impl Display for TerminationEvidence {
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RuntimeEvent {
     Running {
-        session_id: Uuid,
+        session_id: SessionId,
         runtime_pid: u32,
         start_time: DateTime<Utc>,
     },
     Terminated {
-        session_id: Uuid,
+        session_id: SessionId,
         exit_code: Option<i32>,
         signal: Option<i32>,
         evidence: TerminationEvidence,
     },
     Lost {
-        session_id: Uuid,
+        session_id: SessionId,
         evidence: LostEvidence,
     },
 }
@@ -207,7 +207,7 @@ pub enum RuntimeEvent {
 mod tests {
     use super::*;
 
-    fn ready(session_id: Uuid) -> ShimReady {
+    fn ready(session_id: SessionId) -> ShimReady {
         ShimReady {
             session_id,
             shim_pid: 100,
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn lifecycle_transitions_from_forking_to_running_to_exited() {
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
 
         assert_eq!(lifecycle.state, LifecycleState::Forking);
@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn lifecycle_transitions_from_forking_to_lost() {
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
 
         assert!(lifecycle.mark_lost(LostEvidence::ShimDiedBeforeReport));
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn lifecycle_transitions_from_running_to_lost() {
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
         assert!(lifecycle.mark_running(ready(session_id)));
 

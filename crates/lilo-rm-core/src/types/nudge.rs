@@ -1,9 +1,9 @@
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NudgeRequest {
-    pub session_id: Uuid,
+    pub session_id: SessionId,
     pub content: String,
     pub mode: NudgeMode,
 }

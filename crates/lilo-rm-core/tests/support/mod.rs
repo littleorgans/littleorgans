@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 
 use chrono::{TimeZone, Utc};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     DockerIsolationStatus, DockerReadiness, DockerStatus, DoctorResponse, LaunchEnv, LaunchSpec,
     LauncherStatus, Lifecycle, LifecycleCounts, LifecycleLogAvailability, LogAvailability,
     LostEvidence, MigrationState, PaneSnapshot, RecentLostEvent, RuntimeKind, ShimReady,
     TmuxStatus, VersionInfo, WatcherCounts, version_info,
 };
-use uuid::Uuid;
 
-pub fn ready(session_id: Uuid) -> ShimReady {
+pub fn ready(session_id: SessionId) -> ShimReady {
     ShimReady {
         session_id,
         shim_pid: 4241,
@@ -19,7 +19,7 @@ pub fn ready(session_id: Uuid) -> ShimReady {
     }
 }
 
-pub fn headless_lifecycle(session_id: Uuid) -> Lifecycle {
+pub fn headless_lifecycle(session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     assert!(lifecycle.mark_running(ready(session_id)));
     lifecycle.log_availability = Some(LogAvailability::Headless {
@@ -29,7 +29,7 @@ pub fn headless_lifecycle(session_id: Uuid) -> Lifecycle {
     lifecycle
 }
 
-pub fn tmux_lifecycle(session_id: Uuid) -> Lifecycle {
+pub fn tmux_lifecycle(session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     assert!(lifecycle.mark_running(ready(session_id)));
     lifecycle.log_availability = Some(LogAvailability::TmuxPaneSnapshot);
@@ -130,12 +130,16 @@ pub fn current_version_info() -> VersionInfo {
     version_info()
 }
 
-pub fn session_id() -> Uuid {
-    Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").expect("uuid")
+pub fn session_id() -> SessionId {
+    "018f6e28-0000-7000-8000-000000000001"
+        .parse()
+        .expect("uuid")
 }
 
-pub fn other_session_id() -> Uuid {
-    Uuid::parse_str("018f6e28-0000-7000-8000-000000000002").expect("uuid")
+pub fn other_session_id() -> SessionId {
+    "018f6e28-0000-7000-8000-000000000002"
+        .parse()
+        .expect("uuid")
 }
 
 pub fn timestamp() -> chrono::DateTime<Utc> {

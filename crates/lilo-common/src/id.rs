@@ -24,6 +24,7 @@ macro_rules! define_id {
         #[derive(
             Clone,
             Copy,
+            Debug,
             PartialEq,
             Eq,
             Hash,

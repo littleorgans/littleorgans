@@ -1192,6 +1192,7 @@ dependencies = [
  "chrono",
  "insta",
  "lilo-build-support",
+ "lilo-common",
  "serde",
  "serde_json",
  "thiserror",

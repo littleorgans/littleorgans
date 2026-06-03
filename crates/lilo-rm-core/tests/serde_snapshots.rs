@@ -146,7 +146,7 @@ fn runtime_response_json_shapes_are_stable() {
 }
 
 fn spawned_response_cases(
-    session_id: uuid::Uuid,
+    session_id: lilo_common::id::SessionId,
     lifecycle: Lifecycle,
     tmux_lifecycle: Lifecycle,
 ) -> Vec<RuntimeResponse> {
@@ -209,7 +209,7 @@ fn validate_target_response_cases() -> Vec<RuntimeResponse> {
     ]
 }
 
-fn other_response_cases(session_id: uuid::Uuid) -> Vec<RuntimeResponse> {
+fn other_response_cases(session_id: lilo_common::id::SessionId) -> Vec<RuntimeResponse> {
     vec![
         RuntimeResponse::ShimLaunch(ShimLaunchPayload {
             launch: launch_spec(),
