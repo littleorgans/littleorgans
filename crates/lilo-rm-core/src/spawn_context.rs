@@ -7,21 +7,13 @@ use crate::{LaunchEnv, ShellResume};
 ///
 /// These either name the calling process's parent context (so forwarding lies to the spawned
 /// runtime about who its parent is) or are daemon/test internals the daemon re-sets correctly.
-pub const CALLER_ENV_DENYLIST: &[&str] = &[
-    "CLAUDECODE",
-    "TMUX",
-    "TMUX_PANE",
-    "LILO_SOCKET_PATH",
-    "HELIOY_SESSION_ID",
-    "HELIOY_RUNTIME",
-    "RTM_SESSION_ID",
-    "RTM_RUNTIME_KIND",
-];
+pub const CALLER_ENV_DENYLIST: &[&str] = &["CLAUDECODE", "TMUX", "TMUX_PANE", "LILO_SOCKET_PATH"];
 
 /// Prefixes dropped when forwarding caller env. Used for variable families
 /// like `CLAUDE_CODE_*` and `CLAUDE_PLUGIN_*` that describe the calling claude
 /// instance, not user state.
-pub const CALLER_ENV_DENYLIST_PREFIXES: &[&str] = &["CLAUDE_CODE_", "CLAUDE_PLUGIN_"];
+pub const CALLER_ENV_DENYLIST_PREFIXES: &[&str] =
+    &["CLAUDE_CODE_", "CLAUDE_PLUGIN_", "LILO_AGENT_"];
 
 const SHELL_RESUME_ENV_ALLOWLIST: &[&str] = &[
     "COLORTERM",
@@ -148,15 +140,15 @@ mod tests {
             ("TMUX", "/private/tmp/tmux"),
             ("TMUX_PANE", "%4"),
             ("LILO_SOCKET_PATH", "/tmp/lilod.sock"),
-            ("HELIOY_SESSION_ID", "session"),
-            ("HELIOY_RUNTIME", "claude"),
-            ("RTM_SESSION_ID", "session"),
-            ("RTM_RUNTIME_KIND", "claude"),
-            ("HELIOY_PAT", "ghp_secret"),
+            ("LILO_AGENT_SESSION_ID", "session"),
+            ("LILO_AGENT_RUNTIME", "claude"),
+            ("LILO_AGENT_ROLE", "worker"),
+            ("LILO_AGENT_WORKSPACE", "/work"),
+            ("LILO_GITHUB_PAT", "ghp_secret"),
             ("ANTHROPIC_API_KEY", "sk-secret"),
         ]);
         let keys: Vec<&str> = env.iter().map(|e| e.key.as_str()).collect();
-        assert_eq!(keys, vec!["PATH", "HELIOY_PAT", "ANTHROPIC_API_KEY"]);
+        assert_eq!(keys, vec!["PATH", "LILO_GITHUB_PAT", "ANTHROPIC_API_KEY"]);
     }
 
     #[test]
@@ -179,9 +171,9 @@ mod tests {
         // entry point), so this test protects the actual production path
         // rather than the already-UTF-8 capture_env_from variant.
         let raw_value = OsString::from_vec(vec![b'A', 0xFF, b'B']);
-        let env = capture_env_from_os([(OsString::from("RTM_TEST_BAD_BYTES"), raw_value)]);
+        let env = capture_env_from_os([(OsString::from("LILO_TEST_BAD_BYTES"), raw_value)]);
         assert_eq!(env.len(), 1);
-        assert_eq!(env[0].key, "RTM_TEST_BAD_BYTES");
+        assert_eq!(env[0].key, "LILO_TEST_BAD_BYTES");
         assert!(env[0].value.contains('\u{FFFD}'), "{:?}", env[0].value);
     }
 
@@ -208,7 +200,10 @@ mod tests {
             (OsString::from("HOME"), OsString::from("/Users/test")),
             (OsString::from("PATH"), OsString::from("/usr/bin")),
             (OsString::from("TERM"), OsString::from("xterm-256color")),
-            (OsString::from("RTM_SESSION_ID"), OsString::from("secret")),
+            (
+                OsString::from("LILO_AGENT_SESSION_ID"),
+                OsString::from("secret"),
+            ),
             (
                 OsString::from("ANTHROPIC_API_KEY"),
                 OsString::from("secret"),

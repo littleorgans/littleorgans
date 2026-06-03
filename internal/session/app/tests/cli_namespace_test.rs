@@ -216,7 +216,7 @@ fn delete_namespace_surfaces_binding_clear_failure_and_retry_converges() {
 
     let failed = daemon
         .command()
-        .env("LILO_FAULT_NAMESPACE_BINDING_CLEAR", "1")
+        .env("LILO_TEST_FAULT_NAMESPACE_BINDING_CLEAR", "1")
         .args(["delete", "namespace", "foo"])
         .output()
         .or_panic("sm delete namespace foo executes");

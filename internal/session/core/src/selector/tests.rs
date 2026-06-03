@@ -134,7 +134,7 @@ fn selector_rejects_legacy_workspace_and_invalid_new_selectors() {
     assert!(workspace.contains("unsupported selector"));
     assert!(workspace.contains("namespace:<slug>"));
 
-    let namespace = Selector::from_str("namespace:SM")
+    let namespace = Selector::from_str("namespace:UPPER")
         .err_or_panic("expected error")
         .to_string();
     assert!(namespace.contains("invalid namespace selector"));

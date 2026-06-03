@@ -42,7 +42,7 @@ impl VersionInfo {
 }
 
 pub fn version_info() -> VersionInfo {
-    VersionInfo::new(env!("CARGO_PKG_VERSION"), env!("RTM_GIT_SHA"))
+    VersionInfo::new(env!("CARGO_PKG_VERSION"), env!("LILO_GIT_SHA"))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

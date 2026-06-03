@@ -9,7 +9,7 @@ pub(crate) async fn session_run_agent_config_path_is_canonicalized_against_reque
     let workspace = daemon.dir.path().join("workspace");
     std::fs::create_dir_all(&workspace).or_panic("workspace dir");
     let config = workspace.join("agent.toml");
-    std::fs::write(&config, "[env]\nHELIOY_AGENT_NAME = \"mcp\"\n").or_panic("agent config");
+    std::fs::write(&config, "[env]\nEXAMPLE_AGENT_NAME = \"mcp\"\n").or_panic("agent config");
     let mut mcp = daemon.spawn_mcp();
     mcp.send(&json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}));
 

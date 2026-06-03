@@ -1,4 +1,5 @@
 use anyhow::{Result, bail};
+use lilo_paths::env::LILO_AGENT_SESSION_ID;
 use std::str::FromStr;
 
 use lilo_session_core::{
@@ -15,8 +16,6 @@ use crate::cli::output::{
     print_conversation_overview, print_mail_counts, print_mail_send_summary, print_messages,
 };
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
-
-const HELIOY_SESSION_ID_ENV: &str = "HELIOY_SESSION_ID";
 
 pub async fn run(args: MailArgs, json_output: bool) -> Result<()> {
     match args.action {
@@ -258,11 +257,11 @@ async fn send_daemon_request(request: SessionRpc) -> Result<RpcResponse> {
 }
 
 fn request_with_caller_session(request: SessionRpc) -> Result<SessionRpc> {
-    let Some(raw) = std::env::var_os(HELIOY_SESSION_ID_ENV) else {
+    let Some(raw) = std::env::var_os(LILO_AGENT_SESSION_ID) else {
         return Ok(request);
     };
     let Ok(caller_session_id) = raw.into_string() else {
-        bail!("{HELIOY_SESSION_ID_ENV} is not valid UTF-8");
+        bail!("{LILO_AGENT_SESSION_ID} is not valid UTF-8");
     };
     Ok(SessionRpc::CallerContext {
         request: CallerContextRequest {

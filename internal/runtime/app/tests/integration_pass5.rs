@@ -92,7 +92,7 @@ fn tmux_spawn_cwd_flag_overrides_caller_cwd() {
     std::fs::create_dir_all(caller_cwd).expect("caller cwd");
     let runtime_cwd = std::path::PathBuf::from(format!("/tmp/rtm-cwd-{}", Uuid::now_v7().simple()));
     std::fs::create_dir_all(&runtime_cwd).expect("runtime cwd");
-    std::fs::write(runtime_cwd.join(".rtm-print-cwd"), "").expect("cwd marker");
+    std::fs::write(runtime_cwd.join(".lilo-print-cwd"), "").expect("cwd marker");
     let runtime_cwd = std::fs::canonicalize(runtime_cwd).expect("canonical runtime cwd");
     let target = format!("tmux:{}", tmux_session.pane());
 
@@ -281,7 +281,7 @@ fn ctrl_c_interrupts_runtime_without_losing_tmux_pane(runtime: &str) {
     let expected_pane = tmux_session.pane();
     let spawn = harness
         .spawn_command(&session_id, runtime, &format!("tmux:{expected_pane}"), true)
-        .env("RTM_TEST_TUI_EXIT_WINDOW", "1")
+        .env("LILO_TEST_TUI_EXIT_WINDOW", "1")
         .output()
         .expect("spawn client");
     spawn_output_ok(spawn, runtime);

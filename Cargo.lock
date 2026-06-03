@@ -1045,6 +1045,7 @@ name = "lilo-common"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "lilo-paths",
  "serde",
  "serde_json",
  "thiserror",
@@ -1187,6 +1188,7 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "insta",
+ "lilo-build-support",
  "serde",
  "serde_json",
  "thiserror",

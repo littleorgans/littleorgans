@@ -97,19 +97,11 @@ pub(crate) fn runtime_env(request: &SpawnRequest) -> Vec<LaunchEnv> {
     let mut env = request.env.clone();
     upsert_launch_env(
         &mut env,
-        LaunchEnv::new("HELIOY_SESSION_ID", request.session_id.to_string()),
+        LaunchEnv::new("LILO_AGENT_SESSION_ID", request.session_id.to_string()),
     );
     upsert_launch_env(
         &mut env,
-        LaunchEnv::new("HELIOY_RUNTIME", request.runtime.to_string()),
-    );
-    upsert_launch_env(
-        &mut env,
-        LaunchEnv::new("RTM_SESSION_ID", request.session_id.to_string()),
-    );
-    upsert_launch_env(
-        &mut env,
-        LaunchEnv::new("RTM_RUNTIME_KIND", request.runtime.to_string()),
+        LaunchEnv::new("LILO_AGENT_RUNTIME", request.runtime.to_string()),
     );
     env
 }

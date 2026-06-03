@@ -13,7 +13,7 @@ pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     let config = daemon.dir.path().join("agent.toml");
     std::fs::write(
         &config,
-        "claude_config_dir = \"/tmp/demo-claude\"\n[env]\nHELIOY_AGENT_NAME = \"demo\"\n",
+        "claude_config_dir = \"/tmp/demo-claude\"\n[env]\nEXAMPLE_AGENT_NAME = \"demo\"\n",
     )
     .or_panic("agent config writes");
 
@@ -70,7 +70,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
         .join("demo-agent");
     std::fs::create_dir_all(&config_dir).or_panic("agent config dir creates");
     let config = config_dir.join("agent.toml");
-    std::fs::write(&config, "[env]\nHELIOY_AGENT_NAME = \"demo\"\n")
+    std::fs::write(&config, "[env]\nEXAMPLE_AGENT_NAME = \"demo\"\n")
         .or_panic("agent config writes");
     let _home = set_home_for_test(home.path());
 

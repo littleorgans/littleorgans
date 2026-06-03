@@ -107,7 +107,7 @@ impl Display for RuntimeFailure {
                 write!(formatter, "docker daemon is unavailable: {message}")
             }
             Self::DockerImageNotConfigured => {
-                formatter.write_str("docker image is not configured; pass --image or set RTM_DOCKER_IMAGE before starting the daemon")
+                formatter.write_str("docker image is not configured; pass --image or set LILO_DOCKER_IMAGE before starting the daemon")
             }
             Self::DockerImageUnavailable { message } => {
                 write!(formatter, "docker image is unavailable: {message}")

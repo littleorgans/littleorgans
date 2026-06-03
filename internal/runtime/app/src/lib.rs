@@ -10,4 +10,4 @@ pub mod generated;
 pub mod mcp;
 pub mod shared;
 
-pub const VERSION: &str = env!("RTM_CLI_VERSION");
+pub const VERSION: &str = env!("LILO_CLI_VERSION");

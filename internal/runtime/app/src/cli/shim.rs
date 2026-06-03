@@ -279,13 +279,13 @@ mod tests {
         // Rust's default test harness).
         let launch = LaunchSpec {
             argv: vec!["/usr/bin/env".to_owned()],
-            env: vec![LaunchEnv::new("RTM_ALLOWED_SENTINEL", "present")],
+            env: vec![LaunchEnv::new("LILO_TEST_ALLOWED_SENTINEL", "present")],
             cwd: PathBuf::from("/tmp"),
             shell_resume: None,
         };
 
         let mut command = Command::new("/usr/bin/env");
-        command.env("RTM_PRE_EXISTING_SENTINEL", "should_be_cleared");
+        command.env("LILO_TEST_PRE_EXISTING_SENTINEL", "should_be_cleared");
         apply_launch_env_cwd(&mut command, &launch);
 
         let output = command.output().expect("/usr/bin/env runs");
@@ -293,11 +293,11 @@ mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         assert!(
-            stdout.contains("RTM_ALLOWED_SENTINEL=present"),
+            stdout.contains("LILO_TEST_ALLOWED_SENTINEL=present"),
             "LaunchSpec.env was not delivered:\n{stdout}"
         );
         assert!(
-            !stdout.contains("RTM_PRE_EXISTING_SENTINEL"),
+            !stdout.contains("LILO_TEST_PRE_EXISTING_SENTINEL"),
             "pre-existing env was not cleared:\n{stdout}"
         );
         // The child should also not see PATH from this test process. Rust
@@ -313,7 +313,7 @@ mod tests {
     fn shell_resume_command_clears_pre_existing_env() {
         let resume = ShellResume {
             argv: vec!["/usr/bin/env".to_owned()],
-            env: vec![LaunchEnv::new("SHELL_RESUME_SENTINEL", "present")],
+            env: vec![LaunchEnv::new("LILO_TEST_SHELL_RESUME_SENTINEL", "present")],
             cwd: PathBuf::from("/tmp"),
         };
 
@@ -325,7 +325,7 @@ mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         assert!(
-            stdout.contains("SHELL_RESUME_SENTINEL=present"),
+            stdout.contains("LILO_TEST_SHELL_RESUME_SENTINEL=present"),
             "shell resume env was not delivered:\n{stdout}"
         );
         assert!(

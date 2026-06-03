@@ -378,6 +378,7 @@ impl LiloDaemon {
         let stderr = fixture.paths.tmp_root().join("lilod.stderr.log");
         fs::create_dir_all(&fake_bin)?;
         write_sleeping_runtime(&fake_bin, "claude")?;
+        write_fake_docker(&fake_bin)?;
         let path = path_with_prefix(&fake_bin)?;
         let stderr_file = fs::File::create(&stderr).context("daemon stderr log creates")?;
         let mut child = Command::new(&lilo)
@@ -466,14 +467,24 @@ fn lilo_home(fixture: &IntegrationFixture) -> Result<PathBuf> {
 }
 
 fn write_sleeping_runtime(dir: &Path, name: &str) -> Result<()> {
-    let path = dir.join(name);
-    fs::write(
-        &path,
+    write_executable_script(
+        &dir.join(name),
         "#!/bin/sh\ntrap 'exit 0' TERM INT\nwhile :; do sleep 60; done\n",
-    )?;
-    let mut permissions = fs::metadata(&path)?.permissions();
+    )
+}
+
+fn write_fake_docker(dir: &Path) -> Result<()> {
+    write_executable_script(
+        &dir.join("docker"),
+        "#!/bin/sh\nif [ \"$1\" = version ]; then\n  printf '24.0.0\\n'\n  exit 0\nfi\nexit 0\n",
+    )
+}
+
+fn write_executable_script(path: &Path, script: &str) -> Result<()> {
+    fs::write(path, script)?;
+    let mut permissions = fs::metadata(path)?.permissions();
     permissions.set_mode(0o755);
-    fs::set_permissions(&path, permissions)?;
+    fs::set_permissions(path, permissions)?;
     Ok(())
 }
 

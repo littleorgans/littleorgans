@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 use crate::docker_mount_plan;
 
-const RTM_DOCKER_CONTAINER_PREFIX: &str = "rtm";
-const RTM_DOCKER_SESSION_LABEL: &str = "io.helioy.runtime-matters.session";
+const LILO_DOCKER_CONTAINER_PREFIX: &str = "rtm";
+const LILO_DOCKER_SESSION_LABEL: &str = "com.littleorgans.runtime.session";
 
 pub(crate) fn container_name(session_id: Uuid) -> String {
-    format!("{RTM_DOCKER_CONTAINER_PREFIX}-{session_id}")
+    format!("{LILO_DOCKER_CONTAINER_PREFIX}-{session_id}")
 }
 
 pub(crate) fn docker_run_launch(
@@ -79,7 +79,7 @@ fn docker_run_base_argv(
         "--name".to_owned(),
         container_name(session_id),
         "--label".to_owned(),
-        format!("{RTM_DOCKER_SESSION_LABEL}={session_id}"),
+        format!("{LILO_DOCKER_SESSION_LABEL}={session_id}"),
     ];
     if cwd_plan.auto_mount_cwd {
         argv.push("--mount".to_owned());
@@ -279,7 +279,7 @@ mod tests {
     fn tmux_direct_run_preserves_special_chars_without_shell_quoting() {
         let launch = launch_spec(
             &["claude", "it's-safe"],
-            vec![LaunchEnv::new("RTM_QUOTE", "it's-safe")],
+            vec![LaunchEnv::new("LILO_TEST_QUOTE", "it's-safe")],
         );
 
         let spec = docker_run_launch(
@@ -293,7 +293,7 @@ mod tests {
         )
         .expect("docker tmux launch");
 
-        assert!(spec.argv.contains(&"RTM_QUOTE=it's-safe".to_owned()));
+        assert!(spec.argv.contains(&"LILO_TEST_QUOTE=it's-safe".to_owned()));
         assert!(spec.argv.contains(&"it's-safe".to_owned()));
         assert!(!spec.argv.iter().any(|arg| arg.contains("\\''")));
     }

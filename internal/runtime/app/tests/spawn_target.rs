@@ -103,7 +103,7 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
                 request: headless_spawn_request_with_env(
                     session_id,
                     harness.rtm_home(),
-                    vec![LaunchEnv::new("RTM_TEST_STDIO_SENTINELS", "1")],
+                    vec![LaunchEnv::new("LILO_TEST_STDIO_SENTINELS", "1")],
                 ),
             },
         ))
@@ -137,7 +137,7 @@ fn headless_spawn_cwd_flag_overrides_caller_cwd() {
     let caller_cwd = harness.rtm_home();
     let runtime_cwd = caller_cwd.join("runtime-cwd");
     std::fs::create_dir_all(&runtime_cwd).expect("runtime cwd");
-    std::fs::write(runtime_cwd.join(".rtm-print-cwd"), "").expect("cwd marker");
+    std::fs::write(runtime_cwd.join(".lilo-print-cwd"), "").expect("cwd marker");
     let runtime_cwd = std::fs::canonicalize(runtime_cwd).expect("canonical runtime cwd");
 
     let output = harness
@@ -167,7 +167,7 @@ fn headless_spawn_env_flag_forwards_caller_explicit_duplicate_and_empty_values()
     let output = harness
         .spawn_command(&session_id, "claude", "headless", true)
         .arg("--env")
-        .arg("RTM_TEST_PRINT_ENV=1")
+        .arg("LILO_TEST_PRINT_ENV=1")
         .arg("--env")
         .arg("CLAUDE_CODE_OAUTH_TOKEN")
         .arg("--env")
@@ -283,7 +283,7 @@ fn docker_spawn_env_flag_reaches_container_and_runtime() {
         .arg("--image")
         .arg("runtime-matters-agent:latest")
         .arg("--env")
-        .arg("RTM_TEST_PRINT_ENV=1")
+        .arg("LILO_TEST_PRINT_ENV=1")
         .arg("--env")
         .arg("CLAUDE_CODE_OAUTH_TOKEN")
         .arg("--env")

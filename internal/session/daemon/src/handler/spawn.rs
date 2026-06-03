@@ -389,18 +389,18 @@ fn spawn_launch(
     if let Some(config) = agent_config {
         merge_env(&mut env, config.env.clone());
     }
-    env.retain(|item| !item.key.starts_with("HELIOY_SESSION_"));
+    env.retain(|item| !item.key.starts_with("LILO_AGENT_"));
     upsert_env(
         &mut env,
-        LaunchEnv::new("HELIOY_SESSION_ID", id.to_string()),
+        LaunchEnv::new("LILO_AGENT_SESSION_ID", id.to_string()),
     );
     upsert_env(
         &mut env,
-        LaunchEnv::new("HELIOY_SESSION_ROLE", request.role.clone()),
+        LaunchEnv::new("LILO_AGENT_ROLE", request.role.clone()),
     );
     upsert_env(
         &mut env,
-        LaunchEnv::new("HELIOY_SESSION_WORKSPACE", request.workspace.clone()),
+        LaunchEnv::new("LILO_AGENT_WORKSPACE", request.workspace.clone()),
     );
     let cwd = std::path::PathBuf::from(&request.workspace);
     let shell_resume = shell_resume(request, &cwd);

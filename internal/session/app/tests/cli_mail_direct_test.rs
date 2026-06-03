@@ -16,7 +16,7 @@ fn direct_mail_cli_uses_session_identity_env() {
 
     let sent = daemon
         .lilo_command()
-        .env("HELIOY_SESSION_ID", &sender_id)
+        .env("LILO_AGENT_SESSION_ID", &sender_id)
         .args([
             "mail",
             "send",
@@ -61,7 +61,7 @@ fn direct_mail_cli_uses_session_identity_env() {
 
     let read = daemon
         .lilo_command()
-        .env("HELIOY_SESSION_ID", &recipient_id)
+        .env("LILO_AGENT_SESSION_ID", &recipient_id)
         .args(["mail", "read"])
         .output()
         .or_panic("lilo mail read executes");
@@ -70,7 +70,7 @@ fn direct_mail_cli_uses_session_identity_env() {
 
     let second_read = daemon
         .lilo_command()
-        .env("HELIOY_SESSION_ID", &recipient_id)
+        .env("LILO_AGENT_SESSION_ID", &recipient_id)
         .args(["mail", "read"])
         .output()
         .or_panic("second lilo mail read executes");
@@ -79,7 +79,7 @@ fn direct_mail_cli_uses_session_identity_env() {
 
     let agent_peek = daemon
         .lilo_command()
-        .env("HELIOY_SESSION_ID", &recipient_id)
+        .env("LILO_AGENT_SESSION_ID", &recipient_id)
         .args(["mail", "peek"])
         .output()
         .or_panic("agent lilo mail peek executes");

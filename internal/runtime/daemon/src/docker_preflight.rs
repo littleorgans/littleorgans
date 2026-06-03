@@ -1,14 +1,13 @@
 use anyhow::Result;
+use lilo_paths::env::{
+    LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE, LILO_DOCKER_ALLOW_ROOT_IMAGE_USER, LILO_DOCKER_IMAGE,
+};
 use lilo_rm_core::SpawnRequest;
 use serde::Deserialize;
 use tokio::process::Command;
 
 use crate::docker_command::stderr_or;
 use crate::error::RuntimeFailure;
-
-const RTM_DOCKER_IMAGE: &str = "RTM_DOCKER_IMAGE";
-const RTM_DOCKER_ALLOW_ROOT_IMAGE_USER: &str = "RTM_DOCKER_ALLOW_ROOT_IMAGE_USER";
-const RTM_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE: &str = "RTM_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE";
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct DockerPreflightConfig {
@@ -20,12 +19,12 @@ pub struct DockerPreflightConfig {
 impl DockerPreflightConfig {
     pub fn from_env() -> Self {
         Self {
-            image: std::env::var(RTM_DOCKER_IMAGE)
+            image: std::env::var(LILO_DOCKER_IMAGE)
                 .ok()
                 .filter(|value| !value.trim().is_empty())
                 .map(|value| trimmed_string(&value)),
-            allow_root_image_user: env_flag(RTM_DOCKER_ALLOW_ROOT_IMAGE_USER),
-            allow_arm64_manifest_escape: env_flag(RTM_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE),
+            allow_root_image_user: env_flag(LILO_DOCKER_ALLOW_ROOT_IMAGE_USER),
+            allow_arm64_manifest_escape: env_flag(LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE),
         }
     }
 

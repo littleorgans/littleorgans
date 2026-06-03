@@ -1,6 +1,6 @@
 set shell := ["bash", "-cu"]
 
-LILO_LOCAL_BIN := env("LILO_LOCAL_BIN", env("HOME") / ".cargo/bin/lilo")
+LILO_DEV_BIN := env("LILO_DEV_BIN", env("HOME") / ".cargo/bin/lilo")
 BASE_REF := env("BASE_REF", "main")
 
 default:
@@ -76,7 +76,7 @@ install-release: build-install-release
 _install-bin src:
     @set -eu; \
     src="$(pwd)/{{src}}"; \
-    dest="{{LILO_LOCAL_BIN}}"; \
+    dest="{{LILO_DEV_BIN}}"; \
     case "$dest" in /*) ;; *) dest="$(pwd)/$dest";; esac; \
     if [ "$src" = "$dest" ]; then \
         echo "Built $src"; \
@@ -112,6 +112,9 @@ check-provenance:
 check-seam:
     bash scripts/check-seam.sh
 
+check-env:
+    python3 scripts/check-env.sh --check
+
 # Scope clippy to changed crates + reverse-dep closure. Run read-only clippy
 # first because `cargo clippy --fix` uses a different fingerprint mode from
 # read-only clippy and triggers a full workspace recompile on every invocation
@@ -145,7 +148,7 @@ _clippy-incremental:
 # to changed crates + reverse deps. fmt / loc / provenance / seam always run
 # workspace-wide because they are cheap and operate on raw files, not the
 # Rust compile graph.
-check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam
+check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam check-env
 
 # Full-workspace gate. Use before merging to main, in CI, or any time the
 # scoping heuristic in scripts/changed-crates.sh might miss a regression
@@ -157,5 +160,6 @@ regression:
     bash scripts/check-loc-limit.sh
     bash scripts/check-provenance.sh
     bash scripts/check-seam.sh
+    python3 scripts/check-env.sh --check
     cargo clippy --workspace --all-targets -- -D warnings
     cargo nextest run --workspace

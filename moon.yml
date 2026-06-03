@@ -50,6 +50,7 @@ tasks:
       - "check-loc"
       - "check-provenance"
       - "check-seam"
+      - "check-env"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
@@ -100,6 +101,15 @@ tasks:
     options:
       runInCI: "always"
 
+  check-env:
+    command: "python3 scripts/check-env.sh --check"
+    inputs:
+      - "@globs(sources)"
+      - "@globs(tests)"
+      - "scripts/check-env.sh"
+    options:
+      runInCI: "always"
+
   check:
     deps:
       - "fmt-check"
@@ -107,5 +117,6 @@ tasks:
       - "check-loc"
       - "check-provenance"
       - "check-seam"
+      - "check-env"
     options:
       runInCI: false

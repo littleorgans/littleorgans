@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(e_values, vec!["LILO_SOCKET_PATH=/tmp/lilod.sock"]);
 
         for forbidden in [
-            "HELIOY_PAT=",
+            "LILO_GITHUB_PAT=",
             "ANTHROPIC_API_KEY=",
             "PATH=",
             "CLAUDE_CODE_SESSION_ID=",

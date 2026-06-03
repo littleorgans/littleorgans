@@ -1,12 +1,10 @@
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use crate::env::env_path;
+use crate::env::{LILO_HOME, LILO_SOCKET_PATH, env_path};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub(crate) const LILO_HOME_ENV: &str = "LILO_HOME";
-pub(crate) const LILO_SOCKET_PATH_ENV: &str = "LILO_SOCKET_PATH";
 const HOME_ENV: &str = "HOME";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -16,7 +14,7 @@ pub struct LiloHome {
 
 impl LiloHome {
     pub fn from_env() -> Result<Self, LiloPathError> {
-        if let Some(path) = env_path(LILO_HOME_ENV) {
+        if let Some(path) = env_path(LILO_HOME) {
             return Self::from_path(path);
         }
 
@@ -95,7 +93,7 @@ impl LiloPaths {
     }
 
     pub fn socket_path(&self) -> PathBuf {
-        env_path(LILO_SOCKET_PATH_ENV).unwrap_or_else(|| self.run_root().join("lilod.sock"))
+        env_path(LILO_SOCKET_PATH).unwrap_or_else(|| self.run_root().join("lilod.sock"))
     }
 
     pub fn pid_path(&self) -> PathBuf {
@@ -171,22 +169,12 @@ mod tests {
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     const DEFAULT_HOME: &str = "/tmp/lilo-home";
     const FALLBACK_HOME: &str = "/tmp/home";
-    const LEGACY_VALUE: &str = "/tmp/legacy";
-
-    macro_rules! legacy_env_ignored_test {
-        ($test_name:ident, $legacy_name:literal) => {
-            #[test]
-            fn $test_name() {
-                assert_legacy_env_is_ignored($legacy_name);
-            }
-        };
-    }
 
     #[test]
     fn lilo_home_env_roots_every_path() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", None),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, None),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -197,8 +185,8 @@ mod tests {
     #[test]
     fn home_env_fallback_roots_every_path_under_dot_lilo() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", None),
-            ("LILO_SOCKET_PATH", None),
+            (LILO_HOME, None),
+            (LILO_SOCKET_PATH, None),
             ("HOME", Some(FALLBACK_HOME)),
         ]);
 
@@ -209,8 +197,8 @@ mod tests {
     #[test]
     fn socket_override_wins_without_moving_other_paths() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", Some("/custom/sock")),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, Some("/custom/sock")),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -255,8 +243,8 @@ mod tests {
     #[test]
     fn endpoint_uses_paths_display_and_stable_json_string() {
         let _env = EnvGuard::new(&[
-            ("LILO_HOME", Some(DEFAULT_HOME)),
-            ("LILO_SOCKET_PATH", Some("/custom/sock")),
+            (LILO_HOME, Some(DEFAULT_HOME)),
+            (LILO_SOCKET_PATH, Some("/custom/sock")),
             ("HOME", Some("/tmp/ignored-home")),
         ]);
 
@@ -275,7 +263,7 @@ mod tests {
 
     #[test]
     fn missing_home_errors_when_no_lilo_home_or_home_exist() {
-        let _env = EnvGuard::new(&[("LILO_HOME", None), ("HOME", None)]);
+        let _env = EnvGuard::new(&[(LILO_HOME, None), ("HOME", None)]);
 
         assert_eq!(LiloHome::from_env(), Err(LiloPathError::MissingHome));
     }
@@ -286,29 +274,6 @@ mod tests {
             LiloHome::from_path(PathBuf::new()),
             Err(LiloPathError::EmptyPath)
         );
-    }
-
-    legacy_env_ignored_test!(rtm_home_is_ignored, "RTM_HOME");
-    legacy_env_ignored_test!(rtm_socket_path_is_ignored, "RTM_SOCKET_PATH");
-    legacy_env_ignored_test!(sm_home_is_ignored, "SM_HOME");
-    legacy_env_ignored_test!(sm_socket_path_is_ignored, "SM_SOCKET_PATH");
-    legacy_env_ignored_test!(sm_db_path_is_ignored, "SM_DB_PATH");
-    legacy_env_ignored_test!(sm_namespace_is_ignored, "SM_NAMESPACE");
-    legacy_env_ignored_test!(rtm_db_path_is_ignored, "RTM_DB_PATH");
-    legacy_env_ignored_test!(lilo_db_path_is_ignored, "LILO_DB_PATH");
-    legacy_env_ignored_test!(agm_home_is_ignored, "AGM_HOME");
-
-    fn assert_legacy_env_is_ignored(legacy_name: &'static str) {
-        let _env = EnvGuard::new(&[
-            ("LILO_HOME", None),
-            ("LILO_SOCKET_PATH", None),
-            ("HOME", Some(FALLBACK_HOME)),
-            (legacy_name, Some(LEGACY_VALUE)),
-        ]);
-
-        let root = Path::new(FALLBACK_HOME).join(".lilo");
-        let paths = paths_from_env();
-        assert_default_tree(&paths, root.as_path());
     }
 
     fn paths_from_env() -> LiloPaths {

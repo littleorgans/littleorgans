@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint};
+use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint, env::LILO_TMUX_SERVER_LABEL};
 use lilo_runtime_store::StoreConfig;
 use uuid::Uuid;
 
 use crate::{docker_preflight::DockerPreflightConfig, reconcile};
-
-const LILO_TMUX_SERVER_LABEL: &str = "LILO_TMUX_SERVER_LABEL";
 
 #[derive(Clone, Debug)]
 pub struct DaemonConfig {

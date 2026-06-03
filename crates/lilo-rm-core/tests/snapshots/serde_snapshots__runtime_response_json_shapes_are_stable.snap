@@ -138,7 +138,7 @@ expression: responses
         ],
         "env": [
           {
-            "key": "RTM",
+            "key": "EXAMPLE_RUNTIME_MARKER",
             "value": "1"
           }
         ],

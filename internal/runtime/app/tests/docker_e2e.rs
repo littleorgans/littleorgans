@@ -10,7 +10,7 @@ use common::{RtmHarness, output_stdout, wait_until};
 use tempfile::TempDir;
 use uuid::Uuid;
 
-const E2E_ENV: &str = "RTM_E2E_DOCKER";
+const E2E_ENV: &str = "LILO_TEST_E2E_DOCKER";
 
 #[test]
 fn real_docker_spawn_lifecycle_is_opt_in() {

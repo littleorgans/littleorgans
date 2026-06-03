@@ -16,7 +16,7 @@ pub async fn run_stdio_bridge() -> Result<()> {
         let response = crate::cli::client::send_request(&SessionRpc::McpBridge {
             request: McpBridgeRequest {
                 line,
-                caller_session_id: std::env::var("HELIOY_SESSION_ID").ok(),
+                caller_session_id: std::env::var("LILO_AGENT_SESSION_ID").ok(),
             },
         })
         .await?;

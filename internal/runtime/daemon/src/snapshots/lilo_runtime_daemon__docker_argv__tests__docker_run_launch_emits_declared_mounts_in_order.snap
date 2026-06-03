@@ -10,7 +10,7 @@ expression: spec.argv
     "--name",
     "rtm-00000000-0000-0000-0000-000000000000",
     "--label",
-    "io.helioy.runtime-matters.session=00000000-0000-0000-0000-000000000000",
+    "com.littleorgans.runtime.session=00000000-0000-0000-0000-000000000000",
     "--mount",
     "type=bind,src=/workspace/project,dst=/workspace/project",
     "--mount",

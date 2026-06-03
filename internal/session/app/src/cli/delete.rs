@@ -105,7 +105,7 @@ fn clear_binding_if_matches(namespace: &Namespace) -> Result<bool> {
 
 fn fail_binding_clear_for_tests() -> Result<()> {
     #[cfg(debug_assertions)]
-    if std::env::var_os("LILO_FAULT_NAMESPACE_BINDING_CLEAR").is_some() {
+    if std::env::var_os("LILO_TEST_FAULT_NAMESPACE_BINDING_CLEAR").is_some() {
         bail!("fault injected while clearing namespace binding");
     }
     Ok(())

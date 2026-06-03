@@ -65,7 +65,7 @@ impl DaemonFixture {
     pub fn spawn_mcp_for_session(&self, session_id: &str, current_dir: &Path) -> McpFixture {
         let child = self
             .mcp_command()
-            .env("HELIOY_SESSION_ID", session_id)
+            .env("LILO_AGENT_SESSION_ID", session_id)
             .current_dir(current_dir)
             .spawn()
             .or_panic("sm mcp starts");
@@ -180,7 +180,7 @@ impl Drop for McpFixture {
 }
 
 pub fn sm_bin() -> PathBuf {
-    if let Some(path) = std::env::var_os("LILO_BENCH_BIN") {
+    if let Some(path) = std::env::var_os("LILO_TEST_BENCH_BIN") {
         return PathBuf::from(path);
     }
     assert_cmd::cargo::cargo_bin("sm")
