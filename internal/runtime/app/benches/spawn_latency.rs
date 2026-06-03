@@ -5,8 +5,8 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{RuntimeResponse, RuntimeRpc};
-use uuid::Uuid;
 
 const DEFAULT_SAMPLES: usize = 10;
 const P50_LIMIT: Duration = Duration::from_millis(200);
@@ -18,7 +18,7 @@ fn main() {
     let mut latencies = Vec::with_capacity(samples);
 
     for _ in 0..samples {
-        let session_id = Uuid::now_v7();
+        let session_id = SessionId::new();
         let started = Instant::now();
         let response = runtime
             .block_on(lilo_runtime_app::shared::request(

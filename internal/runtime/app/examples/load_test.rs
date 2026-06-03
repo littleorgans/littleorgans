@@ -80,7 +80,7 @@ fn spawn_one(
     let response = runtime
         .block_on(spawn_support::spawn_runtime(
             harness.socket_path(),
-            SessionId::from_uuid(uuid::Uuid::now_v7()),
+            SessionId::new(),
             RuntimeKind::Claude,
             target,
         ))

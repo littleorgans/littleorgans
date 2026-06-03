@@ -5,8 +5,8 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{RuntimeResponse, StatusFilter};
-use uuid::Uuid;
 
 const DEFAULT_SAMPLES: usize = 100;
 const P50_LIMIT: Duration = Duration::from_millis(5);
@@ -14,7 +14,7 @@ const P50_LIMIT: Duration = Duration::from_millis(5);
 fn main() {
     let samples = common::bench_sample_count(DEFAULT_SAMPLES);
     let harness = common::RtmHarness::start();
-    let session_id = Uuid::now_v7().to_string();
+    let session_id = SessionId::new().to_string();
     common::spawn_ok(&harness, &session_id, "claude");
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     let mut latencies = Vec::with_capacity(samples);
