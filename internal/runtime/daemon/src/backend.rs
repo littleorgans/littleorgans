@@ -212,7 +212,7 @@ mod tests {
     fn launch_spec() -> LaunchSpec {
         LaunchSpec {
             argv: vec!["claude".to_owned()],
-            env: vec![LaunchEnv::new("RTM_TEST", "1")],
+            env: vec![LaunchEnv::new("LILO_TEST_ENV", "1")],
             cwd: PathBuf::from("/tmp"),
             shell_resume: None,
         }

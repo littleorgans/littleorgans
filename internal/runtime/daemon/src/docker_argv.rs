@@ -279,7 +279,7 @@ mod tests {
     fn tmux_direct_run_preserves_special_chars_without_shell_quoting() {
         let launch = launch_spec(
             &["claude", "it's-safe"],
-            vec![LaunchEnv::new("RTM_QUOTE", "it's-safe")],
+            vec![LaunchEnv::new("LILO_TEST_QUOTE", "it's-safe")],
         );
 
         let spec = docker_run_launch(
@@ -293,7 +293,7 @@ mod tests {
         )
         .expect("docker tmux launch");
 
-        assert!(spec.argv.contains(&"RTM_QUOTE=it's-safe".to_owned()));
+        assert!(spec.argv.contains(&"LILO_TEST_QUOTE=it's-safe".to_owned()));
         assert!(spec.argv.contains(&"it's-safe".to_owned()));
         assert!(!spec.argv.iter().any(|arg| arg.contains("\\''")));
     }

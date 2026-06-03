@@ -117,7 +117,7 @@ fn spawn_isolation_flag_rejects_invalid_policy_before_daemon_request() {
 
 #[test]
 fn spawn_env_flag_rejects_missing_caller_env_before_daemon_request() {
-    let key = format!("RTM_TEST_MISSING_{}", Uuid::now_v7().simple());
+    let key = format!("LILO_TEST_MISSING_{}", Uuid::now_v7().simple());
     let output = spawn_command()
         .args(["--env", &key])
         .env_remove(&key)

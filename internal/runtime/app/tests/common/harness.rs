@@ -349,7 +349,7 @@ fn write_fake_runtime(dir: &Path, name: &str) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "#!/bin/sh\nif [ \"${{RTM_TEST_STDIO_SENTINELS:-}}\" = 1 ]; then\n  printf 'HELLO\\n'\n  printf 'WORLD\\n' >&2\n  exec sleep 60\nfi\nif [ \"${{RTM_TEST_TUI_EXIT_WINDOW:-}}\" = 1 ]; then\n  trap 'trap \"\" INT; printf \"press CTRL+C to quit\\n\"; sleep 1; exit 130' INT\n  printf '{FAKE_RUNTIME_READY}\\n'\n  while :; do sleep 60; done\nfi\nif [ \"${{RTM_TEST_PRINT_CWD:-}}\" = 1 ] || [ -f .rtm-print-cwd ]; then\n  printf '{FAKE_RUNTIME_READY} %s\\n' \"$(pwd)\"\n  exec sleep 60\nfi\nif [ \"${{RTM_TEST_PRINT_ENV:-}}\" = 1 ]; then\n  env | sort\n  exec sleep 60\nfi\nprintf '{FAKE_RUNTIME_READY}\\n'\nexec sleep 60\n"
+            "#!/bin/sh\nif [ \"${{LILO_TEST_STDIO_SENTINELS:-}}\" = 1 ]; then\n  printf 'HELLO\\n'\n  printf 'WORLD\\n' >&2\n  exec sleep 60\nfi\nif [ \"${{LILO_TEST_TUI_EXIT_WINDOW:-}}\" = 1 ]; then\n  trap 'trap \"\" INT; printf \"press CTRL+C to quit\\n\"; sleep 1; exit 130' INT\n  printf '{FAKE_RUNTIME_READY}\\n'\n  while :; do sleep 60; done\nfi\nif [ -f .lilo-print-cwd ]; then\n  printf '{FAKE_RUNTIME_READY} %s\\n' \"$(pwd)\"\n  exec sleep 60\nfi\nif [ \"${{LILO_TEST_PRINT_ENV:-}}\" = 1 ]; then\n  env | sort\n  exec sleep 60\nfi\nprintf '{FAKE_RUNTIME_READY}\\n'\nexec sleep 60\n"
         ),
     )
     .expect("fake runtime");
