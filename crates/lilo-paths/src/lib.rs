@@ -2,7 +2,7 @@
 
 //! Local littleorgans path policy plus folded runtime and session path contracts.
 
-mod env;
+pub mod env;
 mod lilo;
 mod runtime;
 
