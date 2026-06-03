@@ -1324,6 +1324,7 @@ version = "0.8.0"
 dependencies = [
  "chrono",
  "indexmap",
+ "lilo-common",
  "lilo-paths",
  "lilo-rm-core",
  "serde",

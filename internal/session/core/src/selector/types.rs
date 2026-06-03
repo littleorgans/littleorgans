@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use lilo_common::id::SessionId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::namespace::Namespace;
 
@@ -10,7 +10,7 @@ use crate::namespace::Namespace;
 #[derive(Default)]
 pub enum Selector {
     Id {
-        id: Uuid,
+        id: SessionId,
     },
     Label {
         key: String,

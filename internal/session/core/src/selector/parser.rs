@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use uuid::Uuid;
+use lilo_common::id::SessionId;
 
 use crate::label::parse_label_token;
 use crate::namespace::Namespace;
@@ -19,12 +19,12 @@ impl FromStr for Selector {
         if value == "all" {
             return Ok(Self::All);
         }
-        if let Ok(id) = Uuid::parse_str(value) {
+        if let Ok(id) = SessionId::from_str(value) {
             return Ok(Self::Id { id });
         }
         if let Some(raw) = value.strip_prefix("id:") {
             return Ok(Self::Id {
-                id: Uuid::parse_str(raw.trim())?,
+                id: SessionId::from_str(raw.trim())?,
             });
         }
         if let Some(raw) = value.strip_prefix("role:") {

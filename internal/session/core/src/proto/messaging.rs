@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use super::TargetError;
 use crate::{MailCountView, MailIntent, MailNotifyMode, MailSendResult, MessageView, Selector};
 use chrono::{DateTime, Utc};
+use lilo_common::id::MessageId;
 use lilo_rm_core::NudgeMode;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailSendRequest {
@@ -48,7 +48,7 @@ pub struct MailLogFilter {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MailLogCursor {
     pub sent_at: DateTime<Utc>,
-    pub message_id: Uuid,
+    pub message_id: MessageId,
 }
 
 impl MailLogCursor {

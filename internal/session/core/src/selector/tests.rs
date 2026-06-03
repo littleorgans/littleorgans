@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use uuid::Uuid;
+use lilo_common::id::SessionId;
 
 use crate::namespace::Namespace;
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
@@ -10,7 +10,7 @@ use super::{LabelOp, NamespaceScope, Selector};
 
 #[test]
 fn selector_parser_covers_closed_grammar() {
-    let id = Uuid::now_v7();
+    let id = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     assert_eq!(
         Selector::from_str("all").or_panic("expected value"),
@@ -64,7 +64,7 @@ fn selector_parser_covers_closed_grammar() {
 
 #[test]
 fn selector_display_round_trips_through_from_str() {
-    let id = Uuid::now_v7();
+    let id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let cases = vec![
         Selector::All,
         Selector::Id { id },
