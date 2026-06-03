@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, SystemTime};
 
+use lilo_common::id::{MessageId, SessionId};
 use lilo_session_core::{Label, MailCountView, MailSendResult, MessageView, SenderView, Session};
-use uuid::Uuid;
 
 const CONTENT_PREVIEW_MAX_CHARS: usize = 120;
 const PREVIEW_ELLIPSIS: &str = "...";
@@ -182,8 +182,8 @@ fn mail_send_cells(result: &MailSendResult, include_error: bool) -> Vec<String> 
 
 struct ConversationSummary<'a> {
     context_id: &'a str,
-    message_ids: BTreeSet<Uuid>,
-    recipient_ids: BTreeSet<Uuid>,
+    message_ids: BTreeSet<MessageId>,
+    recipient_ids: BTreeSet<SessionId>,
     latest: Option<&'a MessageView>,
 }
 
@@ -404,14 +404,13 @@ mod tests {
     #[test]
     fn message_row_places_recipient_session_id_after_recipient() {
         use chrono::Utc;
+        use lilo_common::id::{MessageId, SessionId};
         use lilo_session_core::{
             MailIntent, MailStatus, MessageView, Namespace, RecipientSummary, SenderView,
         };
-        use uuid::Uuid;
-
-        let recipient_id = Uuid::from_u128(1);
+        let recipient_id = SessionId::from_uuid(uuid::Uuid::from_u128(1));
         let view = MessageView {
-            id: Uuid::from_u128(2),
+            id: MessageId::from_uuid(uuid::Uuid::from_u128(2)),
             content: "what are we working on?".to_string(),
             sent_at: Utc::now(),
             read_at: None,

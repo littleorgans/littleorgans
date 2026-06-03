@@ -51,6 +51,7 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
 
 #[cfg(test)]
 mod tests {
+    use lilo_common::id::SessionId;
     use lilo_im_core::Action;
     use lilo_rm_core::NudgeMode;
     use lilo_session_core::{
@@ -60,7 +61,6 @@ mod tests {
         NamespaceCreateRequest, NamespaceDeleteRequest, NamespaceGetRequest, NamespaceListRequest,
         NudgeRequest, RuntimeKind, Selector, SessionRpc, SpawnRequest, WaitCondition, WaitRequest,
     };
-    use uuid::Uuid;
 
     use super::{AuthzPlan, authz_plan};
 
@@ -205,7 +205,7 @@ mod tests {
             },
             SessionRpc::Capture {
                 request: CaptureRequest {
-                    session_id: Uuid::nil(),
+                    session_id: SessionId::from_uuid(uuid::Uuid::nil()),
                     scrollback_lines: None,
                 },
             },
@@ -214,7 +214,7 @@ mod tests {
             },
             SessionRpc::CallerContext {
                 request: CallerContextRequest {
-                    caller_session_id: Uuid::nil().to_string(),
+                    caller_session_id: SessionId::from_uuid(uuid::Uuid::nil()).to_string(),
                     request: Box::new(SessionRpc::MailRead {
                         request: MailReadRequest {},
                     }),

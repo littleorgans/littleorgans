@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_im_core::{Action, AuditRow, Principal, ResourceSpec};
 use lilo_paths::{LiloHome, LiloPaths};
@@ -27,7 +28,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tokio::io::BufReader;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinHandle;
-use uuid::Uuid;
 
 #[path = "../../../test_support.rs"]
 pub mod shared_test_support;
@@ -301,7 +301,11 @@ pub fn spawn_request(
     }
 }
 
-pub async fn mail_count(state: &DaemonState, context: RequestContext, session_id: Uuid) -> usize {
+pub async fn mail_count(
+    state: &DaemonState,
+    context: RequestContext,
+    session_id: SessionId,
+) -> usize {
     let response = state
         .handle(
             context,

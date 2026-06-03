@@ -1,6 +1,7 @@
 mod common;
 
 use common::{LOCAL_UID, TestDaemon, local_context, mail_count, mail_request};
+use lilo_common::id::SessionId;
 use lilo_session_core::{
     MailIntent, MailLogFilter, MailPeekRequest, MailReadRequest, MailTailRequest, RpcResponse,
     Selector, SenderView, SessionRpc,
@@ -63,7 +64,7 @@ async fn operator_transcript_hides_system_receipts_by_default() {
     assert_eq!(mail_count(&daemon.state, context, sender.id).await, 1);
 }
 
-async fn send_mail(daemon: &TestDaemon, sender_id: uuid::Uuid, recipient_id: uuid::Uuid) {
+async fn send_mail(daemon: &TestDaemon, sender_id: SessionId, recipient_id: SessionId) {
     let sent = daemon
         .state
         .handle(
@@ -81,7 +82,7 @@ async fn send_mail(daemon: &TestDaemon, sender_id: uuid::Uuid, recipient_id: uui
     assert!(matches!(sent.response, RpcResponse::MailSent { .. }));
 }
 
-async fn read_mail(daemon: &TestDaemon, recipient_id: uuid::Uuid) {
+async fn read_mail(daemon: &TestDaemon, recipient_id: SessionId) {
     let read = daemon
         .state
         .handle(

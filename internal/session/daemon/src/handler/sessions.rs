@@ -2,12 +2,12 @@ use std::future::Future;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_im_core::Action;
 use lilo_session_core::{
     CaptureRequest, CaptureResponse, DeleteRequest, DeleteResponse, LabelRequest, LabelResponse,
     ListRequest, ListResponse, RpcResponse, Selector, Session, SessionState, TargetError,
 };
-use uuid::Uuid;
 
 use crate::identity_client::{RequestContext, session_resource};
 
@@ -92,7 +92,7 @@ impl DaemonState {
         &self,
         context: &RequestContext,
         request: &DeleteRequest,
-        id: Uuid,
+        id: SessionId,
     ) -> Result<Session> {
         self.identity
             .authorize(&context.principal, Action::Kill, &session_resource(id))
@@ -132,7 +132,7 @@ impl DaemonState {
     async fn label_one(
         &self,
         context: &RequestContext,
-        target_id: Uuid,
+        target_id: SessionId,
         request: &LabelRequest,
     ) -> Result<Session> {
         self.identity
@@ -155,7 +155,7 @@ impl DaemonState {
         mut apply: F,
     ) -> Result<(Vec<Session>, Vec<TargetError>)>
     where
-        F: FnMut(Uuid) -> Fut,
+        F: FnMut(SessionId) -> Fut,
         Fut: Future<Output = Result<Session>>,
     {
         let targets = self.resolve_selector(selector, "session").await?;

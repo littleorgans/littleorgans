@@ -1,7 +1,7 @@
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_im_core::{Action, ResourceSpec};
 use lilo_session_core::{McpBridgeResponse, RpcResponse, SessionRpc, ShutdownResponse};
-use uuid::Uuid;
 
 use crate::identity_client::RequestContext;
 
@@ -140,7 +140,7 @@ fn with_caller_session_id(
     raw: &str,
     label: &str,
 ) -> std::result::Result<RequestContext, String> {
-    Uuid::parse_str(raw)
+    raw.parse::<SessionId>()
         .map(|id| context.with_caller_session_id(id))
         .map_err(|error| format!("invalid {label}: {error}"))
 }

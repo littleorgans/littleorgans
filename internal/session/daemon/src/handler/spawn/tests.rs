@@ -44,7 +44,7 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
         Arc::clone(&runtime),
     );
     let mut child = ChildGuard::spawn(temp.path());
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let namespace = Namespace::new("deleted").expect("namespace validates");
     let request = spawn_request(session_id, namespace, temp.path());
     let intent = pending_intent(session_id, &request);
@@ -109,8 +109,8 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
     );
     let store = SqliteStore::open(&db);
     let lifecycle_store = LifecycleStore::open(&db);
-    let bad_session_id = Uuid::now_v7();
-    let good_session_id = Uuid::now_v7();
+    let bad_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let good_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let bad_request = spawn_request(
         bad_session_id,
         Namespace::new("deleted").expect("namespace validates"),
@@ -234,7 +234,7 @@ impl Drop for ChildGuard {
 
 struct StaticStatusRuntimePort {
     lifecycles: Vec<Lifecycle>,
-    terminated_session_ids: Mutex<Vec<Uuid>>,
+    terminated_session_ids: Mutex<Vec<SessionId>>,
 }
 
 impl StaticStatusRuntimePort {
@@ -245,7 +245,7 @@ impl StaticStatusRuntimePort {
         }
     }
 
-    fn terminated(&self, session_id: Uuid) -> bool {
+    fn terminated(&self, session_id: SessionId) -> bool {
         self.terminated_session_ids
             .lock()
             .expect("terminated ids lock succeeds")
@@ -281,13 +281,13 @@ impl RuntimePort for StaticStatusRuntimePort {
         _grace: Duration,
     ) -> PortFuture<'a, Option<ChildExit>> {
         Box::pin(async move {
-            let session_id_uuid = Uuid::parse_str(session_id).map_err(|_| {
+            let session_id = session_id.parse::<SessionId>().map_err(|_| {
                 RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string()))
             })?;
             self.terminated_session_ids
                 .lock()
                 .expect("terminated ids lock succeeds")
-                .push(session_id_uuid);
+                .push(session_id);
             Ok(Some(ChildExit {
                 session_id: session_id.to_string(),
                 runtime_pid: 1001,
@@ -335,18 +335,18 @@ fn read_runtime_pid(pid_file: &Path, child: &mut Child) -> u32 {
     panic!("runtime pid file was not written");
 }
 
-fn pending_intent(session_id: Uuid, request: &SpawnRequest) -> PendingSpawnIntent {
+fn pending_intent(session_id: SessionId, request: &SpawnRequest) -> PendingSpawnIntent {
     let launch = spawn_launch(session_id, request, None);
     let runtime_request =
         runtime_spawn_request(session_id, &launch).expect("runtime request builds");
     PendingSpawnIntent::new(
-        Uuid::now_v7(),
+        IntentId::from_uuid(uuid::Uuid::now_v7()),
         runtime_request,
         SessionDraft::new(&draft_session(session_id, request)),
     )
 }
 
-fn draft_session(session_id: Uuid, request: &SpawnRequest) -> Session {
+fn draft_session(session_id: SessionId, request: &SpawnRequest) -> Session {
     let created_at = Utc::now();
     Session {
         id: session_id,
@@ -393,7 +393,7 @@ async fn insert_running_lifecycle(store: &LifecycleStore, lifecycle: &Lifecycle)
         .expect("running lifecycle updates");
 }
 
-fn running_lifecycle(session_id: Uuid, runtime_pid: u32) -> Lifecycle {
+fn running_lifecycle(session_id: SessionId, runtime_pid: u32) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
     lifecycle.isolation = IsolationPolicy::Host;
     mark_running(&mut lifecycle, runtime_pid);
@@ -408,7 +408,7 @@ fn unsupported_port_call<T: Send + 'static>(operation: &'static str) -> PortFutu
     })
 }
 
-fn spawn_request(session_id: Uuid, namespace: Namespace, dir: &Path) -> SpawnRequest {
+fn spawn_request(session_id: SessionId, namespace: Namespace, dir: &Path) -> SpawnRequest {
     SpawnRequest {
         runtime: RuntimeKind::Claude,
         role: "pm".to_string(),

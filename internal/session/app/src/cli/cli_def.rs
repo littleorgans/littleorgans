@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationPolicy, MountSpec};
 use lilo_session_core::{MailNotifyMode, Namespace, RuntimeKind};
 
@@ -242,7 +243,7 @@ pub struct LogsArgs {
 #[command(arg_required_else_help = true)]
 pub struct CaptureArgs {
     #[arg(help = generated_help::SESSION_CAPTURE_ID_HELP)]
-    pub session_id: uuid::Uuid,
+    pub session_id: SessionId,
     #[arg(long = "scrollback-lines", help = generated_help::SESSION_CAPTURE_SCROLLBACK_LINES_HELP)]
     pub scrollback_lines: Option<u32>,
 }

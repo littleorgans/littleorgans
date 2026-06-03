@@ -1,8 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_session_core::{Mail, MessageView, RecipientSummary, SenderRef, SenderView, Session};
-use uuid::Uuid;
 
 use super::DaemonState;
 
@@ -20,7 +20,10 @@ pub(super) async fn message_views(
         .collect()
 }
 
-async fn message_sessions(state: &DaemonState, mail: &[Mail]) -> Result<HashMap<Uuid, Session>> {
+async fn message_sessions(
+    state: &DaemonState,
+    mail: &[Mail],
+) -> Result<HashMap<SessionId, Session>> {
     let mut ids = BTreeSet::new();
     for item in mail {
         ids.insert(item.recipient_id);
@@ -40,7 +43,7 @@ async fn message_sessions(state: &DaemonState, mail: &[Mail]) -> Result<HashMap<
         .collect())
 }
 
-fn sender_view(sender: &SenderRef, sessions: &HashMap<Uuid, Session>) -> Result<SenderView> {
+fn sender_view(sender: &SenderRef, sessions: &HashMap<SessionId, Session>) -> Result<SenderView> {
     match sender {
         SenderRef::Session { session_id } => {
             let session = sessions
@@ -54,8 +57,8 @@ fn sender_view(sender: &SenderRef, sessions: &HashMap<Uuid, Session>) -> Result<
 }
 
 fn recipient_summary(
-    recipient_id: Uuid,
-    sessions: &HashMap<Uuid, Session>,
+    recipient_id: SessionId,
+    sessions: &HashMap<SessionId, Session>,
 ) -> Result<RecipientSummary> {
     let session = sessions
         .get(&recipient_id)

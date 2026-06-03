@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use lilo_common::id::MessageId;
 use lilo_runtime_daemon::RuntimeService;
 use lilo_session_core::RpcResponse;
 use lilo_session_driver::RuntimePort;
 use lilo_session_store::SqliteStore;
 use tokio::sync::broadcast;
-use uuid::Uuid;
 
 use crate::identity_client::IdentityPort;
 use crate::mail_safety::MailSafetyConfig;
@@ -29,7 +29,7 @@ pub struct HandlerResult {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MailAppendEvent {
-    pub message_id: Uuid,
+    pub message_id: MessageId,
 }
 
 impl DaemonState {
@@ -69,7 +69,7 @@ impl DaemonState {
         );
     }
 
-    pub(crate) fn emit_mail_append(&self, message_id: Uuid) {
+    pub(crate) fn emit_mail_append(&self, message_id: MessageId) {
         let _ = self.mail_append_events.send(MailAppendEvent { message_id });
     }
 }

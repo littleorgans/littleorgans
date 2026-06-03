@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_session_core::{Selector, Session, TargetError};
-use uuid::Uuid;
 
 use super::DaemonState;
 
@@ -26,7 +26,7 @@ impl DaemonState {
         }
     }
 
-    pub(super) async fn require_session(&self, id: &Uuid, label: &str) -> Result<()> {
+    pub(super) async fn require_session(&self, id: &SessionId, label: &str) -> Result<()> {
         let exists = self
             .store()
             .get_session(id)
@@ -38,7 +38,7 @@ impl DaemonState {
     }
 }
 
-pub(super) fn target_error(id: &Uuid, error: &anyhow::Error) -> TargetError {
+pub(super) fn target_error(id: &SessionId, error: &anyhow::Error) -> TargetError {
     TargetError {
         target: id.to_string(),
         message: format!("{error:#}"),

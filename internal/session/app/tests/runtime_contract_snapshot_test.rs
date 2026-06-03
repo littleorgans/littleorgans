@@ -2,6 +2,7 @@ mod common;
 
 use chrono::{TimeZone, Utc};
 use common::OrPanic as _;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureResponse, CursorExpiredPayload, DoctorPayload, EventBatch,
     EventsPayload, IsolationPolicy, KillOutcome, KilledPayload, Lifecycle, LifecycleCounts,
@@ -11,7 +12,6 @@ use lilo_rm_core::{
     ValidateTargetOutcome, ValidateTargetPayload, ValidateTargetResponse, VersionInfo,
     WatcherCounts,
 };
-use uuid::Uuid;
 
 #[test]
 fn rtmd_payload_json_shapes_are_snapshotted() {
@@ -87,7 +87,7 @@ fn rtmd_payload_json_shapes_are_snapshotted() {
     }));
 }
 
-fn lifecycle(session_id: Uuid) -> Lifecycle {
+fn lifecycle(session_id: SessionId) -> Lifecycle {
     Lifecycle {
         session_id,
         runtime: RuntimeKind::Claude,
@@ -101,7 +101,7 @@ fn lifecycle(session_id: Uuid) -> Lifecycle {
     }
 }
 
-fn running_event(session_id: Uuid) -> RuntimeEvent {
+fn running_event(session_id: SessionId) -> RuntimeEvent {
     RuntimeEvent::Running {
         session_id,
         runtime_pid: 4242,
@@ -109,7 +109,7 @@ fn running_event(session_id: Uuid) -> RuntimeEvent {
     }
 }
 
-fn doctor_payload(session_id: Uuid) -> lilo_rm_core::DoctorResponse {
+fn doctor_payload(session_id: SessionId) -> lilo_rm_core::DoctorResponse {
     lilo_rm_core::DoctorResponse {
         version: VersionInfo::new("0.6.0", "0123456"),
         socket_path: "/tmp/rtm/sock".to_string(),
@@ -154,8 +154,10 @@ fn doctor_payload(session_id: Uuid) -> lilo_rm_core::DoctorResponse {
     }
 }
 
-fn session_id() -> Uuid {
-    Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").or_panic("uuid")
+fn session_id() -> SessionId {
+    "018f6e28-0000-7000-8000-000000000001"
+        .parse()
+        .or_panic("session id")
 }
 
 fn timestamp() -> chrono::DateTime<Utc> {

@@ -8,6 +8,7 @@ use common::{
     LOCAL_UID, RecordingIdentityPort, TestDaemon, local_context, mail_count, mail_request,
     spawn_test_session, spawn_test_session_with_labels,
 };
+use lilo_common::id::SessionId;
 use lilo_im_core::{Action, AuditDecision, Principal};
 use lilo_rm_core::NudgeMode;
 use lilo_session_core::{
@@ -17,7 +18,6 @@ use lilo_session_core::{
 };
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityPort, RequestContext};
-use uuid::Uuid;
 
 #[tokio::test]
 async fn mail_round_trip_marks_read() {
@@ -276,7 +276,9 @@ async fn mail_send_rejects_unknown_recipient() {
             local_context(),
             SessionRpc::MailSend {
                 request: mail_request(
-                    Selector::Id { id: Uuid::now_v7() },
+                    Selector::Id {
+                        id: SessionId::from_uuid(uuid::Uuid::now_v7()),
+                    },
                     "review the spec",
                     "review-thread",
                     MailIntent::Request,
@@ -374,7 +376,7 @@ async fn mail_send_targets_only_running_recipients() {
     let live = spawn_test_session(&daemon, &context, "engineer").await;
     let dead = spawn_test_session(&daemon, &context, "engineer").await;
     let mut spawning = live.clone();
-    spawning.id = Uuid::now_v7();
+    spawning.id = SessionId::from_uuid(uuid::Uuid::now_v7());
     spawning.state = SessionState::Spawning;
     daemon
         .state
@@ -544,8 +546,8 @@ async fn denied_mutation_is_audited_without_mutating_store() {
 async fn send_read_nudge_delete(
     state: &DaemonState,
     context: RequestContext,
-    sender_id: Uuid,
-    recipient_id: Uuid,
+    sender_id: SessionId,
+    recipient_id: SessionId,
 ) {
     let context = context.with_mcp_caller_session_id(sender_id);
     let response = state
