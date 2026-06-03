@@ -19,7 +19,6 @@ where
     full_id
 }
 
-#[macro_export]
 macro_rules! define_id {
     ($name:ident) => {
         #[derive(
