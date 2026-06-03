@@ -25,6 +25,9 @@ toml.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 
+[build-dependencies]
+lilo-build-support.workspace = true
+
 [dev-dependencies]
 insta.workspace = true
 

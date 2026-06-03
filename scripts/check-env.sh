@@ -50,6 +50,7 @@ SITES = [
     re.compile(r"\.env(?:_remove)?\s*\(\s*" + NAME),
     re.compile(r"LaunchEnv::new\s*\(\s*" + NAME),
     re.compile(r"emit_cli_version\s*\(\s*" + NAME),
+    re.compile(r"emit_git_sha_env\s*\(\s*" + NAME),
     re.compile(r"duration_env\s*\(\s*" + NAME),
     re.compile(r"const\s+\w+\s*:\s*&(?:'static\s+)?str\s*=\s*" + NAME),
 ]

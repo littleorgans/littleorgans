@@ -17,6 +17,14 @@ pub fn emit_cli_version(version_env: &str) {
     println!("cargo:rustc-env={version_env}={version}");
 }
 
+pub fn emit_git_sha_env(name: &str) {
+    emit_git_rerun_directives();
+    emit_git_sha_env_rerun_directives();
+
+    let sha = build_git_sha().unwrap_or_else(|| "unknown".to_owned());
+    println!("cargo:rustc-env={name}={sha}");
+}
+
 pub fn package_version_with_optional_git_sha(package_version: &str) -> String {
     match (include_git_sha(), build_git_sha()) {
         (true, Some(sha)) => format!("{package_version}+{sha}"),
