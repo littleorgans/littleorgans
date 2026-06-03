@@ -9,15 +9,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use lilo_common::id::SessionId;
 use lilo_db::{begin_immediate_tx, finish_immediate_tx};
 use lilo_integration_tests::{
-    IntegrationFixture, count_rows, draft_session, event_log_line_count, fixed_uuid, running_event,
-    running_lifecycle, runtime_config, runtime_request,
+    IntegrationFixture, count_rows, draft_session, event_log_line_count, fixed_intent_id,
+    fixed_session_id, running_event, running_lifecycle, runtime_config, runtime_request,
 };
 use lilo_runtime_daemon::{RuntimeService, RuntimeServiceContext};
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SqliteStore};
-use uuid::Uuid;
 
 const DAEMON_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -52,7 +52,7 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
         assert!(allowed_spawn_audit_count(&fixture, session_id).await? >= 1);
     }
 
-    let raw_runtime_id = fixed_uuid(30);
+    let raw_runtime_id = fixed_session_id(30);
     LifecycleStore::open(&fixture.db)
         .insert_forking(&lilo_rm_core::Lifecycle::forking(
             raw_runtime_id,
@@ -119,10 +119,10 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
     let fixture = IntegrationFixture::open().await?;
     let session_store = SqliteStore::open(&fixture.db);
     let lifecycle_store = LifecycleStore::open(&fixture.db);
-    let session_id = fixed_uuid(1);
+    let session_id = fixed_session_id(1);
     let mut observed = Vec::new();
     let intent = PendingSpawnIntent::new(
-        fixed_uuid(2),
+        fixed_intent_id(2),
         runtime_request(session_id),
         SessionDraft::new(&draft_session(session_id)),
     );
@@ -194,7 +194,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
 async fn raw_runtime_spawn_keeps_session_tables_empty() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let lifecycle_store = LifecycleStore::open(&fixture.db);
-    let session_id = fixed_uuid(10);
+    let session_id = fixed_session_id(10);
 
     insert_audit(
         fixture.db.identity_pool(),
@@ -228,9 +228,9 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     );
     let session_store = SqliteStore::open(&fixture.db);
     let lifecycle_store = LifecycleStore::open(&fixture.db);
-    let session_id = fixed_uuid(20);
+    let session_id = fixed_session_id(20);
     let intent = PendingSpawnIntent::new(
-        fixed_uuid(21),
+        fixed_intent_id(21),
         runtime_request(session_id),
         SessionDraft::new(&draft_session(session_id)),
     );
@@ -284,7 +284,7 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     Ok(())
 }
 
-async fn insert_audit<'e, E>(executor: E, id: &str, session_id: Uuid) -> Result<()>
+async fn insert_audit<'e, E>(executor: E, id: &str, session_id: SessionId) -> Result<()>
 where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
@@ -305,7 +305,7 @@ where
     Ok(())
 }
 
-async fn audit_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn audit_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
         fixture.db.identity_pool(),
         "SELECT COUNT(*) FROM identity_audit WHERE session_ref = ?",
@@ -314,7 +314,7 @@ async fn audit_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i
     .await
 }
 
-async fn lifecycle_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn lifecycle_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
         fixture.db.runtime_pool(),
         "SELECT COUNT(*) FROM runtime_lifecycle WHERE session_id = ?",
@@ -323,7 +323,7 @@ async fn lifecycle_count(fixture: &IntegrationFixture, session_id: Uuid) -> Resu
     .await
 }
 
-async fn pending_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn pending_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
         fixture.db.session_pool(),
         "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'pending'",
@@ -332,7 +332,7 @@ async fn pending_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result
     .await
 }
 
-async fn resolved_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn resolved_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
         fixture.db.session_pool(),
         "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'resolved'",
@@ -341,7 +341,7 @@ async fn resolved_count(fixture: &IntegrationFixture, session_id: Uuid) -> Resul
     .await
 }
 
-async fn session_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn session_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
         fixture.db.session_pool(),
         "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
@@ -350,7 +350,10 @@ async fn session_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result
     .await
 }
 
-async fn allowed_spawn_audit_count(fixture: &IntegrationFixture, session_id: Uuid) -> Result<i64> {
+async fn allowed_spawn_audit_count(
+    fixture: &IntegrationFixture,
+    session_id: SessionId,
+) -> Result<i64> {
     count_rows(
         fixture.db.identity_pool(),
         "SELECT COUNT(*) FROM identity_audit
@@ -536,7 +539,7 @@ fn assert_success(command: &str, output: &Output) {
     );
 }
 
-fn stdout_session_id(output: &Output) -> Result<Uuid> {
+fn stdout_session_id(output: &Output) -> Result<SessionId> {
     stdout(output)
         .split_whitespace()
         .next()
@@ -545,7 +548,7 @@ fn stdout_session_id(output: &Output) -> Result<Uuid> {
         .context("session id parses")
 }
 
-fn listed_session_ids(output: &Output) -> Result<Vec<Uuid>> {
+fn listed_session_ids(output: &Output) -> Result<Vec<SessionId>> {
     let sessions: serde_json::Value =
         serde_json::from_slice(&output.stdout).context("session list JSON parses")?;
     let array = sessions

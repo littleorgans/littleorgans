@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use chrono::Utc;
+use lilo_common::id::{IntentId, SessionId};
 use lilo_db::LiloDb;
 use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint};
 use lilo_rm_core::{
@@ -15,7 +16,6 @@ use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig};
 use lilo_runtime_store::StoreConfig;
 use lilo_session_core::{Namespace, RuntimeKind as SessionRuntimeKind, Session, SessionState};
 use tempfile::TempDir;
-use uuid::Uuid;
 
 pub struct IntegrationFixture {
     _dir: TempDir,
@@ -41,7 +41,7 @@ pub fn runtime_config(paths: &LiloPaths) -> DaemonConfig {
     DaemonConfig {
         endpoint: RuntimeEndpoint::unix_socket(paths.socket_path()),
         shim_path: paths.run_root().join("shim"),
-        log_root: paths.runtime_log_dir(Uuid::nil()),
+        log_root: paths.runtime_log_dir(uuid::Uuid::nil()),
         store: StoreConfig {
             db_path: paths.db_path(),
         },
@@ -55,7 +55,7 @@ pub fn runtime_config(paths: &LiloPaths) -> DaemonConfig {
     }
 }
 
-pub fn draft_session(id: Uuid) -> Session {
+pub fn draft_session(id: SessionId) -> Session {
     let now = Utc::now();
     Session {
         id,
@@ -79,7 +79,7 @@ pub fn draft_session(id: Uuid) -> Session {
     }
 }
 
-pub fn runtime_request(session_id: Uuid) -> RuntimeSpawnRequest {
+pub fn runtime_request(session_id: SessionId) -> RuntimeSpawnRequest {
     RuntimeSpawnRequest {
         session_id,
         runtime: RuntimeRuntimeKind::Claude,
@@ -94,7 +94,7 @@ pub fn runtime_request(session_id: Uuid) -> RuntimeSpawnRequest {
     }
 }
 
-pub fn running_lifecycle(session_id: Uuid) -> Lifecycle {
+pub fn running_lifecycle(session_id: SessionId) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
     assert!(lifecycle.mark_running(ShimReady {
         session_id,
@@ -106,7 +106,7 @@ pub fn running_lifecycle(session_id: Uuid) -> Lifecycle {
     lifecycle
 }
 
-pub fn running_event(session_id: Uuid) -> RuntimeEvent {
+pub fn running_event(session_id: SessionId) -> RuntimeEvent {
     RuntimeEvent::Running {
         session_id,
         runtime_pid: 2,
@@ -133,6 +133,14 @@ pub async fn count_all(pool: &sqlx::SqlitePool, sql: &str) -> Result<i64> {
     Ok(sqlx::query_scalar(sql).fetch_one(pool).await?)
 }
 
-pub fn fixed_uuid(suffix: u128) -> Uuid {
-    Uuid::from_u128(0x018f_6e28_0000_7000_8000_0000_0000_0000 + suffix)
+pub fn fixed_session_id(suffix: u128) -> SessionId {
+    SessionId::from_uuid(uuid::Uuid::from_u128(
+        0x018f_6e28_0000_7000_8000_0000_0000_0000 + suffix,
+    ))
+}
+
+pub fn fixed_intent_id(suffix: u128) -> IntentId {
+    IntentId::from_uuid(uuid::Uuid::from_u128(
+        0x018f_6e28_0000_7000_8000_0000_0000_0000 + suffix,
+    ))
 }

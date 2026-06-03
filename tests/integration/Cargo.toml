@@ -8,6 +8,7 @@ publish = false
 anyhow.workspace = true
 assert_cmd.workspace = true
 chrono.workspace = true
+lilo-common.workspace = true
 lilo-db.workspace = true
 lilo-paths.workspace = true
 lilo-rm-core.workspace = true

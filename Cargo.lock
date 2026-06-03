@@ -1136,6 +1136,7 @@ dependencies = [
  "assert_cmd",
  "chrono",
  "libc",
+ "lilo-common",
  "lilo-db",
  "lilo-paths",
  "lilo-rm-core",
