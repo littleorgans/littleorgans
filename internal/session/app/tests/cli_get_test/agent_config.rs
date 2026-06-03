@@ -12,7 +12,7 @@ pub(crate) fn run_agent_config_paths_are_canonicalized_from_caller_context() {
     std::fs::create_dir_all(&workspace).or_panic("workspace dir");
     std::fs::create_dir_all(&home).or_panic("home dir");
     let config = caller.join("agent.toml");
-    std::fs::write(&config, "[env]\nHELIOY_AGENT_NAME = \"cli\"\n").or_panic("agent config");
+    std::fs::write(&config, "[env]\nEXAMPLE_AGENT_NAME = \"cli\"\n").or_panic("agent config");
 
     let run = daemon
         .command()

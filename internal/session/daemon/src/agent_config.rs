@@ -159,7 +159,7 @@ mod tests {
         fs::create_dir_all(&config_dir).or_panic("config dir creates");
         fs::write(
             config_dir.join("agent.toml"),
-            "claude_config_dir = \"/tmp/claude\"\n[env]\nHELIOY_AGENT_NAME = \"demo\"\n",
+            "claude_config_dir = \"/tmp/claude\"\n[env]\nEXAMPLE_AGENT_NAME = \"demo\"\n",
         )
         .or_panic("config writes");
 
@@ -179,7 +179,7 @@ mod tests {
                     value: "/tmp/claude".to_string(),
                 },
                 LaunchEnv {
-                    key: "HELIOY_AGENT_NAME".to_string(),
+                    key: "EXAMPLE_AGENT_NAME".to_string(),
                     value: "demo".to_string(),
                 },
             ]
@@ -194,7 +194,7 @@ mod tests {
         fs::create_dir_all(&config_dir).or_panic("config dir creates");
         fs::write(
             config_dir.join("agent.toml"),
-            "[env]\nHELIOY_AGENT_NAME = \"tools\"\n",
+            "[env]\nEXAMPLE_AGENT_NAME = \"tools\"\n",
         )
         .or_panic("config writes");
 
@@ -215,7 +215,7 @@ mod tests {
         fs::create_dir_all(&legacy_config_dir).or_panic("legacy config dir creates");
         fs::write(
             legacy_config_dir.join("agent.toml"),
-            "[env]\nHELIOY_AGENT_NAME = \"legacy\"\n",
+            "[env]\nEXAMPLE_AGENT_NAME = \"legacy\"\n",
         )
         .or_panic("legacy config writes");
 
@@ -237,7 +237,7 @@ mod tests {
     fn resolves_explicit_agent_config_path() {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
         let path = dir.path().join("agent.toml");
-        fs::write(&path, "[env]\nHELIOY_AGENT_NAME = \"explicit\"\n").or_panic("config writes");
+        fs::write(&path, "[env]\nEXAMPLE_AGENT_NAME = \"explicit\"\n").or_panic("config writes");
 
         let requested = path.to_str().or_panic("path is utf8").to_string();
         let resolved =
@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(
             resolved.env,
             vec![LaunchEnv {
-                key: "HELIOY_AGENT_NAME".to_string(),
+                key: "EXAMPLE_AGENT_NAME".to_string(),
                 value: "explicit".to_string(),
             }]
         );

@@ -39,15 +39,15 @@ fn assert_launcher_conforms(launcher: &'static dyn RuntimeLauncher) {
     let env = launcher.env(&request).expect("env");
     assert!(!env.is_empty(), "env should not be empty");
     assert!(
-        env.iter().any(|entry| entry.key == "HELIOY_SESSION_ID"
+        env.iter().any(|entry| entry.key == "LILO_AGENT_SESSION_ID"
             && entry.value == request.session_id.to_string()),
-        "HELIOY_SESSION_ID should be present"
+        "LILO_AGENT_SESSION_ID should be present"
     );
     assert!(
-        env.iter().any(
-            |entry| entry.key == "HELIOY_RUNTIME" && entry.value == request.runtime.to_string()
-        ),
-        "HELIOY_RUNTIME should be present"
+        env.iter()
+            .any(|entry| entry.key == "LILO_AGENT_RUNTIME"
+                && entry.value == request.runtime.to_string()),
+        "LILO_AGENT_RUNTIME should be present"
     );
 }
 

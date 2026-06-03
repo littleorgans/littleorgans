@@ -65,7 +65,7 @@ impl DaemonFixture {
     pub fn spawn_mcp_for_session(&self, session_id: &str, current_dir: &Path) -> McpFixture {
         let child = self
             .mcp_command()
-            .env("HELIOY_SESSION_ID", session_id)
+            .env("LILO_AGENT_SESSION_ID", session_id)
             .current_dir(current_dir)
             .spawn()
             .or_panic("sm mcp starts");

@@ -419,7 +419,10 @@ fn spawn_request(session_id: Uuid, namespace: Namespace, dir: &Path) -> SpawnReq
         agent_config: None,
         isolation: IsolationPolicy::default(),
         image: None,
-        env: vec![LaunchEnv::new("HELIOY_SESSION_ID", session_id.to_string())],
+        env: vec![LaunchEnv::new(
+            "LILO_AGENT_SESSION_ID",
+            session_id.to_string(),
+        )],
         mounts: Vec::new(),
         shell_resume: None,
         labels: Vec::new(),
