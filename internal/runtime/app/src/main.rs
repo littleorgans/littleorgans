@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use clap::Parser;
+use lilo_common::id::SessionId;
 use lilo_runtime_app::cli::{Cli, output};
-use uuid::Uuid;
 
 fn main() -> Result<()> {
     if let Some(session_id) = shim_session_id()? {
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn shim_session_id() -> Result<Option<Uuid>> {
+fn shim_session_id() -> Result<Option<SessionId>> {
     let mut args = std::env::args_os();
     let _bin = args.next();
     if args.next().as_deref() != Some(std::ffi::OsStr::new("__shim")) {

@@ -24,7 +24,6 @@ use {
     },
     lilo_runtime_store::{LifecycleStore, StoreConfig},
     std::path::PathBuf,
-    uuid::Uuid,
 };
 
 #[cfg(test)]

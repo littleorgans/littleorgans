@@ -7,15 +7,15 @@ mod spawn_support;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     KillRequest, RuntimeKind, RuntimeResponse, RuntimeRpc, RuntimeSignal, SpawnTarget,
 };
-use uuid::Uuid;
 
 #[derive(Debug, Parser)]
 struct Args {
     #[arg(long)]
-    session_id: Uuid,
+    session_id: SessionId,
     #[arg(long, default_value_t = RuntimeKind::Claude)]
     runtime: RuntimeKind,
     #[arg(long, value_name = "headless|tmux:SESSION:WINDOW.PANE")]

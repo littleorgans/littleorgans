@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationPolicy, KillOutcome, KillRequest, RuntimeSignal};
-use uuid::Uuid;
 
 use crate::{docker_runtime, error::RuntimeFailure, server::ServerState};
 
@@ -93,7 +93,7 @@ impl KillTarget for HostKillTarget {
 }
 
 struct DockerKillTarget {
-    session_id: Uuid,
+    session_id: SessionId,
 }
 
 impl KillTarget for DockerKillTarget {
@@ -116,11 +116,11 @@ impl KillTarget for DockerKillTarget {
 
 struct StateTerminalCheck<'a> {
     state: &'a ServerState,
-    session_id: Uuid,
+    session_id: SessionId,
 }
 
 impl<'a> StateTerminalCheck<'a> {
-    fn new(state: &'a ServerState, session_id: Uuid) -> Self {
+    fn new(state: &'a ServerState, session_id: SessionId) -> Self {
         Self { state, session_id }
     }
 }

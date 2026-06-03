@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{ErrorCode, LauncherError, RuntimeResponse, TmuxAddress};
-use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RpcErrorContext {
@@ -13,8 +13,8 @@ pub(crate) enum RpcErrorContext {
 #[derive(Debug)]
 pub(crate) enum RuntimeFailure {
     ProtocolMismatch { message: String },
-    SessionAlreadyExists { session_id: Uuid },
-    SessionNotFound { session_id: Uuid },
+    SessionAlreadyExists { session_id: SessionId },
+    SessionNotFound { session_id: SessionId },
     TmuxPaneDead { address: TmuxAddress },
     DockerUnavailable { message: String },
     DockerImageNotConfigured,
@@ -31,11 +31,11 @@ impl RuntimeFailure {
         .into()
     }
 
-    pub(crate) fn session_already_exists(session_id: Uuid) -> anyhow::Error {
+    pub(crate) fn session_already_exists(session_id: SessionId) -> anyhow::Error {
         Self::SessionAlreadyExists { session_id }.into()
     }
 
-    pub(crate) fn session_not_found(session_id: Uuid) -> anyhow::Error {
+    pub(crate) fn session_not_found(session_id: SessionId) -> anyhow::Error {
         Self::SessionNotFound { session_id }.into()
     }
 
@@ -186,7 +186,9 @@ mod tests {
 
     #[test]
     fn runtime_failures_map_to_stable_error_codes() {
-        let session_id = Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").unwrap();
+        let session_id = SessionId::from_uuid(
+            uuid::Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").unwrap(),
+        );
         let address = "rtm:0.1".parse().unwrap();
         let cases = [
             (

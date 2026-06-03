@@ -17,6 +17,7 @@ path = "src/lib.rs"
 test-support = []
 
 [dependencies]
+lilo-common.workspace = true
 lilo-im-core.workspace = true
 lilo-identity-service.workspace = true
 libc.workspace = true

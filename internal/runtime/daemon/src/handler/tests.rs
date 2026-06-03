@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, AuditDecision, AuditRow, Principal};
@@ -12,7 +13,6 @@ use lilo_rm_core::{
     RuntimeRpc, RuntimeSignal, ShimExit, ShimLaunchRequest, ShimReady, SpawnRequest, SpawnTarget,
 };
 use lilo_runtime_store::{LifecycleStore, StoreConfig};
-use uuid::Uuid;
 
 use crate::server::ServerState;
 use crate::{DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig};
@@ -63,8 +63,8 @@ impl TestRuntime {
 async fn non_local_spawn_and_kill_are_denied_before_runtime_work() {
     let runtime = TestRuntime::new().await;
     let principal = Principal::Local(LOCAL_UID + 1);
-    let spawn_id = Uuid::now_v7();
-    let kill_id = Uuid::now_v7();
+    let spawn_id = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let kill_id = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     let spawn = runtime
         .handle(
@@ -94,8 +94,8 @@ async fn non_local_spawn_and_kill_are_denied_before_runtime_work() {
 async fn local_spawn_and_kill_are_audited_before_runtime_errors() {
     let runtime = TestRuntime::new().await;
     let principal = Principal::Local(LOCAL_UID);
-    let spawn_id = Uuid::now_v7();
-    let kill_id = Uuid::now_v7();
+    let spawn_id = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let kill_id = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     let spawn = runtime
         .handle(
@@ -171,7 +171,7 @@ fn config(paths: &LiloPaths, temp: &Path) -> DaemonConfig {
     }
 }
 
-fn spawn_request(session_id: Uuid, cwd: &Path) -> SpawnRequest {
+fn spawn_request(session_id: SessionId, cwd: &Path) -> SpawnRequest {
     SpawnRequest {
         session_id,
         runtime: RuntimeKind::Codex,
@@ -186,7 +186,7 @@ fn spawn_request(session_id: Uuid, cwd: &Path) -> SpawnRequest {
     }
 }
 
-fn kill_request(session_id: Uuid) -> KillRequest {
+fn kill_request(session_id: SessionId) -> KillRequest {
     KillRequest {
         session_id,
         signal: RuntimeSignal::Term,
@@ -198,12 +198,12 @@ fn shim_rpcs() -> Vec<RuntimeRpc> {
     vec![
         RuntimeRpc::ShimLaunch {
             request: ShimLaunchRequest {
-                session_id: Uuid::now_v7(),
+                session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
             },
         },
         RuntimeRpc::ShimReady {
             ready: ShimReady {
-                session_id: Uuid::now_v7(),
+                session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
                 shim_pid: 10,
                 runtime_pid: 11,
                 start_time: Utc::now(),
@@ -212,7 +212,7 @@ fn shim_rpcs() -> Vec<RuntimeRpc> {
         },
         RuntimeRpc::ShimExit {
             exit: ShimExit {
-                session_id: Uuid::now_v7(),
+                session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
                 exit: RuntimeExit::new(Some(1), None),
             },
         },
@@ -241,7 +241,7 @@ fn assert_non_auth_error(response: &RuntimeResponse) {
     );
 }
 
-fn assert_decision(row: &AuditRow, action: Action, session_id: Uuid, should_allow: bool) {
+fn assert_decision(row: &AuditRow, action: Action, session_id: SessionId, should_allow: bool) {
     assert_eq!(row.action, action);
     assert_eq!(row.resource.session_id, Some(session_id));
     if should_allow {
@@ -251,7 +251,7 @@ fn assert_decision(row: &AuditRow, action: Action, session_id: Uuid, should_allo
     }
 }
 
-async fn assert_session_tables_empty(db: &LiloDb, session_id: Uuid) {
+async fn assert_session_tables_empty(db: &LiloDb, session_id: SessionId) {
     let id = session_id.to_string();
     assert_eq!(
         count_rows(

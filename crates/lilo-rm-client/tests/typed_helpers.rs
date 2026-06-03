@@ -1,6 +1,7 @@
 #[path = "common/mock_socket.rs"]
 mod mock_socket;
 
+use lilo_common::id::SessionId;
 use lilo_rm_client::{ClientError, request};
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureRequest, CaptureResponse, CursorExpiredPayload,
@@ -154,8 +155,8 @@ fn unexpected_name_for(expected: &str) -> &'static str {
     }
 }
 
-fn session_id() -> Uuid {
-    Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").expect("uuid")
+fn session_id() -> SessionId {
+    SessionId::from_uuid(Uuid::parse_str("018f6e28-0000-7000-8000-000000000001").expect("uuid"))
 }
 
 fn spawn_request() -> SpawnRequest {

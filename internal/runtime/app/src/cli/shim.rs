@@ -5,12 +5,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
+use lilo_common::id::SessionId;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     LaunchSpec, RuntimeExit, RuntimeSignal, ShellResume, ShimExit, ShimLaunchRequest, ShimReady,
 };
 use lilo_sys::signal::{Signal, SignalDisposition};
-use uuid::Uuid;
 
 pub const SHIM_RECONNECT_MAX_ATTEMPTS: usize = 10;
 const SHIM_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
@@ -23,7 +23,7 @@ static SIGTERM_RECEIVED: AtomicBool = AtomicBool::new(false);
 #[derive(Debug, Args)]
 pub struct ShimArgs {
     #[arg(long)]
-    session_id: Uuid,
+    session_id: SessionId,
 }
 
 pub async fn run(args: ShimArgs) -> Result<()> {
@@ -32,7 +32,7 @@ pub async fn run(args: ShimArgs) -> Result<()> {
         .context("shim task join failed")?
 }
 
-pub fn run_for_session_blocking(session_id: Uuid) -> Result<()> {
+pub fn run_for_session_blocking(session_id: SessionId) -> Result<()> {
     ignore_user_interrupts()?;
     let socket_path = LiloPaths::new(LiloHome::from_env()?).socket_path();
     let launch_request = ShimLaunchRequest { session_id };

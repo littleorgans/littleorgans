@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{Duration, Utc};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     DockerIsolationStatus, DockerReadiness, DockerStatus, DoctorResponse, HeadlessSpawnTarget,
     IsolationPolicy, LauncherStatus, SpawnRequest, SpawnTarget, TmuxStatus,
 };
 use tokio::process::Command;
-use uuid::Uuid;
 
 use crate::server::ServerState;
 
@@ -43,7 +43,7 @@ fn launcher_statuses() -> Vec<LauncherStatus> {
 fn launcher_status(launcher: &'static dyn lilo_rm_core::RuntimeLauncher) -> LauncherStatus {
     let runtime = launcher.kind();
     let request = SpawnRequest {
-        session_id: Uuid::nil(),
+        session_id: SessionId::from_uuid(uuid::Uuid::nil()),
         runtime: runtime.clone(),
         isolation: IsolationPolicy::default(),
         image: None,

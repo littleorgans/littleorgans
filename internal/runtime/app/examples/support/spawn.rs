@@ -1,14 +1,14 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     IsolationPolicy, RuntimeKind, RuntimeResponse, RuntimeRpc, SpawnRequest, SpawnTarget,
 };
-use uuid::Uuid;
 
 pub async fn spawn_runtime(
     socket_path: &Path,
-    session_id: Uuid,
+    session_id: SessionId,
     runtime: RuntimeKind,
     target: SpawnTarget,
 ) -> Result<RuntimeResponse> {

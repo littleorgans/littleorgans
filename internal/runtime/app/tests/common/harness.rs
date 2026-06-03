@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, RuntimeKind, SpawnRequest, SpawnTarget,
 };
@@ -455,12 +456,12 @@ fn wait_for_child(child: &mut Child) {
     panic!("daemon did not exit");
 }
 
-pub fn headless_spawn_request(session_id: Uuid, cwd: impl Into<PathBuf>) -> SpawnRequest {
+pub fn headless_spawn_request(session_id: SessionId, cwd: impl Into<PathBuf>) -> SpawnRequest {
     headless_spawn_request_with_env(session_id, cwd, Vec::new())
 }
 
 pub fn headless_spawn_request_with_env(
-    session_id: Uuid,
+    session_id: SessionId,
     cwd: impl Into<PathBuf>,
     env: Vec<LaunchEnv>,
 ) -> SpawnRequest {

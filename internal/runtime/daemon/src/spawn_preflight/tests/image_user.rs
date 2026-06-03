@@ -12,7 +12,7 @@ async fn missing_image_user_metadata_is_treated_as_root() {
 #[tokio::test]
 async fn root_image_user_is_allowed_by_profile_escape_hatch() {
     let state = test_state().await;
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(Some("allow-root"));
 
     let response = check_with_docker_inspector(
@@ -36,7 +36,7 @@ async fn root_image_user_is_allowed_by_config_escape_hatch() {
     let state =
         test_state_with_docker_config(DockerPreflightConfig::new("test-agent:latest", true, false))
             .await;
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(None);
 
     let response = check_with_docker_inspector(

@@ -183,8 +183,8 @@ mod tests {
 
     // Outside pid_t range, so shutdown drain cannot signal an unrelated CI process.
     const TEST_SHIM_PID: u32 = u32::MAX;
+    use lilo_common::id::SessionId;
     use std::time::Duration;
-    use uuid::Uuid;
 
     #[tokio::test]
     async fn domain_surface_verbs_match_wire_responses() {
@@ -227,7 +227,7 @@ mod tests {
     }
 
     async fn assert_kill_runtime_parity(service: &RuntimeService) {
-        let kill_session_id = Uuid::now_v7();
+        let kill_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let kill_pid = finished_child_pid();
         insert_running_headless(service, kill_session_id, kill_pid).await;
         let kill_request = KillRequest {
@@ -279,7 +279,7 @@ mod tests {
     }
 
     async fn assert_nudge_parity(service: &RuntimeService) {
-        let nudge_session_id = Uuid::now_v7();
+        let nudge_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         insert_running_headless(service, nudge_session_id, finished_child_pid()).await;
         let nudge_request = NudgeRequest {
             session_id: nudge_session_id,
@@ -310,7 +310,7 @@ mod tests {
 
     async fn assert_capture_parity(service: &RuntimeService) {
         let capture_request = CaptureRequest {
-            session_id: Uuid::now_v7(),
+            session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
             scrollback_lines: None,
         };
         let direct_capture = service
@@ -361,13 +361,19 @@ mod tests {
         let runtime_pid = std::process::id();
         let direct = spawn_direct_with_ready(
             &service,
-            spawn_request(Uuid::now_v7(), fixture.dir.path()),
+            spawn_request(
+                SessionId::from_uuid(uuid::Uuid::now_v7()),
+                fixture.dir.path(),
+            ),
             runtime_pid,
         )
         .await;
         let wire = spawn_wire_with_ready(
             &service,
-            spawn_request(Uuid::now_v7(), fixture.dir.path()),
+            spawn_request(
+                SessionId::from_uuid(uuid::Uuid::now_v7()),
+                fixture.dir.path(),
+            ),
             runtime_pid,
         )
         .await;
@@ -389,8 +395,14 @@ mod tests {
             .await
             .expect("service builds");
         let runtime_pid = std::process::id();
-        let direct_request = spawn_request(Uuid::now_v7(), fixture.dir.path());
-        let wire_request = spawn_request(Uuid::now_v7(), fixture.dir.path());
+        let direct_request = spawn_request(
+            SessionId::from_uuid(uuid::Uuid::now_v7()),
+            fixture.dir.path(),
+        );
+        let wire_request = spawn_request(
+            SessionId::from_uuid(uuid::Uuid::now_v7()),
+            fixture.dir.path(),
+        );
         let _ = spawn_direct_with_ready(&service, direct_request.clone(), runtime_pid).await;
         let _ = spawn_wire_with_ready(&service, wire_request.clone(), runtime_pid).await;
 
@@ -422,7 +434,7 @@ mod tests {
             .await
             .expect("service builds");
         let event = RuntimeEvent::Running {
-            session_id: Uuid::now_v7(),
+            session_id: SessionId::from_uuid(uuid::Uuid::now_v7()),
             runtime_pid: 4242,
             start_time: Utc::now(),
         };
@@ -477,7 +489,7 @@ mod tests {
 
     async fn complete_ready_after_wait(
         state: Arc<crate::server::ServerState>,
-        session_id: Uuid,
+        session_id: SessionId,
         runtime_pid: u32,
     ) -> anyhow::Result<()> {
         tokio::time::sleep(Duration::from_millis(25)).await;
@@ -492,7 +504,11 @@ mod tests {
             .await
     }
 
-    async fn insert_running_headless(service: &RuntimeService, session_id: Uuid, runtime_pid: u32) {
+    async fn insert_running_headless(
+        service: &RuntimeService,
+        session_id: SessionId,
+        runtime_pid: u32,
+    ) {
         let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
         service
             .state()
@@ -557,7 +573,7 @@ mod tests {
         );
     }
 
-    fn assert_running_event(event: &RuntimeEvent, session_id: Uuid, runtime_pid: u32) {
+    fn assert_running_event(event: &RuntimeEvent, session_id: SessionId, runtime_pid: u32) {
         let RuntimeEvent::Running {
             session_id: event_session_id,
             runtime_pid: event_runtime_pid,
@@ -605,7 +621,7 @@ mod tests {
         payload
     }
 
-    fn spawn_request(session_id: Uuid, cwd: &Path) -> SpawnRequest {
+    fn spawn_request(session_id: SessionId, cwd: &Path) -> SpawnRequest {
         SpawnRequest {
             session_id,
             runtime: RuntimeKind::Claude,

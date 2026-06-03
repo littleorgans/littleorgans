@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_identity_service::IdentityClient;
 #[cfg(test)]
 use lilo_im_store::SqliteAuditSink;
@@ -14,7 +15,6 @@ use lilo_rm_core::{
     TerminationEvidence, ValidateTargetRequest, ValidateTargetResponse, WatcherCounts,
 };
 use lilo_runtime_store::LifecycleStore;
-use uuid::Uuid;
 
 use crate::{
     error::RuntimeFailure,
@@ -45,7 +45,7 @@ pub(crate) struct ServerState {
     // Live shims this daemon spawned, keyed by session. Drained on shutdown so
     // shims never outlive the daemon as orphans. Synchronous (std Mutex) so it
     // is reapable from Drop, where async store reads are not possible.
-    shim_pids: Mutex<HashMap<Uuid, u32>>,
+    shim_pids: Mutex<HashMap<SessionId, u32>>,
 }
 
 impl ServerState {
@@ -109,11 +109,11 @@ impl ServerState {
         self.spawn.validate_target_request(self, request).await
     }
 
-    pub(crate) async fn cancel_spawn(&self, session_id: Uuid) {
+    pub(crate) async fn cancel_spawn(&self, session_id: SessionId) {
         self.spawn.cancel_spawn(self, session_id).await;
     }
 
-    pub(crate) async fn take_launch_spec(&self, session_id: Uuid) -> Result<LaunchSpec> {
+    pub(crate) async fn take_launch_spec(&self, session_id: SessionId) -> Result<LaunchSpec> {
         self.spawn.take_launch_spec(session_id).await
     }
 
@@ -260,7 +260,7 @@ impl ServerState {
 
     pub(crate) async fn start_exit_watcher(
         self: &Arc<Self>,
-        session_id: Uuid,
+        session_id: SessionId,
         runtime_pid: u32,
     ) -> Result<()> {
         self.watchers
@@ -268,11 +268,14 @@ impl ServerState {
             .await
     }
 
-    pub(crate) async fn is_terminal(&self, session_id: Uuid) -> bool {
+    pub(crate) async fn is_terminal(&self, session_id: SessionId) -> bool {
         self.termination.is_terminal(&self.store, session_id).await
     }
 
-    pub(super) async fn watcher_evidence(&self, session_id: Uuid) -> Result<TerminationEvidence> {
+    pub(super) async fn watcher_evidence(
+        &self,
+        session_id: SessionId,
+    ) -> Result<TerminationEvidence> {
         self.termination
             .watcher_evidence(&self.store, session_id)
             .await
@@ -280,7 +283,7 @@ impl ServerState {
 
     pub(super) async fn record_exited(
         &self,
-        session_id: Uuid,
+        session_id: SessionId,
         exit: RuntimeExit,
         evidence: TerminationEvidence,
     ) -> Result<Option<RuntimeEvent>> {
@@ -294,7 +297,7 @@ impl ServerState {
 
     pub(crate) async fn record_lost(
         &self,
-        session_id: Uuid,
+        session_id: SessionId,
         evidence: LostEvidence,
     ) -> Result<Option<RuntimeEvent>> {
         let result = self
@@ -305,7 +308,7 @@ impl ServerState {
         result
     }
 
-    pub(super) async fn remove_watcher(&self, session_id: Uuid) {
+    pub(super) async fn remove_watcher(&self, session_id: SessionId) {
         self.watchers.remove_watcher(session_id).await;
     }
 
@@ -313,17 +316,17 @@ impl ServerState {
         self.events.append_event(event).await
     }
 
-    fn shim_pids_guard(&self) -> std::sync::MutexGuard<'_, HashMap<Uuid, u32>> {
+    fn shim_pids_guard(&self) -> std::sync::MutexGuard<'_, HashMap<SessionId, u32>> {
         self.shim_pids
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn track_shim(&self, session_id: Uuid, shim_pid: u32) {
+    fn track_shim(&self, session_id: SessionId, shim_pid: u32) {
         self.shim_pids_guard().insert(session_id, shim_pid);
     }
 
-    fn forget_shim(&self, session_id: Uuid) {
+    fn forget_shim(&self, session_id: SessionId) {
         self.shim_pids_guard().remove(&session_id);
     }
 

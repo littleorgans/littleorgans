@@ -1,13 +1,14 @@
 use std::path::Path;
 
 use chrono::{DateTime, TimeZone, Utc};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{Lifecycle, RuntimeKind, ShimReady};
 use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
 
 use super::process::process_alive;
 
-pub fn persist_running(db_path: &Path, session_id: Uuid, runtime_pid: u32) {
+pub fn persist_running(db_path: &Path, session_id: SessionId, runtime_pid: u32) {
     persist_running_with_start_time(
         db_path,
         session_id,
@@ -18,7 +19,7 @@ pub fn persist_running(db_path: &Path, session_id: Uuid, runtime_pid: u32) {
 
 pub fn persist_running_with_start_time(
     db_path: &Path,
-    session_id: Uuid,
+    session_id: SessionId,
     runtime_pid: u32,
     start_time: DateTime<Utc>,
 ) {

@@ -5,6 +5,7 @@ mod common;
 use std::process::Command;
 
 use common::headless_spawn_command;
+use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 #[test]
@@ -183,7 +184,7 @@ fn spawn_mount_flag_rejects_tilde_source_when_home_is_unset() {
 }
 
 fn spawn_command() -> Command {
-    headless_spawn_command(Uuid::now_v7())
+    headless_spawn_command(SessionId::from_uuid(Uuid::now_v7()))
 }
 
 fn spawn_with_mount(value: &str) -> std::process::Output {

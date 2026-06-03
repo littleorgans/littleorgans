@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use lilo_common::id::SessionId;
 use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint, env::LILO_TMUX_SERVER_LABEL};
 use lilo_runtime_store::StoreConfig;
-use uuid::Uuid;
 
 use crate::{docker_preflight::DockerPreflightConfig, reconcile};
 
@@ -65,11 +65,11 @@ impl DaemonConfig {
         Ok(self.endpoint.unix_socket_path()?)
     }
 
-    pub fn session_log_dir(&self, session_id: Uuid) -> PathBuf {
+    pub fn session_log_dir(&self, session_id: SessionId) -> PathBuf {
         self.log_root.join(session_id.to_string())
     }
 
-    pub fn session_log_paths(&self, session_id: Uuid) -> crate::shim_socket::HeadlessLogPaths {
+    pub fn session_log_paths(&self, session_id: SessionId) -> crate::shim_socket::HeadlessLogPaths {
         let log_dir = self.session_log_dir(session_id);
         crate::shim_socket::HeadlessLogPaths {
             stdout_path: log_dir.join("stdout.log"),

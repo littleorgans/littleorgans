@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn image_unavailable_fails_before_lifecycle_insert() {
     let state = test_state().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
 
@@ -82,7 +82,7 @@ async fn nonexistent_local_image_reports_image_unavailable_after_registry_failur
 #[tokio::test]
 async fn arm64_manifest_escape_hatch_skips_manifest_inspection() {
     let state = test_state().await;
-    let mut request = headless_request(Uuid::now_v7(), false);
+    let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(Some("arm64-manifest-escape"));
 
     validate_docker_image_metadata_on_arch(

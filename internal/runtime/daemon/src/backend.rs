@@ -102,11 +102,11 @@ async fn spawn_via_shim(config: &DaemonConfig, request: &SpawnRequest) -> Result
 mod tests {
     use std::path::PathBuf;
 
+    use lilo_common::id::SessionId;
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationPolicy, IsolationProfile, LaunchEnv, LaunchSpec, MountSpec,
         RuntimeKind, SpawnRequest, SpawnTarget, TmuxAddress, TmuxSpawnTarget,
     };
-    use uuid::Uuid;
 
     use super::RuntimeBackends;
     use crate::{docker_preflight::DockerPreflightConfig, server::DaemonConfig};
@@ -196,7 +196,7 @@ mod tests {
 
     fn spawn_request() -> SpawnRequest {
         SpawnRequest {
-            session_id: Uuid::nil(),
+            session_id: SessionId::from_uuid(uuid::Uuid::nil()),
             runtime: RuntimeKind::Claude,
             isolation: IsolationPolicy::Host,
             image: None,

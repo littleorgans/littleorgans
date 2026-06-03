@@ -6,6 +6,7 @@ use common::{
     FAKE_RUNTIME_READY, RtmHarness, output_stderr, output_stdout, spawn_ok, spawn_output_ok,
     wait_for_json_status, wait_for_status,
 };
+use lilo_common::id::SessionId;
 use lilo_rm_core::{CaptureError, CaptureRequest, CaptureResponse, RuntimeResponse, RuntimeRpc};
 use std::{thread, time::Duration};
 use uuid::Uuid;
@@ -170,7 +171,7 @@ fn capture_tmux_pane_returns_snapshot_json() {
 #[test]
 fn capture_headless_target_returns_not_tmux_target() {
     let harness = RtmHarness::start();
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     spawn_ok(&harness, &session_id.to_string(), "claude");
 
     let response = capture_rpc(&harness, session_id, None);
@@ -193,7 +194,7 @@ fn capture_dead_tmux_pane_returns_pane_unavailable() {
     };
 
     let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let expected_pane = tmux_session.pane();
     spawn_output_ok(
         harness.spawn_runtime_in_tmux(&session_id.to_string(), "claude", &expected_pane),
@@ -222,7 +223,7 @@ fn docker_tmux_pattern_a_container_survives_pane_close() {
     };
 
     let harness = RtmHarness::start_with_tmux_server_label(tmux_session.server_label());
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(Uuid::now_v7());
     let expected_pane = tmux_session.pane();
     let spawn = harness
         .spawn_command(
@@ -348,7 +349,7 @@ fn wait_for_interrupt_recovery(
 
 fn capture_rpc(
     harness: &RtmHarness,
-    session_id: Uuid,
+    session_id: SessionId,
     scrollback_lines: Option<u32>,
 ) -> RuntimeResponse {
     tokio::runtime::Runtime::new()

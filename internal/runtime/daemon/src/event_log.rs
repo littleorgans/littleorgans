@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     EVENT_LOG_RETENTION_MIN_AGE_SECS, EVENT_LOG_RETENTION_MIN_EVENTS, EventCursor, RuntimeEvent,
     clamped_event_wait_ms,
@@ -14,7 +15,6 @@ use lilo_rm_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, Notify};
-use uuid::Uuid;
 
 const EVENT_LOG_SYNC_BATCH: usize = 32;
 const EVENT_LOG_SYNC_INTERVAL: Duration = Duration::from_millis(100);
@@ -48,7 +48,7 @@ struct EventLogInner {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct EventLogKey {
-    session_id: Uuid,
+    session_id: SessionId,
     kind: EventLogKind,
 }
 
@@ -388,8 +388,8 @@ fn oldest_valid_cursor(events: &[EventLogEntry]) -> Option<EventCursor> {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+    use lilo_common::id::SessionId;
     use tempfile::TempDir;
-    use uuid::Uuid;
 
     #[tokio::test]
     async fn replay_survives_reopen() {
@@ -504,7 +504,9 @@ mod tests {
 
     fn running_event_for(index: usize) -> RuntimeEvent {
         RuntimeEvent::Running {
-            session_id: Uuid::parse_str(&format!("018f6e28-0000-7000-8000-{index:012}")).unwrap(),
+            session_id: SessionId::from_uuid(
+                uuid::Uuid::parse_str(&format!("018f6e28-0000-7000-8000-{index:012}")).unwrap(),
+            ),
             runtime_pid: 42,
             start_time: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
         }

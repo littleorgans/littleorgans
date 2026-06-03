@@ -1,20 +1,20 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Result, bail};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     LaunchSpec, Lifecycle, LifecycleState, RuntimeEvent, ShimReady, SpawnRequest,
     ValidateTargetOutcome, ValidateTargetRequest, ValidateTargetResponse,
 };
 use tokio::sync::{Mutex, oneshot};
-use uuid::Uuid;
 
 use crate::{error::RuntimeFailure, event_channel};
 
 use super::ServerState;
 
 pub(super) struct SpawnCoordinator {
-    pending_launches: Mutex<HashMap<Uuid, LaunchSpec>>,
-    pending_ready: Mutex<HashMap<Uuid, oneshot::Sender<ShimReady>>>,
+    pending_launches: Mutex<HashMap<SessionId, LaunchSpec>>,
+    pending_ready: Mutex<HashMap<SessionId, oneshot::Sender<ShimReady>>>,
 }
 
 pub(crate) struct BeginSpawn {
@@ -118,7 +118,10 @@ impl SpawnCoordinator {
         Ok(ValidateTargetResponse::valid())
     }
 
-    async fn begin_ready_wait(&self, session_id: Uuid) -> Result<oneshot::Receiver<ShimReady>> {
+    async fn begin_ready_wait(
+        &self,
+        session_id: SessionId,
+    ) -> Result<oneshot::Receiver<ShimReady>> {
         let (sender, receiver) = oneshot::channel();
         let previous = self.pending_ready.lock().await.insert(session_id, sender);
         if previous.is_some() {
@@ -129,7 +132,7 @@ impl SpawnCoordinator {
         Ok(receiver)
     }
 
-    pub(super) async fn cancel_spawn(&self, state: &ServerState, session_id: Uuid) {
+    pub(super) async fn cancel_spawn(&self, state: &ServerState, session_id: SessionId) {
         self.pending_launches.lock().await.remove(&session_id);
         self.pending_ready.lock().await.remove(&session_id);
         if let Err(error) = state.store().delete(session_id).await {
@@ -137,7 +140,7 @@ impl SpawnCoordinator {
         }
     }
 
-    pub(super) async fn take_launch_spec(&self, session_id: Uuid) -> Result<LaunchSpec> {
+    pub(super) async fn take_launch_spec(&self, session_id: SessionId) -> Result<LaunchSpec> {
         self.pending_launches
             .lock()
             .await

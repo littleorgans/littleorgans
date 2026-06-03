@@ -1,7 +1,7 @@
 #[tokio::test]
 async fn docker_unavailable_fails_before_lifecycle_insert() {
     let state = test_state().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
 
@@ -28,7 +28,7 @@ async fn docker_unavailable_fails_before_lifecycle_insert() {
 #[tokio::test]
 async fn docker_tmux_pattern_a_passes_preflight() {
     let state = test_state().await;
-    let mut request = tmux_request(Uuid::now_v7(), false);
+    let mut request = tmux_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(None);
 
     let response = check_with_docker_inspector(
@@ -73,7 +73,7 @@ async fn unsupported_docker_profile_fails_before_lifecycle_insert() {
 async fn accepted_docker_profiles_probe_daemon_availability() {
     for profile in [None, Some("default"), Some("own-init")] {
         let state = test_state().await;
-        let mut request = headless_request(Uuid::now_v7(), false);
+        let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
         request.isolation = docker_profile(profile);
 
         let response = check_with_docker_inspector(

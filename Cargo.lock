@@ -1173,6 +1173,7 @@ dependencies = [
 name = "lilo-rm-client"
 version = "0.8.0"
 dependencies = [
+ "lilo-common",
  "lilo-paths",
  "lilo-rm-core",
  "lilo-runtime-daemon",
@@ -1212,6 +1213,7 @@ dependencies = [
  "insta",
  "libc",
  "lilo-build-support",
+ "lilo-common",
  "lilo-db",
  "lilo-paths",
  "lilo-rm-client",
@@ -1238,6 +1240,7 @@ dependencies = [
  "chrono",
  "insta",
  "libc",
+ "lilo-common",
  "lilo-db",
  "lilo-identity-service",
  "lilo-im-core",
@@ -1261,6 +1264,7 @@ dependencies = [
 name = "lilo-runtime-launchers"
 version = "0.8.0"
 dependencies = [
+ "lilo-common",
  "lilo-rm-core",
  "uuid",
 ]

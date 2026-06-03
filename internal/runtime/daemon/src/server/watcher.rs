@@ -1,15 +1,15 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{Result, bail};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{RuntimeExit, TerminationEvidence};
 use lilo_sys::process_exit::{ProcessExitWatcher, watch_process_exit};
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 use super::ServerState;
 
 pub(super) struct WatcherCoordinator {
-    exit_watchers: Mutex<HashMap<Uuid, ProcessExitWatcher>>,
+    exit_watchers: Mutex<HashMap<SessionId, ProcessExitWatcher>>,
 }
 
 impl WatcherCoordinator {
@@ -22,7 +22,7 @@ impl WatcherCoordinator {
     pub(super) async fn start_exit_watcher(
         &self,
         state: &Arc<ServerState>,
-        session_id: Uuid,
+        session_id: SessionId,
         runtime_pid: u32,
     ) -> Result<()> {
         let mut exit_watchers = self.exit_watchers.lock().await;
@@ -44,7 +44,7 @@ impl WatcherCoordinator {
         Ok(())
     }
 
-    pub(super) async fn remove_watcher(&self, session_id: Uuid) {
+    pub(super) async fn remove_watcher(&self, session_id: SessionId) {
         self.exit_watchers.lock().await.remove(&session_id);
     }
 
@@ -53,7 +53,7 @@ impl WatcherCoordinator {
     }
 }
 
-async fn record_watcher_exit(state: Arc<ServerState>, session_id: Uuid) -> Result<()> {
+async fn record_watcher_exit(state: Arc<ServerState>, session_id: SessionId) -> Result<()> {
     tokio::time::sleep(Duration::from_millis(300)).await;
     if state.is_terminal(session_id).await {
         return Ok(());
