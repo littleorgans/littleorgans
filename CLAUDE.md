@@ -60,8 +60,8 @@ process, so it provides observability and sits outside the identity, session,
 and runtime control flow. The user verb `lilo capture` already anchors its
 surface. Its crate names, daemon composition, state path, and migration phase
 are not yet fixed, so do not invent them ahead of its migration phase. Captured
-sessions must correlate to the control-plane UUIDv7 spawn id, the platform join
-key, so agents and the UI can share a session by that id rather than by a
+sessions must correlate to the control-plane `SessionId`, a UUIDv4 platform
+join key, so agents and the UI can share a session by that id rather than by a
 provider-minted conversation id.
 
 ## K8s mental model post-monorepo
@@ -152,13 +152,15 @@ legacy path fallbacks.
 
 Decision locked 2026-06-03. Full design:
 `NOTES/typed-ids-and-v4-prefix.md`. Introduce a typed id family and move
-generation from UUIDv7 to UUIDv4. Not yet executed; the staged PR sequence and
-acceptance live in the note.
+generation from UUIDv7 to UUIDv4. The staged PR sequence and acceptance live in
+the note.
 
 `lilo-common` gains a `define_id!` macro and one newtype per id concept
-(`SessionId`, `MessageId`, `EventId`, `IntentId`, `NamespaceId`, `AuditId`),
+(`SessionId`, `MessageId`, `IntentId`, `AuditId`),
 replacing bare `uuid::Uuid` at domain signatures across the workspace. The macro
 is the single source of truth for each id's behaviour, so the family stays DRY.
+Events have no id field, and namespaces are keyed by validated names, so no
+speculative `EventId` or `NamespaceId` exists until a real field needs one.
 The runtime "spawn id" is a `SessionId`, not a separate type. `Uuid` stays the
 inner 128-bit value; the wire and disk key stays 36 chars.
 

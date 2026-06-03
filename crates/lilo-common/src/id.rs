@@ -92,16 +92,12 @@ macro_rules! define_id {
 
 define_id!(SessionId);
 define_id!(MessageId);
-define_id!(EventId);
 define_id!(IntentId);
-define_id!(NamespaceId);
 define_id!(AuditId);
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        AuditId, EventId, IntentId, MessageId, NamespaceId, SessionId, shortest_unambiguous_prefix,
-    };
+    use super::{AuditId, IntentId, MessageId, SessionId, shortest_unambiguous_prefix};
     use uuid::Uuid;
 
     const FIXED_UUID: &str = "12345678-1234-4234-9234-123456789abc";
@@ -128,9 +124,7 @@ mod tests {
     fn all_id_types_roundtrip_full_uuid_display_and_parse() {
         assert_id_contract!(SessionId);
         assert_id_contract!(MessageId);
-        assert_id_contract!(EventId);
         assert_id_contract!(IntentId);
-        assert_id_contract!(NamespaceId);
         assert_id_contract!(AuditId);
     }
 
