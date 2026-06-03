@@ -1,17 +1,17 @@
 use chrono::{DateTime, TimeZone, Utc};
+use lilo_common::id::SessionId;
 use lilo_rm_core::{
     IsolationPolicy, IsolationProfile, Lifecycle, LifecycleState, LostEvidence, RuntimeKind,
     ShimReady, StatusFilter,
 };
 use tempfile::TempDir;
-use uuid::Uuid;
 
 use super::LifecycleStore;
 
 #[tokio::test]
 async fn persists_lifecycle_transitions() {
     let (_temp, store) = lifecycle_store().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
 
     store.insert_forking(&lifecycle).await.expect("insert");
@@ -29,7 +29,7 @@ async fn persists_lifecycle_transitions() {
 #[tokio::test]
 async fn tmux_pane_round_trips_through_sqlite() {
     let (_temp, store) = lifecycle_store().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.mark_running(ShimReady {
         session_id,
@@ -52,7 +52,7 @@ async fn tmux_pane_round_trips_through_sqlite() {
 #[tokio::test]
 async fn isolation_policy_round_trips_through_sqlite() {
     let (_temp, store) = lifecycle_store().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.isolation = IsolationPolicy::Docker(IsolationProfile {
         name: Some("locked".to_owned()),
@@ -67,9 +67,9 @@ async fn isolation_policy_round_trips_through_sqlite() {
 #[tokio::test]
 async fn lists_lifecycles_with_composed_status_filters() {
     let (_temp, store) = lifecycle_store().await;
-    let old_claude = Uuid::now_v7();
-    let wanted = Uuid::now_v7();
-    let wrong_state = Uuid::now_v7();
+    let old_claude = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let wanted = SessionId::from_uuid(uuid::Uuid::now_v7());
+    let wrong_state = SessionId::from_uuid(uuid::Uuid::now_v7());
 
     insert_running(&store, old_claude, RuntimeKind::Claude, 10).await;
     insert_running(&store, wanted, RuntimeKind::Codex, 20).await;
@@ -96,7 +96,7 @@ async fn lists_lifecycles_with_composed_status_filters() {
 #[tokio::test]
 async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
     let (_temp, store) = lifecycle_store().await;
-    let session_id = Uuid::now_v7();
+    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     store.insert_forking(&lifecycle).await.expect("insert");
     lifecycle.mark_lost(LostEvidence::PidNotAlive);
@@ -139,7 +139,7 @@ async fn migration_is_idempotent() {
 
 async fn insert_running(
     store: &LifecycleStore,
-    session_id: Uuid,
+    session_id: SessionId,
     runtime: RuntimeKind,
     runtime_pid: u32,
 ) {
@@ -155,14 +155,14 @@ async fn insert_running(
     store.update_lifecycle(&lifecycle).await.expect("update");
 }
 
-async fn insert_lost(store: &LifecycleStore, session_id: Uuid, runtime: RuntimeKind) {
+async fn insert_lost(store: &LifecycleStore, session_id: SessionId, runtime: RuntimeKind) {
     let mut lifecycle = Lifecycle::forking(session_id, runtime);
     store.insert_forking(&lifecycle).await.expect("insert");
     assert!(lifecycle.mark_lost(LostEvidence::PidNotAlive));
     store.update_lifecycle(&lifecycle).await.expect("update");
 }
 
-async fn set_updated_at(store: &LifecycleStore, session_id: Uuid, updated_at: DateTime<Utc>) {
+async fn set_updated_at(store: &LifecycleStore, session_id: SessionId, updated_at: DateTime<Utc>) {
     sqlx::query("UPDATE runtime_lifecycle SET updated_at = ? WHERE session_id = ?")
         .bind(updated_at.to_rfc3339())
         .bind(session_id.to_string())
