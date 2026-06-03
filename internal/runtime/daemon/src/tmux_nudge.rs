@@ -19,6 +19,16 @@ const STEER_TIMING: NudgeTiming = NudgeTiming {
     idle_probes_required: 2,
 };
 
+/// After sending a nudge payload, confirm the submit actually landed by probing
+/// for the busy marker. The submit keystroke can be silently dropped while the
+/// agent is in a transitional state (loading MCP on its first message, or
+/// just-interrupted by steer), leaving the payload typed but unsubmitted.
+/// `SUBMIT_CONFIRM_PROBES` probes spaced `SUBMIT_CONFIRM_POLL` apart give the
+/// turn time to surface before we decide the submit was dropped and re-send it.
+const SUBMIT_CONFIRM_PROBES: usize = 3;
+const SUBMIT_CONFIRM_POLL: Duration = Duration::from_millis(250);
+const MAX_SUBMIT_RESENDS: usize = 2;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum NudgeSendOutcome {
     Delivered,
@@ -51,6 +61,11 @@ trait NudgeOps {
     async fn interrupt(&mut self) -> Result<()>;
 
     async fn send_payload(&mut self) -> Result<()>;
+
+    /// Re-send only the submit keystroke (`Enter`). Used when the payload was
+    /// typed into the composer but the submit was dropped; the content is
+    /// already buffered, so re-sending it would duplicate it.
+    async fn resubmit(&mut self) -> Result<()>;
 
     async fn sleep(&mut self, duration: Duration);
 
@@ -89,6 +104,10 @@ impl NudgeOps for RealNudgeOps<'_> {
             send_keys(self.server_label, self.tmux_pane, &trailing).await?;
         }
         Ok(())
+    }
+
+    async fn resubmit(&mut self) -> Result<()> {
+        send_keys(self.server_label, self.tmux_pane, &[String::from("Enter")]).await
     }
 
     async fn sleep(&mut self, duration: Duration) {
@@ -136,22 +155,86 @@ async fn execute_nudge(
         return Ok(NudgeSendOutcome::AgentBusyTimeout);
     }
 
-    send_nudge_payload(ops).await
+    send_nudge_payload(ops, runtime).await
 }
 
-async fn send_nudge_payload(ops: &mut impl NudgeOps) -> Result<NudgeSendOutcome> {
+async fn send_nudge_payload(
+    ops: &mut impl NudgeOps,
+    runtime: &RuntimeKind,
+) -> Result<NudgeSendOutcome> {
     if ops.pane_in_mode().await? {
         let _ = ops.cancel_copy_mode().await;
     }
-    match ops.send_payload().await {
-        Ok(()) => Ok(NudgeSendOutcome::Delivered),
+    if let Some(outcome) = send_or_pane_dead(ops, SendStep::Payload).await? {
+        return Ok(outcome);
+    }
+    // The submit keystroke can be silently dropped while the agent is in a
+    // transitional state (loading MCP on its first message, or just-interrupted
+    // by steer), leaving the payload typed but unsubmitted. Confirm the submit
+    // landed (the agent started a turn) and re-send the submit if it did not.
+    let mut resends = 0;
+    loop {
+        if submission_confirmed(ops, runtime).await {
+            return Ok(NudgeSendOutcome::Delivered);
+        }
+        if resends >= MAX_SUBMIT_RESENDS {
+            tracing::warn!(
+                resends,
+                "nudge payload submit unconfirmed after resends; treating as delivered best-effort"
+            );
+            return Ok(NudgeSendOutcome::Delivered);
+        }
+        if let Some(outcome) = send_or_pane_dead(ops, SendStep::Resubmit).await? {
+            return Ok(outcome);
+        }
+        resends += 1;
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SendStep {
+    Payload,
+    Resubmit,
+}
+
+/// Run a send step, mapping a send failure on a now-dead pane to `PaneDead`.
+async fn send_or_pane_dead(
+    ops: &mut impl NudgeOps,
+    step: SendStep,
+) -> Result<Option<NudgeSendOutcome>> {
+    let result = match step {
+        SendStep::Payload => ops.send_payload().await,
+        SendStep::Resubmit => ops.resubmit().await,
+    };
+    match result {
+        Ok(()) => Ok(None),
         Err(error) => {
             if !ops.is_alive().await.unwrap_or(false) {
-                return Ok(NudgeSendOutcome::PaneDead);
+                return Ok(Some(NudgeSendOutcome::PaneDead));
             }
             Err(error)
         }
     }
+}
+
+/// Probe whether the agent started a turn after the payload was sent, which is
+/// how we know the submit keystroke landed. Wait/Steer deliver only to an idle
+/// agent, so a transition to busy is an unambiguous "submit landed" signal. A
+/// capture failure degrades to best-effort (assume delivered) rather than
+/// re-sending blindly.
+async fn submission_confirmed(ops: &mut impl NudgeOps, runtime: &RuntimeKind) -> bool {
+    for probe in 0..SUBMIT_CONFIRM_PROBES {
+        match probe_agent_busy(ops, runtime).await {
+            Ok(false) => {}
+            // Busy: the submit landed and started a turn. Capture error: degrade
+            // to best-effort and assume delivered rather than re-send blindly.
+            Ok(true) | Err(_) => return true,
+        }
+        if probe + 1 < SUBMIT_CONFIRM_PROBES {
+            ops.sleep(SUBMIT_CONFIRM_POLL).await;
+        }
+    }
+    false
 }
 
 async fn wait_for_idle(
@@ -307,6 +390,11 @@ mod tests {
             Ok(())
         }
 
+        async fn resubmit(&mut self) -> Result<()> {
+            self.actions.push("resubmit");
+            Ok(())
+        }
+
         async fn sleep(&mut self, duration: Duration) {
             self.actions.push("sleep");
             self.now += duration.max(Duration::from_millis(1));
@@ -417,6 +505,7 @@ mod tests {
         let mut ops = FakeOps::new(vec![
             CaptureFixture::Content(IDLE_CODEX),
             CaptureFixture::Content(IDLE_CODEX),
+            CaptureFixture::Content(BUSY_CODEX),
         ])
         .with_copy_modes(vec![true, true]);
 
@@ -436,7 +525,8 @@ mod tests {
                 "capture",
                 "pane_in_mode",
                 "cancel_copy_mode",
-                "payload"
+                "payload",
+                "capture"
             ]
         );
     }
@@ -469,5 +559,54 @@ mod tests {
 
         assert_eq!(outcome, NudgeSendOutcome::Delivered);
         assert!(ops.actions.contains(&"payload"));
+    }
+
+    #[tokio::test]
+    async fn dropped_submit_is_resent_until_the_agent_starts_a_turn() {
+        // First confirm round sees the agent still idle (submit dropped); after
+        // one resend the agent goes busy, proving the resent submit landed.
+        let mut ops = FakeOps::new(vec![
+            CaptureFixture::Content(IDLE_CODEX),
+            CaptureFixture::Content(IDLE_CODEX),
+            CaptureFixture::Content(IDLE_CODEX),
+            CaptureFixture::Content(BUSY_CODEX),
+        ]);
+
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+            .await
+            .expect("nudge succeeds");
+
+        assert_eq!(outcome, NudgeSendOutcome::Delivered);
+        assert_eq!(ops.actions.iter().filter(|a| **a == "payload").count(), 1);
+        assert_eq!(ops.actions.iter().filter(|a| **a == "resubmit").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn confirmed_submit_does_not_resend() {
+        let mut ops = FakeOps::new(vec![CaptureFixture::Content(BUSY_CODEX)]);
+
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+            .await
+            .expect("nudge succeeds");
+
+        assert_eq!(outcome, NudgeSendOutcome::Delivered);
+        assert!(!ops.actions.contains(&"resubmit"));
+    }
+
+    #[tokio::test]
+    async fn unconfirmed_submit_delivers_best_effort_after_max_resends() {
+        // Agent never starts a turn: bounded resends, then best-effort Delivered
+        // rather than a silent drop or an unbounded resend loop.
+        let mut ops = FakeOps::new(vec![]);
+
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+            .await
+            .expect("nudge succeeds");
+
+        assert_eq!(outcome, NudgeSendOutcome::Delivered);
+        assert_eq!(
+            ops.actions.iter().filter(|a| **a == "resubmit").count(),
+            MAX_SUBMIT_RESENDS
+        );
     }
 }
