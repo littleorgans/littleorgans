@@ -63,13 +63,13 @@ pub const SESSION_LABEL_SELECTOR_HELP: &str = "Session selector used for matchin
 pub const SESSION_LABEL_MUTATION_HELP: &str = "Label mutation as key=value or key-.";
 
 #[rustfmt::skip]
-pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected running sessions.";
+pub const MAIL_SEND_ABOUT: &str = "Send durable mail to selected running sessions; summary MAIL reports inbox acceptance; summary NOTIFY reports wake delivery: ok when the nudge landed, err when it failed or timed out, skipped when no notify was requested.";
 #[rustfmt::skip]
 pub const MAIL_SEND_TO_HELP: &str = "Recipient selector used for matching running sessions.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
 #[rustfmt::skip]
 pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
 #[rustfmt::skip]
-pub const MAIL_SEND_NOTIFY_HELP: &str = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.";
+pub const MAIL_SEND_NOTIFY_HELP: &str = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait; summary NOTIFY reports wake delivery: ok when the nudge landed, err when it failed or timed out, skipped when no notify was requested; summary MAIL reports inbox acceptance.";
 #[rustfmt::skip]
 pub const MAIL_SEND_TIMEOUT_HELP: &str = "Maximum seconds to wait for --notify wait. Requires --notify wait.";
 #[rustfmt::skip]

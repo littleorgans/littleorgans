@@ -297,7 +297,8 @@ pub struct MailSendArgs {
         num_args = 0..=1,
         default_missing_value = MailNotifyMode::WAIT_VALUE,
         value_parser = clap::builder::PossibleValuesParser::new(MailNotifyMode::CLIENT_VALUES),
-        help = generated_help::MAIL_SEND_NOTIFY_HELP
+        help = generated_help::MAIL_SEND_NOTIFY_HELP,
+        long_help = generated_help::MAIL_SEND_NOTIFY_HELP
     )]
     pub notify: Option<String>,
     #[arg(
