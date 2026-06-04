@@ -234,5 +234,6 @@ fn nudge_request(session_id: SessionId) -> NudgeRequest {
         session_id,
         content: "wake up".to_owned(),
         mode: lilo_rm_core::NudgeMode::Immediate,
+        timeout_ms: None,
     }
 }

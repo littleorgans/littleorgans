@@ -10,7 +10,7 @@ use lilo_session_core::{
     MailNotifyStatus, MailReadRequest, MailReadResponse, MailSendRequest, MailSendResponse,
     MailSendResult, MailStatus, MailStopCheckRequest, MailStopCheckResponse, MessageView,
     NudgeDelivery, NudgeRequest, NudgeResponse, RecipientSummary, RpcResponse, Selector, SenderRef,
-    Session, SessionState, TargetError,
+    Session, SessionState, TargetError, validate_mail_notify_timeout,
 };
 
 use crate::identity_client::RequestContext;
@@ -27,6 +27,7 @@ impl DaemonState {
         context: &RequestContext,
         request: MailSendRequest,
     ) -> Result<RpcResponse> {
+        validate_mail_notify_timeout(request.notify, request.timeout_ms)?;
         request.intent.ensure_client_send_allowed()?;
         let recipients = self.resolve_selector(&request.to, "recipient").await?;
         let sender = self.effective_sender(context).await?;
@@ -111,7 +112,7 @@ impl DaemonState {
         let mut errors = Vec::new();
         for recipient in recipients {
             match self
-                .nudge_one(context, recipient.id, &request.content, request.mode)
+                .nudge_one(context, recipient.id, &request.content, request.mode, None)
                 .await
             {
                 Ok(nudge) => nudges.push(nudge),
@@ -162,6 +163,7 @@ impl DaemonState {
         recipient_id: SessionId,
         message: &str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> Result<NudgeDelivery> {
         self.identity
             .authorize_session(&context.principal, Action::Nudge, recipient_id)
@@ -169,7 +171,7 @@ impl DaemonState {
         let to = recipient_id.to_string();
         let result = self
             .runtime
-            .nudge(&to, message, mode)
+            .nudge(&to, message, mode, timeout_ms)
             .await
             .context("nudge runtime port failed")?;
         Ok(NudgeDelivery {
@@ -364,6 +366,7 @@ impl DaemonState {
                 recipient_id,
                 MAIL_NOTIFY_NUDGE_CONTENT,
                 NudgeMode::from(mode),
+                request.timeout_ms,
             )
             .await
         {

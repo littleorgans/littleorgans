@@ -40,6 +40,7 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
         &session_id.to_string(),
         "hello",
         NudgeMode::Immediate,
+        None,
     )
     .await
     .or_panic("in-process nudge maps");
@@ -48,6 +49,7 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
         &session_id.to_string(),
         "hello",
         NudgeMode::Immediate,
+        None,
     )
     .await
     .or_panic("socket nudge maps");
@@ -187,10 +189,11 @@ async fn runtime_ports_invalid_session_id_fault_matches() {
         "not-a-uuid",
         "hello",
         NudgeMode::Immediate,
+        None,
     )
     .await
     .expect_err("in-process invalid session id faults");
-    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello", NudgeMode::Immediate)
+    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello", NudgeMode::Immediate, None)
         .await
         .expect_err("socket invalid session id faults");
 
@@ -345,6 +348,7 @@ fn mock_rtmd_nudge(session_id: SessionId, outcome: NudgeOutcome) -> SocketFixtur
                 session_id,
                 content: "hello".to_string(),
                 mode: NudgeMode::Immediate,
+                timeout_ms: None,
             },
         },
         RuntimeResponse::Nudge(NudgePayload {

@@ -9,7 +9,7 @@ async fn typed_helpers_round_trip_against_real_daemon() {
     let daemon = TestDaemon::start().await;
 
     let version = daemon.client.version().await.expect("version helper");
-    assert_eq!(version.version.protocol_version, "0.6");
+    assert_eq!(version.version.protocol_version, "0.7");
 
     let status = daemon
         .client

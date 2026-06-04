@@ -6,6 +6,8 @@ pub struct NudgeRequest {
     pub session_id: SessionId,
     pub content: String,
     pub mode: NudgeMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Delivery policy for a nudge, expressing how to treat a recipient that is

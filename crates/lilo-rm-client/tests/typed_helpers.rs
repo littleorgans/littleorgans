@@ -217,6 +217,7 @@ fn nudge_request() -> NudgeRequest {
         session_id: session_id(),
         content: "wake up".to_owned(),
         mode: NudgeMode::Immediate,
+        timeout_ms: None,
     }
 }
 

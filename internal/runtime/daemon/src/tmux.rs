@@ -23,9 +23,10 @@ impl TmuxGateway {
         tmux_pane: &TmuxAddress,
         content: &str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
         runtime: &RuntimeKind,
     ) -> Result<crate::tmux_nudge::NudgeSendOutcome> {
-        crate::tmux_nudge::nudge(server_label, tmux_pane, content, mode, runtime).await
+        crate::tmux_nudge::nudge(server_label, tmux_pane, content, mode, timeout_ms, runtime).await
     }
 
     pub async fn respawn_pane(

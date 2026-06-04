@@ -124,6 +124,7 @@ pub(crate) async fn nudge(
     tmux_pane: &TmuxAddress,
     content: &str,
     mode: NudgeMode,
+    timeout_ms: Option<u64>,
     runtime: &RuntimeKind,
 ) -> Result<NudgeSendOutcome> {
     let mut ops = RealNudgeOps {
@@ -131,12 +132,13 @@ pub(crate) async fn nudge(
         tmux_pane,
         content,
     };
-    execute_nudge(&mut ops, mode, runtime).await
+    execute_nudge(&mut ops, mode, timeout_ms, runtime).await
 }
 
 async fn execute_nudge(
     ops: &mut impl NudgeOps,
     mode: NudgeMode,
+    timeout_ms: Option<u64>,
     runtime: &RuntimeKind,
 ) -> Result<NudgeSendOutcome> {
     if !ops.is_alive().await? {
@@ -148,7 +150,7 @@ async fn execute_nudge(
 
     let policy = match mode {
         NudgeMode::Immediate => PolicyOutcome::Ready,
-        NudgeMode::Wait => wait_for_idle(ops, runtime, WAIT_TIMING).await?,
+        NudgeMode::Wait => wait_for_idle(ops, runtime, wait_timing(timeout_ms)).await?,
         NudgeMode::Steer => steer_if_busy(ops, runtime, STEER_TIMING).await?,
     };
     if policy == PolicyOutcome::BusyTimeout {
@@ -156,6 +158,13 @@ async fn execute_nudge(
     }
 
     send_nudge_payload(ops, runtime).await
+}
+
+fn wait_timing(timeout_ms: Option<u64>) -> NudgeTiming {
+    NudgeTiming {
+        timeout: timeout_ms.map_or(WAIT_TIMING.timeout, Duration::from_millis),
+        ..WAIT_TIMING
+    }
 }
 
 async fn send_nudge_payload(
@@ -429,7 +438,7 @@ mod tests {
     async fn execute_wait_timeout_returns_agent_busy_without_payload() {
         let mut ops = FakeOps::new(vec![]).with_busy_default();
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Wait, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Wait, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -438,10 +447,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn execute_wait_uses_timeout_override() {
+        let mut ops = FakeOps::new(vec![]).with_busy_default();
+
+        let outcome = execute_nudge(&mut ops, NudgeMode::Wait, Some(3), &RuntimeKind::Codex)
+            .await
+            .expect("nudge succeeds");
+
+        assert_eq!(outcome, NudgeSendOutcome::AgentBusyTimeout);
+        assert_eq!(
+            ops.actions
+                .iter()
+                .filter(|action| **action == "capture")
+                .count(),
+            2
+        );
+        assert!(!ops.actions.contains(&"payload"));
+    }
+
+    #[tokio::test]
     async fn steer_timeout_interrupts_once_without_payload() {
         let mut ops = FakeOps::new(vec![]).with_busy_default();
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Steer, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Steer, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -491,7 +519,7 @@ mod tests {
     async fn steer_capture_failure_best_effort_delivers_without_escape() {
         let mut ops = FakeOps::new(vec![CaptureFixture::Error]);
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Steer, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Steer, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -509,7 +537,7 @@ mod tests {
         ])
         .with_copy_modes(vec![true, true]);
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Wait, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Wait, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -535,7 +563,7 @@ mod tests {
     async fn payload_send_failure_after_liveness_maps_to_pane_dead() {
         let mut ops = FakeOps::new(vec![]).with_payload_error_pane_dead();
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -552,6 +580,7 @@ mod tests {
         let outcome = execute_nudge(
             &mut ops,
             NudgeMode::Wait,
+            None,
             &RuntimeKind::Other("custom".to_owned()),
         )
         .await
@@ -572,7 +601,7 @@ mod tests {
             CaptureFixture::Content(BUSY_CODEX),
         ]);
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -585,7 +614,7 @@ mod tests {
     async fn confirmed_submit_does_not_resend() {
         let mut ops = FakeOps::new(vec![CaptureFixture::Content(BUSY_CODEX)]);
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
@@ -599,7 +628,7 @@ mod tests {
         // rather than a silent drop or an unbounded resend loop.
         let mut ops = FakeOps::new(vec![]);
 
-        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, &RuntimeKind::Codex)
+        let outcome = execute_nudge(&mut ops, NudgeMode::Immediate, None, &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 

@@ -170,6 +170,7 @@ impl ServerState {
             tmux_pane,
             &request.content,
             request.mode,
+            request.timeout_ms,
             &lifecycle.runtime,
         )
         .await?

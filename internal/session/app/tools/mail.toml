@@ -41,6 +41,15 @@ cli_help        = "Wake mode after mail is persisted: wait (until the recipient 
 cli_flag        = "--notify"
 
 [[tools.mail_send.params]]
+name            = "timeout"
+type            = "integer"
+required        = false
+mcp_description = "Maximum seconds to wait for notify=wait to reach an idle recipient. Requires notify=wait."
+cli_help        = "Maximum seconds to wait for --notify wait. Requires --notify wait."
+cli_flag        = "--timeout"
+mcp_schema      = '{"type":"integer","minimum":1}'
+
+[[tools.mail_send.params]]
 name            = "context_id"
 type            = "string"
 required        = true

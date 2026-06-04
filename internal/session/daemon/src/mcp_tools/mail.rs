@@ -2,7 +2,7 @@ use anyhow::Result;
 use lilo_session_core::{
     MailCheckRequest, MailCountView, MailIntent, MailLogFilter, MailNotifyMode, MailPeekRequest,
     MailReadRequest, MailSendRequest, MailStopCheckRequest, MailTailRequest, RpcResponse, Selector,
-    SessionRpc, tool_success,
+    SessionRpc, mail_timeout_seconds_to_ms, tool_success, validate_mail_notify_timeout,
 };
 use serde_json::{Value, json};
 use std::str::FromStr;
@@ -23,6 +23,9 @@ pub(crate) async fn mail_send(
 ) -> Result<Value> {
     let to = required_selector(arguments, "to")?;
     let to = scoped_required_selector(state, context, arguments, to).await?;
+    let notify = optional_notify(arguments)?;
+    let timeout_ms = optional_timeout_ms(arguments)?;
+    validate_mail_notify_timeout(notify, timeout_ms)?;
     let response = state
         .handle_direct(
             context.clone(),
@@ -30,7 +33,8 @@ pub(crate) async fn mail_send(
                 request: MailSendRequest {
                     to,
                     content: required_string(arguments, "content")?.to_string(),
-                    notify: optional_notify(arguments)?,
+                    notify,
+                    timeout_ms,
                     context_id: required_string(arguments, "context_id")?.to_string(),
                     intent: required_intent(arguments)?,
                     idempotency_key: optional_string(arguments, "idempotency_key")
@@ -215,4 +219,10 @@ fn optional_notify(arguments: &Value) -> Result<Option<MailNotifyMode>> {
         .map(MailNotifyMode::from_str)
         .transpose()
         .map_err(Into::into)
+}
+
+fn optional_timeout_ms(arguments: &Value) -> Result<Option<u64>> {
+    Ok(optional_u64(arguments, "timeout")
+        .map(mail_timeout_seconds_to_ms)
+        .transpose()?)
 }

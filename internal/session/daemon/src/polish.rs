@@ -81,7 +81,7 @@ impl DaemonState {
                 status: status.to_string(),
                 daemon_version: Some(self.daemon_version.clone()),
                 runtime: format!(
-                    "rtmd (lilo-rm-client 0.6.x, protocol {RUNTIME_PROTOCOL_VERSION})"
+                    "rtmd (lilo-rm-client 0.7.x, protocol {RUNTIME_PROTOCOL_VERSION})"
                 ),
                 runtime_matters,
                 findings,

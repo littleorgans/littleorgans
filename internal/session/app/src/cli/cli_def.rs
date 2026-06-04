@@ -298,6 +298,13 @@ pub struct MailSendArgs {
         help = generated_help::MAIL_SEND_NOTIFY_HELP
     )]
     pub notify: Option<String>,
+    #[arg(
+        long,
+        requires = "notify",
+        value_parser = clap::value_parser!(u64).range(1..),
+        help = generated_help::MAIL_SEND_TIMEOUT_HELP
+    )]
+    pub timeout: Option<u64>,
     #[arg(long, help = generated_help::MAIL_SEND_CONTEXT_ID_HELP)]
     pub context_id: String,
     #[arg(long, help = generated_help::MAIL_SEND_INTENT_HELP)]
@@ -396,5 +403,70 @@ mod tests {
             panic!("expected mail tail command");
         };
         assert_eq!(args.timeout, Some(2));
+    }
+
+    #[test]
+    fn mail_send_timeout_requires_notify_and_positive_value() {
+        let parsed = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--notify",
+            "wait",
+            "--timeout",
+            "2",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ])
+        .expect("parse mail send timeout");
+        let Command::Mail(MailArgs {
+            action: MailAction::Send(args),
+        }) = parsed.command
+        else {
+            panic!("expected mail send command");
+        };
+        assert_eq!(args.timeout, Some(2));
+
+        let missing_notify = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--timeout",
+            "2",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ]);
+        assert!(missing_notify.is_err());
+
+        let zero = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--notify",
+            "wait",
+            "--timeout",
+            "0",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ]);
+        assert!(zero.is_err());
     }
 }

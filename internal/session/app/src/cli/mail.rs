@@ -9,7 +9,8 @@ use std::{
 use lilo_session_core::{
     CallerContextRequest, MailIntent, MailLogCursor, MailLogFilter, MailNotifyMode,
     MailPeekRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, MailTailRequest,
-    MailTailResponse, RpcResponse, SessionRpc,
+    MailTailResponse, RpcResponse, SessionRpc, mail_timeout_seconds_to_ms,
+    validate_mail_notify_timeout,
 };
 
 use crate::cli::cli_def::{
@@ -32,15 +33,19 @@ pub async fn run(args: MailArgs, json_output: bool) -> Result<()> {
 }
 
 async fn send(args: MailSendArgs, json_output: bool) -> Result<()> {
+    let notify = args
+        .notify
+        .as_deref()
+        .map(MailNotifyMode::from_str)
+        .transpose()?;
+    let timeout_ms = args.timeout.map(mail_timeout_seconds_to_ms).transpose()?;
+    validate_mail_notify_timeout(notify, timeout_ms)?;
     let response = send_daemon_request(SessionRpc::MailSend {
         request: MailSendRequest {
             to: required_scoped_selector(&args.to, &args.scope)?,
             content: args.content,
-            notify: args
-                .notify
-                .as_deref()
-                .map(MailNotifyMode::from_str)
-                .transpose()?,
+            notify,
+            timeout_ms,
             context_id: args.context_id,
             intent: MailIntent::from_client_send_str(&args.intent)?,
             idempotency_key: args.idempotency_key,

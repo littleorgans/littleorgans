@@ -130,6 +130,7 @@ impl RtmdDriver {
         session_id: &str,
         content: &str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> Result<NudgeResult, RuntimeError> {
         let session_id = parse_session_id(session_id)?;
         let response = self
@@ -138,6 +139,7 @@ impl RtmdDriver {
                 session_id,
                 content: content.to_string(),
                 mode,
+                timeout_ms,
             })
             .await
             .map_err(RuntimeError::wire)?;
@@ -223,8 +225,11 @@ impl RuntimePort for RtmdDriver {
         session_id: &'a str,
         content: &'a str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> RuntimePortFuture<'a, NudgeResult> {
-        Box::pin(async move { RtmdDriver::nudge(self, session_id, content, mode).await })
+        Box::pin(
+            async move { RtmdDriver::nudge(self, session_id, content, mode, timeout_ms).await },
+        )
     }
 
     fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>> {

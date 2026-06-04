@@ -87,10 +87,11 @@ expression: snapshot
         "tmux_pane_snapshot",
         "kill_outcomes",
         "spawn_conflicts",
-        "spawn_request_mounts"
+        "spawn_request_mounts",
+        "nudge_wait_timeout"
       ],
       "git_sha": "[git_sha]",
-      "protocol_version": "0.6",
+      "protocol_version": "0.7",
       "version": "[version]"
     },
     "watchers": {
@@ -196,10 +197,11 @@ expression: snapshot
       "tmux_pane_snapshot",
       "kill_outcomes",
       "spawn_conflicts",
-      "spawn_request_mounts"
+      "spawn_request_mounts",
+      "nudge_wait_timeout"
     ],
     "git_sha": "[git_sha]",
-    "protocol_version": "0.6",
+    "protocol_version": "0.7",
     "version": "[version]"
   }
 }

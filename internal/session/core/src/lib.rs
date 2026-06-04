@@ -46,4 +46,5 @@ pub use types::{
     MailNotifyStatus, MailSendResult, MailStatus, MessageView, NAMESPACE_MAX_LEN, Namespace,
     NamespaceError, NamespaceRecord, NamespaceScope, RESERVED_NAMESPACE_PREFIX, RecipientSummary,
     RuntimeKind, Selector, SenderRef, SenderView, Session, SessionState,
+    mail_timeout_seconds_to_ms, validate_mail_notify_timeout,
 };

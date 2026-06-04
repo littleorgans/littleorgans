@@ -71,6 +71,8 @@ pub const MAIL_SEND_CONTENT_HELP: &str = "Message content.";
 #[rustfmt::skip]
 pub const MAIL_SEND_NOTIFY_HELP: &str = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.";
 #[rustfmt::skip]
+pub const MAIL_SEND_TIMEOUT_HELP: &str = "Maximum seconds to wait for --notify wait. Requires --notify wait.";
+#[rustfmt::skip]
 pub const MAIL_SEND_CONTEXT_ID_HELP: &str = "Conversation correlation tag.";
 #[rustfmt::skip]
 pub const MAIL_SEND_INTENT_HELP: &str = "Message intent tag: request, result, or inform.";

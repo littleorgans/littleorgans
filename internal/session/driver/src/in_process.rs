@@ -141,6 +141,7 @@ impl RuntimePort for InProcessRuntime {
         session_id: &'a str,
         content: &'a str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> RuntimePortFuture<'a, NudgeResult> {
         Box::pin(async move {
             let session_id = parse_session_id(session_id)?;
@@ -150,6 +151,7 @@ impl RuntimePort for InProcessRuntime {
                     session_id,
                     content: content.to_string(),
                     mode,
+                    timeout_ms,
                 })
                 .await
                 .map_err(Self::domain_error)?;

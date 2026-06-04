@@ -42,6 +42,7 @@ fn explicit_headless_spawn_records_no_tmux_pane_and_rejects_nudge() {
                 session_id: session_id.parse().expect("session id"),
                 content: "headless".to_owned(),
                 mode: NudgeMode::Immediate,
+                timeout_ms: None,
             },
         },
     );
@@ -78,6 +79,7 @@ fn missing_session_nudge_uses_structured_error_code() {
                 session_id,
                 content: "missing".to_owned(),
                 mode: NudgeMode::Immediate,
+                timeout_ms: None,
             },
         },
     );

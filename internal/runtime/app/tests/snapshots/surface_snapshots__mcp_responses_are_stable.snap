@@ -231,7 +231,7 @@ expression: snapshot
     "result": {
       "content": [
         {
-          "text": "{\"capabilities\":[\"structured_protocol_errors\",\"headless_stdio_log_paths\",\"status_session_set_filter\",\"status_updated_since_filter\",\"typed_nudge_outcomes\",\"validate_target_preflight\",\"events_cursor\",\"events_long_poll\",\"tmux_pane_snapshot\",\"kill_outcomes\",\"spawn_conflicts\",\"spawn_request_mounts\"],\"git_sha\":\"[git_sha]\",\"protocol_version\":\"0.6\",\"version\":\"[version]\"}",
+          "text": "{\"capabilities\":[\"structured_protocol_errors\",\"headless_stdio_log_paths\",\"status_session_set_filter\",\"status_updated_since_filter\",\"typed_nudge_outcomes\",\"validate_target_preflight\",\"events_cursor\",\"events_long_poll\",\"tmux_pane_snapshot\",\"kill_outcomes\",\"spawn_conflicts\",\"spawn_request_mounts\",\"nudge_wait_timeout\"],\"git_sha\":\"[git_sha]\",\"protocol_version\":\"0.7\",\"version\":\"[version]\"}",
           "type": "text"
         }
       ],
@@ -248,10 +248,11 @@ expression: snapshot
           "tmux_pane_snapshot",
           "kill_outcomes",
           "spawn_conflicts",
-          "spawn_request_mounts"
+          "spawn_request_mounts",
+          "nudge_wait_timeout"
         ],
         "git_sha": "[git_sha]",
-        "protocol_version": "0.6",
+        "protocol_version": "0.7",
         "version": "[version]"
       }
     }
