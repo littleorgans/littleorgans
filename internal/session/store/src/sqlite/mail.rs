@@ -3,9 +3,10 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use lilo_common::id::{MessageId, SessionId};
+use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_session_core::{Mail, MailIntent, MailStatus, SenderRef, SmError};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{QueryBuilder, Row, Sqlite, Transaction};
+use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 use thiserror::Error;
 
 use super::SqliteStore;
@@ -60,24 +61,25 @@ impl SqliteStore {
             });
         }
         let sender_ref = serde_json::to_string(&mail.sender)?;
-        let mut transaction = self.pool.begin().await?;
-        if let Some(replay) =
-            load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?
-        {
-            transaction.commit().await?;
-            return Ok(MailWriteOutcome {
-                mail: replay,
-                inserted: false,
-            });
+        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let result: Result<MailWriteOutcome, MailRowError> = async {
+            if let Some(replay) =
+                load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?
+            {
+                return Ok(MailWriteOutcome {
+                    mail: replay,
+                    inserted: false,
+                });
+            }
+            insert_message(&mut transaction, mail, &sender_ref).await?;
+            insert_deliveries(&mut transaction, mail, recipient_ids).await?;
+            Ok(MailWriteOutcome {
+                mail: mail_for_recipients(mail, recipient_ids),
+                inserted: true,
+            })
         }
-        insert_message(&mut transaction, mail, &sender_ref).await?;
-        insert_deliveries(&mut transaction, mail, recipient_ids).await?;
-        let outcome = MailWriteOutcome {
-            mail: mail_for_recipients(mail, recipient_ids),
-            inserted: true,
-        };
-        transaction.commit().await?;
-        Ok(outcome)
+        .await;
+        finish_immediate_pool_tx(transaction, result).await
     }
 
     pub async fn idempotent_mail_for_recipients(
@@ -89,11 +91,8 @@ impl SqliteStore {
             return Ok(None);
         }
         let sender_ref = serde_json::to_string(&mail.sender)?;
-        let mut transaction = self.pool.begin().await?;
-        let replay =
-            load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?;
-        transaction.commit().await?;
-        Ok(replay)
+        let mut conn = self.pool.acquire().await?;
+        load_idempotent_replay(&mut conn, &sender_ref, mail, recipient_ids).await
     }
 
     pub async fn count_unread_mail(&self, recipient_id: &SessionId) -> Result<usize, MailRowError> {
@@ -119,23 +118,27 @@ impl SqliteStore {
             return fetch_unread(&self.pool, recipient_id).await;
         }
 
-        let mut transaction = self.pool.begin().await?;
-        let mut mail = fetch_unread(&mut *transaction, recipient_id).await?;
-        for item in &mail {
-            sqlx::query(
-                "UPDATE message_deliveries
-                 SET status = 'read', read_at = ?
-                 WHERE message_id = ?
-                   AND recipient_session_id = ?
-                   AND status = 'unread'",
-            )
-            .bind(read_at.to_rfc3339())
-            .bind(item.id.to_string())
-            .bind(recipient_id.to_string())
-            .execute(&mut *transaction)
-            .await?;
+        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let result: Result<Vec<Mail>, MailRowError> = async {
+            let mail = fetch_unread(&mut *transaction, recipient_id).await?;
+            for item in &mail {
+                sqlx::query(
+                    "UPDATE message_deliveries
+                     SET status = 'read', read_at = ?
+                     WHERE message_id = ?
+                       AND recipient_session_id = ?
+                       AND status = 'unread'",
+                )
+                .bind(read_at.to_rfc3339())
+                .bind(item.id.to_string())
+                .bind(recipient_id.to_string())
+                .execute(&mut *transaction)
+                .await?;
+            }
+            Ok(mail)
         }
-        transaction.commit().await?;
+        .await;
+        let mut mail = finish_immediate_pool_tx(transaction, result).await?;
         for item in &mut mail {
             item.read_at = Some(read_at);
         }
@@ -231,7 +234,7 @@ pub struct MailWriteOutcome {
 }
 
 async fn insert_message(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     mail: &Mail,
     sender_ref: &str,
 ) -> Result<(), MailRowError> {
@@ -247,13 +250,13 @@ async fn insert_message(
     .bind(&mail.idempotency_key)
     .bind(&mail.content)
     .bind(mail.sent_at.to_rfc3339())
-    .execute(&mut **transaction)
+    .execute(&mut *transaction)
     .await?;
     Ok(())
 }
 
 async fn insert_deliveries(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     mail: &Mail,
     recipient_ids: &[SessionId],
 ) -> Result<(), MailRowError> {
@@ -267,7 +270,7 @@ async fn insert_deliveries(
         .bind(recipient_id.to_string())
         .bind(mail.status.to_string())
         .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
-        .execute(&mut **transaction)
+        .execute(&mut *transaction)
         .await?;
     }
     Ok(())
@@ -322,7 +325,7 @@ impl StoredMessage {
 }
 
 async fn load_idempotent_replay(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     sender_ref: &str,
     mail: &Mail,
     recipient_ids: &[SessionId],
@@ -340,7 +343,7 @@ async fn load_idempotent_replay(
 }
 
 async fn message_by_idempotency(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     sender_ref: &str,
     key: &str,
 ) -> Result<Option<StoredMessage>, MailRowError> {
@@ -352,14 +355,14 @@ async fn message_by_idempotency(
     )
     .bind(sender_ref)
     .bind(key)
-    .fetch_optional(&mut **transaction)
+    .fetch_optional(&mut *transaction)
     .await?
     .map(|row| stored_message_from_row(&row))
     .transpose()
 }
 
 async fn validate_idempotent_replay(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     existing: &StoredMessage,
     mail: &Mail,
     recipient_ids: &[SessionId],
@@ -381,7 +384,7 @@ async fn validate_idempotent_replay(
 }
 
 async fn recipient_set_for_message(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     message_id: &MessageId,
 ) -> Result<BTreeSet<String>, MailRowError> {
     let rows = sqlx::query_scalar::<_, String>(
@@ -390,7 +393,7 @@ async fn recipient_set_for_message(
          WHERE message_id = ?",
     )
     .bind(message_id.to_string())
-    .fetch_all(&mut **transaction)
+    .fetch_all(&mut *transaction)
     .await?;
     Ok(rows.into_iter().collect())
 }
@@ -400,7 +403,7 @@ fn recipient_set(recipient_ids: &[SessionId]) -> BTreeSet<String> {
 }
 
 async fn load_message_deliveries(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut SqliteConnection,
     message: &StoredMessage,
     recipient_ids: &[SessionId],
 ) -> Result<Vec<Mail>, MailRowError> {
@@ -414,7 +417,7 @@ async fn load_message_deliveries(
         )
         .bind(message.id.to_string())
         .bind(recipient_id.to_string())
-        .fetch_one(&mut **transaction)
+        .fetch_one(&mut *transaction)
         .await?;
         let read_at = parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?;
         let status = MailStatus::from_str(&row.try_get::<String, _>("status")?)?;

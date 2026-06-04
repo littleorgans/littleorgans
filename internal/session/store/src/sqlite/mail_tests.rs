@@ -109,6 +109,64 @@ async fn idempotent_retry_collapses_to_existing_message() {
 }
 
 #[tokio::test]
+async fn concurrent_idempotent_sends_collapse_to_one_message() {
+    let (_dir, store) = SqliteStore::open_temp().await;
+    let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
+    let recipient_ids = [
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
+        SessionId::from_uuid(uuid::Uuid::now_v7()),
+    ];
+    let first = test_mail(
+        sender.clone(),
+        recipient_ids[0],
+        "send once",
+        "idempotent-thread",
+        Some("send-race"),
+    );
+    let second = Mail {
+        id: MessageId::from_uuid(uuid::Uuid::now_v7()),
+        sent_at: Utc::now() + Duration::milliseconds(1),
+        ..first.clone()
+    };
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let first_store = store.clone();
+    let second_store = store.clone();
+    let first_barrier = std::sync::Arc::clone(&barrier);
+    let second_barrier = std::sync::Arc::clone(&barrier);
+
+    let first_task = tokio::spawn(async move {
+        first_barrier.wait().await;
+        first_store
+            .insert_mail_for_recipients_with_outcome(&first, &recipient_ids)
+            .await
+    });
+    let second_task = tokio::spawn(async move {
+        second_barrier.wait().await;
+        second_store
+            .insert_mail_for_recipients_with_outcome(&second, &recipient_ids)
+            .await
+    });
+
+    let first_outcome = first_task.await.or_panic("first task joins");
+    let second_outcome = second_task.await.or_panic("second task joins");
+    let outcomes = [
+        first_outcome.or_panic("first send succeeds"),
+        second_outcome.or_panic("second send succeeds"),
+    ];
+
+    assert_eq!(
+        outcomes.iter().filter(|outcome| outcome.inserted).count(),
+        1
+    );
+    assert_eq!(
+        outcomes.iter().filter(|outcome| !outcome.inserted).count(),
+        1
+    );
+    assert_eq!(message_count(&store).await, 1);
+    assert_eq!(delivery_count(&store).await, 2);
+}
+
+#[tokio::test]
 async fn idempotent_retry_with_different_recipients_conflicts() {
     let (_dir, store) = SqliteStore::open_temp().await;
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_common::id::{IntentId, SessionId};
+use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_rm_core::{Lifecycle, LifecycleState, SpawnRequest as RuntimeSpawnRequest};
 use lilo_session_core::{
     Label, Namespace, RuntimeKind, Session, SessionState, paths::lifecycle_transcript_path,
@@ -199,7 +200,9 @@ impl SqliteStore {
         &self,
         intent: &PendingSpawnIntent,
     ) -> Result<(), SpawnIntentError> {
-        insert_pending_spawn_intent_with(&self.pool, intent).await
+        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let result = insert_pending_spawn_intent_with(&mut *transaction, intent).await;
+        finish_immediate_pool_tx(transaction, result).await
     }
 
     pub async fn insert_pending_spawn_intent_in(
@@ -214,7 +217,11 @@ impl SqliteStore {
         &self,
         session_id: SessionId,
     ) -> Result<(), SpawnIntentError> {
-        resolve_spawn_intent_with(&self.pool, session_id, Utc::now().timestamp_millis()).await
+        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let result =
+            resolve_spawn_intent_with(&mut *transaction, session_id, Utc::now().timestamp_millis())
+                .await;
+        finish_immediate_pool_tx(transaction, result).await
     }
 
     pub async fn resolve_spawn_intent_in(
@@ -230,13 +237,15 @@ impl SqliteStore {
         session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
-        abort_spawn_intent_with(
-            &self.pool,
+        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let result = abort_spawn_intent_with(
+            &mut *transaction,
             session_id,
             reason,
             Utc::now().timestamp_millis(),
         )
-        .await
+        .await;
+        finish_immediate_pool_tx(transaction, result).await
     }
 
     pub async fn abort_spawn_intent_in(
