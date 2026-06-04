@@ -87,7 +87,6 @@ fn retained_leaf_commands_print_help_on_bare_invocation() {
         ["delete", "session"].as_slice(),
         ["delete", "namespace"].as_slice(),
         ["mail", "send"].as_slice(),
-        ["mail", "check"].as_slice(),
         ["mail", "stop-check"].as_slice(),
         ["mail", "tail"].as_slice(),
         ["label"].as_slice(),
@@ -223,7 +222,7 @@ fn mail_help_matches_protocol_v1_surface() {
     assert!(peek.contains("--include-system"), "{peek}");
 
     let tail = help(&["mail", "tail", "--help"]);
-    assert!(tail.contains("--once"), "{tail}");
+    assert!(tail.contains("--timeout"), "{tail}");
     assert!(tail.contains("--context-id"), "{tail}");
 }
 
@@ -354,7 +353,6 @@ fn retained_help_nodes() -> Vec<&'static [&'static str]> {
         &["mail", "send", "--help"],
         &["mail", "read", "--help"],
         &["mail", "peek", "--help"],
-        &["mail", "check", "--help"],
         &["mail", "stop-check", "--help"],
         &["mail", "tail", "--help"],
         &["label", "--help"],

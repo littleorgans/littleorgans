@@ -40,9 +40,9 @@ pub const LABEL_EXAMPLES: &str = "Examples:\n  # Add a label to the sessions mat
 #[rustfmt::skip]
 pub const MAIL_ABOUT: &str = "Send mail to an agent";
 #[rustfmt::skip]
-pub const MAIL_LONG_ABOUT: &str = "Send and inspect agent mail. `mail send` delivers a message to a recipient selector with an intent (request, result, or inform); `mail peek` and `mail tail` inspect a conversation; `mail check` and `mail read` manage an inbox.";
+pub const MAIL_LONG_ABOUT: &str = "Send and inspect agent mail. `mail send` delivers a message to a recipient selector with an intent (request, result, or inform); `mail peek` and `mail tail` inspect a conversation; `mail read` manages an inbox.";
 #[rustfmt::skip]
-pub const MAIL_EXAMPLES: &str = "Examples:\n  # Send a request to an agent by role\n  lilo mail send --to role:reviewer --content 'please review #42' --context-id review-42 --intent request\n\n  # Peek a conversation thread by context id\n  lilo mail peek --context-id review-42\n\n  # Follow a conversation until the current batch ends\n  lilo mail tail --context-id review-42 --once\n";
+pub const MAIL_EXAMPLES: &str = "Examples:\n  # Send a request to an agent by role\n  lilo mail send --to role:reviewer --content 'please review #42' --context-id review-42 --intent request\n\n  # Peek a conversation thread by context id\n  lilo mail peek --context-id review-42\n\n  # Follow a conversation until the current batch ends\n  lilo mail tail --context-id review-42 --timeout 0\n";
 #[rustfmt::skip]
 pub const NUDGE_ABOUT: &str = "Nudge an agent";
 #[rustfmt::skip]
@@ -107,7 +107,7 @@ pub const EXAMPLE_INVOCATIONS: &[&[&str]] = &[
     &["label", "label:tier=canary", "promoted=true", "-A"],
     &["mail", "send", "--to", "role:reviewer", "--content", "please review #42", "--context-id", "review-42", "--intent", "request"],
     &["mail", "peek", "--context-id", "review-42"],
-    &["mail", "tail", "--context-id", "review-42", "--once"],
+    &["mail", "tail", "--context-id", "review-42", "--timeout", "0"],
     &["nudge", "--to", "role:engineer", "--content", "you have mail"],
     &["nudge", "--to", "role:engineer", "--content", "ready for review", "--wait"],
     &["capture", "0190a1b2-c3d4-7e5f-8a9b-1c2d3e4f5a6b"],

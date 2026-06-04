@@ -130,6 +130,7 @@ async fn tail_context(
                     filter: log_filter(context_id, false),
                     after: None,
                     follow: false,
+                    wait_ms: None,
                 },
             },
         )

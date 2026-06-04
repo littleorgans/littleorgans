@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, SystemTime};
 
 use lilo_common::id::{MessageId, SessionId};
-use lilo_session_core::{Label, MailCountView, MailSendResult, MessageView, SenderView, Session};
+use lilo_session_core::{Label, MailSendResult, MessageView, SenderView, Session};
 
 const CONTENT_PREVIEW_MAX_CHARS: usize = 120;
 const PREVIEW_ELLIPSIS: &str = "...";
@@ -188,15 +188,6 @@ pub fn print_mail_send_summary(results: &[MailSendResult]) {
     print_table(&headers, &rows);
 }
 
-pub fn print_mail_counts(total: usize, counts: &[MailCountView]) {
-    println!("{total} unread total");
-    if counts.is_empty() {
-        return;
-    }
-    let rows = counts.iter().map(mail_count_cells).collect::<Vec<_>>();
-    print_table(&["MAILBOX", "UNREAD"], &rows);
-}
-
 fn sender_display_label(sender: &SenderView) -> &str {
     match sender {
         SenderView::Session { display_label, .. } | SenderView::Operator { display_label, .. } => {
@@ -342,10 +333,6 @@ fn conversation_cells(summary: &ConversationSummary<'_>) -> Vec<String> {
 fn message_is_newer(candidate: &MessageView, latest: &MessageView) -> bool {
     candidate.sent_at > latest.sent_at
         || (candidate.sent_at == latest.sent_at && candidate.id > latest.id)
-}
-
-fn mail_count_cells(count: &MailCountView) -> Vec<String> {
-    vec![count.display_label.clone(), count.unread.to_string()]
 }
 
 fn print_table(headers: &[&str], rows: &[Vec<String>]) {

@@ -134,6 +134,7 @@ cli_flag        = "--include-system"
 cli_name        = "mail check"
 mcp_description = "Return the unread mail count for sessions selected by selector without draining mail."
 cli_about       = "Return unread mail count for selected sessions."
+render_cli_help = false
 mcp_namespace_scope = true
 output_schema   = '''
 {
@@ -202,12 +203,10 @@ mcp_description = "Include system receipt metadata in the transcript."
 cli_flag        = "--include-system"
 
 [[tools.mail_tail.params]]
-name            = "once"
-type            = "boolean"
+name            = "timeout"
+type            = "integer"
 required        = false
-mcp_description = "Return immediately after the current transcript batch."
-cli_help        = "Return immediately after the current transcript batch."
-cli_flag        = "--once"
+mcp_description = "Maximum seconds to wait for appended mail. Omit or use 0 for a snapshot; positive values bound one follow request."
 
 [tools.mail_stop_check]
 cli_name        = "mail stop-check"

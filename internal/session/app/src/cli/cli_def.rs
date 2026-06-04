@@ -12,6 +12,8 @@ const NAMESPACE_CREATE_HELP: &str = "Namespace slug to create.";
 const NAMESPACE_CONTEXT_HELP: &str = "Namespace slug to use as the user context.";
 const NAMESPACE_DELETE_HELP: &str = "Namespace slug to delete.";
 const CONFIG_ABOUT: &str = "Manage session-matters user configuration";
+const MAIL_TAIL_TIMEOUT_HELP: &str =
+    "Maximum seconds to follow. Use 0 to return after the current transcript batch.";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -273,8 +275,6 @@ pub enum MailAction {
     Read(MailReadArgs),
     #[command(about = generated_help::MAIL_PEEK_ABOUT, long_about = generated_help::MAIL_PEEK_ABOUT)]
     Peek(MailObservationArgs),
-    #[command(about = generated_help::MAIL_CHECK_ABOUT, long_about = generated_help::MAIL_CHECK_ABOUT)]
-    Check(MailCheckArgs),
     #[command(name = "stop-check", about = generated_help::MAIL_STOP_CHECK_ABOUT, long_about = generated_help::MAIL_STOP_CHECK_ABOUT)]
     StopCheck(MailStopCheckArgs),
     #[command(about = generated_help::MAIL_TAIL_ABOUT, long_about = generated_help::MAIL_TAIL_ABOUT)]
@@ -325,15 +325,6 @@ pub struct MailObservationArgs {
 
 #[derive(Debug, Args)]
 #[command(arg_required_else_help = true)]
-pub struct MailCheckArgs {
-    #[arg(long, help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
-    pub selector: String,
-    #[command(flatten)]
-    pub scope: NamespaceScopeArgs,
-}
-
-#[derive(Debug, Args)]
-#[command(arg_required_else_help = true)]
 pub struct MailStopCheckArgs {
     #[arg(long, help = generated_help::MAIL_STOP_CHECK_SELECTOR_HELP)]
     pub selector: String,
@@ -346,8 +337,8 @@ pub struct MailStopCheckArgs {
 pub struct MailTailArgs {
     #[command(flatten)]
     pub observation: MailObservationArgs,
-    #[arg(long, help = generated_help::MAIL_TAIL_ONCE_HELP)]
-    pub once: bool,
+    #[arg(long = "timeout", help = MAIL_TAIL_TIMEOUT_HELP)]
+    pub timeout: Option<u64>,
 }
 
 #[derive(Debug, Args)]
@@ -379,3 +370,31 @@ pub struct NudgeArgs {
 
 #[derive(Debug, Args)]
 pub struct McpArgs {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mail_tail_timeout_flag_maps_values() {
+        let parsed = Cli::try_parse_from(["sm", "mail", "tail", "--timeout", "0"])
+            .expect("parse mail tail zero timeout");
+        let Command::Mail(MailArgs {
+            action: MailAction::Tail(args),
+        }) = parsed.command
+        else {
+            panic!("expected mail tail command");
+        };
+        assert_eq!(args.timeout, Some(0));
+
+        let parsed = Cli::try_parse_from(["sm", "mail", "tail", "--timeout", "2"])
+            .expect("parse mail tail timeout");
+        let Command::Mail(MailArgs {
+            action: MailAction::Tail(args),
+        }) = parsed.command
+        else {
+            panic!("expected mail tail command");
+        };
+        assert_eq!(args.timeout, Some(2));
+    }
+}

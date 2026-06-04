@@ -144,8 +144,7 @@ about = "Send mail to an agent"
 long_about = """
 Send and inspect agent mail. `mail send` delivers a message to a recipient \
 selector with an intent (request, result, or inform); `mail peek` and \
-`mail tail` inspect a conversation; `mail check` and `mail read` manage an \
-inbox."""
+`mail tail` inspect a conversation; `mail read` manages an inbox."""
 
 [[commands.examples]]
 description = "Send a request to an agent by role"
@@ -157,7 +156,7 @@ args = ["mail", "peek", "--context-id", "review-42"]
 
 [[commands.examples]]
 description = "Follow a conversation until the current batch ends"
-args = ["mail", "tail", "--context-id", "review-42", "--once"]
+args = ["mail", "tail", "--context-id", "review-42", "--timeout", "0"]
 
 [[commands]]
 name = "nudge"

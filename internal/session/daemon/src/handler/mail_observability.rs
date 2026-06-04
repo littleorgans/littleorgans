@@ -5,12 +5,12 @@ use lilo_session_core::{
     MailLogCursor, MailLogFilter, MailPeekRequest, MailPeekResponse, MailTailRequest,
     MailTailResponse, MessageView, RpcResponse, Selector,
 };
-use tokio::sync::broadcast;
+use tokio::{sync::broadcast, time};
 
 use crate::identity_client::RequestContext;
 
-use super::DaemonState;
 use super::message_view;
+use super::{DaemonState, MailAppendEvent};
 
 impl DaemonState {
     pub(super) async fn mail_peek(
@@ -40,7 +40,12 @@ impl DaemonState {
         Self::ensure_operator_observer(context)?;
         self.authorize_mail_observation(context).await?;
         let messages = self
-            .tail_messages(&request.filter, request.after.as_ref(), request.follow)
+            .tail_messages(
+                &request.filter,
+                request.after.as_ref(),
+                request.follow,
+                request.wait_ms,
+            )
             .await?;
         Ok(RpcResponse::MailTail {
             response: MailTailResponse {
@@ -55,23 +60,55 @@ impl DaemonState {
         filter: &MailLogFilter,
         after: Option<&MailLogCursor>,
         follow: bool,
+        wait_ms: Option<u64>,
     ) -> Result<Vec<MessageView>> {
-        let mut messages = self.message_log_views(filter, after).await?;
+        let messages = self.message_log_views(filter, after).await?;
         if !follow || !messages.is_empty() {
             return Ok(messages);
         }
 
         let mut appends = self.subscribe_mail_appends();
-        loop {
-            match appends.recv().await {
-                Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {
-                    messages = self.message_log_views(filter, after).await?;
-                    if !messages.is_empty() {
-                        return Ok(messages);
-                    }
+        if let Some(wait_ms) = wait_ms {
+            let sleep =
+                time::sleep_until(time::Instant::now() + time::Duration::from_millis(wait_ms));
+            tokio::pin!(sleep);
+            loop {
+                let append = tokio::select! {
+                    () = &mut sleep => return Ok(Vec::new()),
+                    append = appends.recv() => append,
+                };
+                if let Some(messages) = self.messages_after_append(append, filter, after).await? {
+                    return Ok(messages);
                 }
-                Err(broadcast::error::RecvError::Closed) => return Ok(Vec::new()),
             }
+        }
+
+        loop {
+            if let Some(messages) = self
+                .messages_after_append(appends.recv().await, filter, after)
+                .await?
+            {
+                return Ok(messages);
+            }
+        }
+    }
+
+    async fn messages_after_append(
+        &self,
+        append: Result<MailAppendEvent, broadcast::error::RecvError>,
+        filter: &MailLogFilter,
+        after: Option<&MailLogCursor>,
+    ) -> Result<Option<Vec<MessageView>>> {
+        match append {
+            Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                let messages = self.message_log_views(filter, after).await?;
+                if messages.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(messages))
+                }
+            }
+            Err(broadcast::error::RecvError::Closed) => Ok(Some(Vec::new())),
         }
     }
 

@@ -10,8 +10,7 @@ use lilo_session_core::{MailCheckRequest, RpcResponse, Selector, SessionRpc};
 mod common;
 use common::OrPanic as _;
 
-const MAIL_CHECK_BUDGET: Duration = Duration::from_millis(50);
-const RPC_BUDGET: Duration = Duration::from_millis(5);
+const MAIL_CHECK_RPC_BUDGET: Duration = Duration::from_millis(5);
 
 fn hot_path_benches(c: &mut Criterion) {
     let runtime_dir = fake_runtime_dir();
@@ -19,18 +18,16 @@ fn hot_path_benches(c: &mut Criterion) {
     let session_id = spawn_bench_agent(&daemon);
     let runtime = tokio::runtime::Runtime::new().or_panic("tokio runtime starts");
 
-    assert_budget("sm mail check cold-start", MAIL_CHECK_BUDGET, || {
-        run_mail_check(&daemon, &session_id);
-    });
-    assert_budget("daemon RPC round-trip", RPC_BUDGET, || {
-        run_rpc_round_trip(&runtime, &daemon, session_id);
-    });
+    assert_budget(
+        "mail_check daemon RPC round-trip",
+        MAIL_CHECK_RPC_BUDGET,
+        || {
+            run_mail_check_rpc(&runtime, &daemon, session_id);
+        },
+    );
 
-    c.bench_function("sm mail check cold-start", |bench| {
-        bench.iter(|| black_box(run_mail_check(&daemon, &session_id)));
-    });
-    c.bench_function("daemon RPC round-trip", |bench| {
-        bench.iter(|| black_box(run_rpc_round_trip(&runtime, &daemon, session_id)));
+    c.bench_function("mail_check daemon RPC round-trip", |bench| {
+        bench.iter(|| black_box(run_mail_check_rpc(&runtime, &daemon, session_id)));
     });
 }
 
@@ -53,23 +50,7 @@ where
     );
 }
 
-fn run_mail_check(daemon: &common::DaemonFixture, session_id: &SessionId) -> usize {
-    let output = daemon
-        .command()
-        .args(["mail", "check", "--selector", &session_id.to_string()])
-        .output()
-        .or_panic("sm mail check runs");
-    assert!(
-        output.status.success(),
-        "sm mail check failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8(output.stdout).or_panic("stdout is utf8");
-    assert_eq!(stdout.trim(), "0 unread");
-    0
-}
-
-fn run_rpc_round_trip(
+fn run_mail_check_rpc(
     runtime: &tokio::runtime::Runtime,
     daemon: &common::DaemonFixture,
     session_id: SessionId,

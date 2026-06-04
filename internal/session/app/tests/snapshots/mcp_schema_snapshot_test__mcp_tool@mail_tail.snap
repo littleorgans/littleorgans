@@ -23,10 +23,6 @@ expression: tool
         "description": "Namespace slug to scope this tool. Overrides the caller session namespace fallback.",
         "type": "string"
       },
-      "once": {
-        "description": "Return immediately after the current transcript batch.",
-        "type": "boolean"
-      },
       "recipient": {
         "description": "Recipient selector used for matching mailboxes.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
         "type": "string"
@@ -34,6 +30,10 @@ expression: tool
       "selector": {
         "description": "Participant selector used for matching messages.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",
         "type": "string"
+      },
+      "timeout": {
+        "description": "Maximum seconds to wait for appended mail. Omit or use 0 for a snapshot; positive values bound one follow request.",
+        "type": "integer"
       }
     },
     "type": "object"
