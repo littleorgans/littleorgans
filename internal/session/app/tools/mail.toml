@@ -134,6 +134,7 @@ cli_flag        = "--include-system"
 cli_name        = "mail check"
 mcp_description = "Return the unread mail count for sessions selected by selector without draining mail."
 cli_about       = "Return unread mail count for selected sessions."
+render_cli_help = false
 mcp_namespace_scope = true
 output_schema   = '''
 {

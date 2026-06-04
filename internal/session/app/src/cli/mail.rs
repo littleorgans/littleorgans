@@ -7,18 +7,17 @@ use std::{
 };
 
 use lilo_session_core::{
-    CallerContextRequest, MailCheckRequest, MailIntent, MailLogCursor, MailLogFilter,
-    MailNotifyMode, MailPeekRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest,
-    MailTailRequest, MailTailResponse, RpcResponse, SessionRpc,
+    CallerContextRequest, MailIntent, MailLogCursor, MailLogFilter, MailNotifyMode,
+    MailPeekRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, MailTailRequest,
+    MailTailResponse, RpcResponse, SessionRpc,
 };
 
 use crate::cli::cli_def::{
-    MailAction, MailArgs, MailCheckArgs, MailObservationArgs, MailReadArgs, MailSendArgs,
-    MailStopCheckArgs, MailTailArgs,
+    MailAction, MailArgs, MailObservationArgs, MailReadArgs, MailSendArgs, MailStopCheckArgs,
+    MailTailArgs,
 };
 use crate::cli::output::{
-    print_conversation_overview, print_mail_counts, print_mail_send_summary, print_messages,
-    print_messages_short_ids,
+    print_conversation_overview, print_mail_send_summary, print_messages, print_messages_short_ids,
 };
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
 
@@ -27,7 +26,6 @@ pub async fn run(args: MailArgs, json_output: bool) -> Result<()> {
         MailAction::Send(args) => send(args, json_output).await,
         MailAction::Read(args) => read(args, json_output).await,
         MailAction::Peek(args) => peek(args, json_output).await,
-        MailAction::Check(args) => check(args, json_output).await,
         MailAction::StopCheck(args) => stop_check(args, json_output).await,
         MailAction::Tail(args) => tail(args, json_output).await,
     }
@@ -110,31 +108,6 @@ async fn peek(args: MailObservationArgs, json_output: bool) -> Result<()> {
             } else {
                 let short_ids = crate::cli::short_ids::load().await?;
                 print_messages_short_ids(&response.messages, &short_ids);
-            }
-            Ok(())
-        }
-        RpcResponse::Error { message } => bail!(message),
-        other => bail!(
-            "unexpected daemon response: {} (please report)",
-            other.kind()
-        ),
-    }
-}
-
-async fn check(args: MailCheckArgs, json_output: bool) -> Result<()> {
-    let response = send_daemon_request(SessionRpc::MailCheck {
-        request: MailCheckRequest {
-            selector: required_scoped_selector(&args.selector, &args.scope)?,
-        },
-    })
-    .await?;
-
-    match response {
-        RpcResponse::MailChecked { response } => {
-            if json_output {
-                print_json(&RpcResponse::MailChecked { response })?;
-            } else {
-                print_mail_counts(response.unread, &response.counts);
             }
             Ok(())
         }

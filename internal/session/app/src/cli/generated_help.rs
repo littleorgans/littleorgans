@@ -92,11 +92,6 @@ pub const MAIL_PEEK_RECIPIENT_HELP: &str = "Recipient selector used for matching
 pub const MAIL_PEEK_INCLUDE_SYSTEM_HELP: &str = "Include system receipt metadata in the transcript.";
 
 #[rustfmt::skip]
-pub const MAIL_CHECK_ABOUT: &str = "Return unread mail count for selected sessions.";
-#[rustfmt::skip]
-pub const MAIL_CHECK_SELECTOR_HELP: &str = "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";
-
-#[rustfmt::skip]
 pub const MAIL_STOP_CHECK_ABOUT: &str = "Check unread mail for stop-hook decisions.";
 #[rustfmt::skip]
 pub const MAIL_STOP_CHECK_SELECTOR_HELP: &str = "Inbox owner selector used for matching sessions.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"";

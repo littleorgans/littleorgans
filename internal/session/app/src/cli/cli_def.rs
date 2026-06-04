@@ -275,8 +275,6 @@ pub enum MailAction {
     Read(MailReadArgs),
     #[command(about = generated_help::MAIL_PEEK_ABOUT, long_about = generated_help::MAIL_PEEK_ABOUT)]
     Peek(MailObservationArgs),
-    #[command(about = generated_help::MAIL_CHECK_ABOUT, long_about = generated_help::MAIL_CHECK_ABOUT)]
-    Check(MailCheckArgs),
     #[command(name = "stop-check", about = generated_help::MAIL_STOP_CHECK_ABOUT, long_about = generated_help::MAIL_STOP_CHECK_ABOUT)]
     StopCheck(MailStopCheckArgs),
     #[command(about = generated_help::MAIL_TAIL_ABOUT, long_about = generated_help::MAIL_TAIL_ABOUT)]
@@ -321,15 +319,6 @@ pub struct MailObservationArgs {
     pub recipient: Option<String>,
     #[arg(long, help = generated_help::MAIL_PEEK_INCLUDE_SYSTEM_HELP)]
     pub include_system: bool,
-    #[command(flatten)]
-    pub scope: NamespaceScopeArgs,
-}
-
-#[derive(Debug, Args)]
-#[command(arg_required_else_help = true)]
-pub struct MailCheckArgs {
-    #[arg(long, help = generated_help::MAIL_CHECK_SELECTOR_HELP)]
-    pub selector: String,
     #[command(flatten)]
     pub scope: NamespaceScopeArgs,
 }
