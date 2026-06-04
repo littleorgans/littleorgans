@@ -195,7 +195,11 @@ async fn send_nudge_payload(
             return Ok(NudgeSendOutcome::Delivered);
         }
         if resends >= MAX_SUBMIT_RESENDS {
-            tracing::warn!(
+            // Expected whenever the agent finishes (or never surfaces) its turn
+            // faster than the busy probe can catch it: the keystrokes landed,
+            // we just couldn't positively confirm the turn. A success path, so
+            // debug rather than warn to avoid one false alarm per recipient.
+            tracing::debug!(
                 resends,
                 "nudge payload submit unconfirmed after resends; treating as delivered best-effort"
             );
