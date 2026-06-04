@@ -44,6 +44,7 @@ chrono = { version = "0.4.42", features = ["clock", "serde"] }
 clap = { version = "4.5.51", features = ["derive"] }
 assert_cmd = "2"
 criterion = "0.5"
+futures-util = "0.3"
 indexmap = { version = "2", features = ["serde"] }
 insta = { version = "1.43.2", features = ["json", "redactions"] }
 libc = "0.2.186"

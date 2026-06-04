@@ -161,9 +161,17 @@ async fn execute_nudge(
 }
 
 fn wait_timing(timeout_ms: Option<u64>) -> NudgeTiming {
+    let Some(timeout_ms) = timeout_ms else {
+        return WAIT_TIMING;
+    };
+    let timeout = Duration::from_millis(timeout_ms);
+    let probe_slots =
+        u32::try_from(WAIT_TIMING.idle_probes_required.saturating_add(1)).unwrap_or(u32::MAX);
+    let scaled_poll = (timeout / probe_slots).max(Duration::from_nanos(1));
     NudgeTiming {
-        timeout: timeout_ms.map_or(WAIT_TIMING.timeout, Duration::from_millis),
-        ..WAIT_TIMING
+        poll_interval: WAIT_TIMING.poll_interval.min(scaled_poll),
+        timeout,
+        idle_probes_required: WAIT_TIMING.idle_probes_required,
     }
 }
 
@@ -449,20 +457,40 @@ mod tests {
     #[tokio::test]
     async fn execute_wait_uses_timeout_override() {
         let mut ops = FakeOps::new(vec![]).with_busy_default();
+        let started_at = ops.now;
 
         let outcome = execute_nudge(&mut ops, NudgeMode::Wait, Some(3), &RuntimeKind::Codex)
             .await
             .expect("nudge succeeds");
 
         assert_eq!(outcome, NudgeSendOutcome::AgentBusyTimeout);
-        assert_eq!(
-            ops.actions
-                .iter()
-                .filter(|action| **action == "capture")
-                .count(),
-            2
-        );
+        let captures = ops
+            .actions
+            .iter()
+            .filter(|action| **action == "capture")
+            .count();
+        assert!(captures >= WAIT_TIMING.idle_probes_required);
+        assert_eq!(ops.now.duration_since(started_at), Duration::from_millis(3));
         assert!(!ops.actions.contains(&"payload"));
+    }
+
+    #[test]
+    fn wait_timing_scales_short_timeout_poll_without_changing_default() {
+        let default = wait_timing(None);
+        assert_eq!(default.poll_interval, WAIT_TIMING.poll_interval);
+        assert_eq!(default.timeout, WAIT_TIMING.timeout);
+        assert_eq!(
+            default.idle_probes_required,
+            WAIT_TIMING.idle_probes_required
+        );
+
+        let short = wait_timing(Some(1));
+
+        assert!(short.poll_interval > Duration::ZERO);
+        assert!(short.poll_interval < WAIT_TIMING.poll_interval);
+        assert!(short.poll_interval <= short.timeout);
+        assert_eq!(short.timeout, Duration::from_millis(1));
+        assert_eq!(short.idle_probes_required, WAIT_TIMING.idle_probes_required);
     }
 
     #[tokio::test]
