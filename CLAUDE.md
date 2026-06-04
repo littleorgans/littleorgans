@@ -24,10 +24,12 @@ MoE-warroom-consensus cm lesson id
 
 ## Migration drivers
 
-Atomic releases are the first driver: one version number covers the whole
-family, and `v0.8.0` is the first monorepo release. Tight cross-component
-refactors are the second driver: a contract change can move through producer,
-consumer, tests, and docs in one review.
+Atomic releases are the first driver: one version covers the whole Rust crate
+family in lockstep, and `v0.8.0` is the first monorepo release. The later
+Python (transport-matters) and TS/Electron app surfaces version on independent
+lines, not in lockstep with the crates; see Release and mirrors. Tight
+cross-component refactors are the second driver: a contract change can move
+through producer, consumer, tests, and docs in one review.
 
 Single CI is the third driver. Moon orchestrates the workspace while Cargo
 remains the Rust source of truth. Open-source distribution is the fourth
@@ -220,9 +222,19 @@ reference docs once a generator owns them.
 
 ## Release and mirrors
 
-Release-plz manages per-package crate tags using package-version tag names.
-The release workflow creates the top-level binary tag such as `v0.8.0` only
-after crate publication succeeds.
+Releases run as three independent trains. The Rust crates move in lockstep on
+one shared `[workspace.package]` version, released with `cargo-release`
+(shared-version) plus `git-cliff` for the changelog; the Python
+(transport-matters) package and the TS/Electron app each version on their own
+line with their own `git-cliff` changelog scoped to that train's paths. Moon
+ships no release tooling and stays the gate runner (`moon ci`); release
+orchestration is language-native per train (`cargo-release` for crates, native
+build for Python, `electron-builder` for the app). The crate-train release
+workflow creates the top-level binary tag such as `v0.8.0` only after crate
+publication succeeds. Squash-merge requires the GitHub "Default to PR title for
+squash merge commits" setting so conventional prefixes reach `git-cliff`. This
+supersedes the prior `release-plz` per-package plan (cm decision
+`019e939c-c190-7423-b63a-acb85cab7069`).
 
 Before crate publication, review `crates/lilo-rm-core/src/version.rs`: the
 hand-maintained `RUNTIME_PROTOCOL_VERSION` and capabilities list are the
