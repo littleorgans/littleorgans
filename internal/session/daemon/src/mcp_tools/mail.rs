@@ -12,8 +12,8 @@ use crate::identity_client::RequestContext;
 
 use super::agent::session_tool_response_error;
 use super::args::{
-    optional_bool, optional_selector, optional_string, required_selector, required_string,
-    scoped_optional_selector, scoped_required_selector,
+    optional_bool, optional_selector, optional_string, optional_u64, required_selector,
+    required_string, scoped_optional_selector, scoped_required_selector,
 };
 
 pub(crate) async fn mail_send(
@@ -128,6 +128,7 @@ pub(crate) async fn mail_tail(
     context: &RequestContext,
     arguments: &Value,
 ) -> Result<Value> {
+    let timeout = optional_u64(arguments, "timeout");
     let response = state
         .handle_direct(
             context.clone(),
@@ -135,7 +136,10 @@ pub(crate) async fn mail_tail(
                 request: MailTailRequest {
                     filter: observation_filter(state, context, arguments).await?,
                     after: None,
-                    follow: !optional_bool(arguments, "once").unwrap_or(true),
+                    follow: matches!(timeout, Some(seconds) if seconds > 0),
+                    wait_ms: timeout
+                        .filter(|seconds| *seconds > 0)
+                        .map(|seconds| seconds.saturating_mul(1000)),
                 },
             },
         )

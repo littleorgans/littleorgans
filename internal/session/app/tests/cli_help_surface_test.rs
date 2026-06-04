@@ -223,7 +223,7 @@ fn mail_help_matches_protocol_v1_surface() {
     assert!(peek.contains("--include-system"), "{peek}");
 
     let tail = help(&["mail", "tail", "--help"]);
-    assert!(tail.contains("--once"), "{tail}");
+    assert!(tail.contains("--timeout"), "{tail}");
     assert!(tail.contains("--context-id"), "{tail}");
 }
 

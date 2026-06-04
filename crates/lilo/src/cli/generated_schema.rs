@@ -253,7 +253,8 @@ pub const CLI_SURFACE_JSON: &str = r#"{
                 "tail",
                 "--context-id",
                 "review-42",
-                "--once"
+                "--timeout",
+                "0"
               ],
               "description": "Follow a conversation until the current batch ends"
             }

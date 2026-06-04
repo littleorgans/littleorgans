@@ -157,7 +157,7 @@ args = ["mail", "peek", "--context-id", "review-42"]
 
 [[commands.examples]]
 description = "Follow a conversation until the current batch ends"
-args = ["mail", "tail", "--context-id", "review-42", "--once"]
+args = ["mail", "tail", "--context-id", "review-42", "--timeout", "0"]
 
 [[commands]]
 name = "nudge"

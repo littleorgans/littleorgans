@@ -2,6 +2,7 @@ use crate::common::{self, DaemonFixture, OrPanic as _};
 use crate::{audited_flow_actions, call_tool, spawn_agent};
 use lilo_im_core::{Action, AuditDecision, AuditRow};
 use serde_json::json;
+use std::time::{Duration, Instant};
 
 #[tokio::test]
 pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
@@ -50,8 +51,8 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
     assert_operator_observes_mail(&mut mcp, &recipient);
 
     let mut recipient_mcp = daemon.spawn_mcp_for_session(&recipient, daemon.dir.path());
-    recipient_mcp.send(&json!({"jsonrpc": "2.0", "id": 8, "method": "initialize", "params": {}}));
-    let read = call_tool(&mut recipient_mcp, 9, "mail_read", json!({}));
+    recipient_mcp.send(&json!({"jsonrpc": "2.0", "id": 12, "method": "initialize", "params": {}}));
+    let read = call_tool(&mut recipient_mcp, 13, "mail_read", json!({}));
     assert!(read["error"].is_null());
     assert_eq!(
         read["result"]["structuredContent"]["messages"][0]["content"],
@@ -60,7 +61,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let checked = call_tool(
         &mut mcp,
-        10,
+        14,
         "mail_stop_check",
         json!({ "selector": format!("id:{recipient}") }),
     );
@@ -73,7 +74,7 @@ pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
 
     let nudged = call_tool(
         &mut mcp,
-        11,
+        15,
         "nudge",
         json!({ "to": recipient.clone(), "content": "ping" }),
     );
@@ -108,17 +109,39 @@ fn assert_operator_observes_mail(mcp: &mut common::McpFixture, recipient: &str) 
         "review the spec"
     );
 
-    let tailed = call_tool(mcp, 7, "mail_tail", with_once(filter));
+    let tailed = call_tool(mcp, 7, "mail_tail", with_timeout(filter, 0));
     assert!(tailed["error"].is_null());
     assert_eq!(
         tailed["result"]["structuredContent"]["messages"][0]["recipient"]["session_id"],
         recipient
     );
+
+    let missing_filter = json!({ "context_id": "missing-thread" });
+    let snapshot = call_tool(mcp, 8, "mail_tail", missing_filter.clone());
+    assert_empty_tail(&snapshot);
+
+    let timeout_zero = call_tool(mcp, 9, "mail_tail", with_timeout(missing_filter.clone(), 0));
+    assert_empty_tail(&timeout_zero);
+
+    let started = Instant::now();
+    let bounded = call_tool(mcp, 10, "mail_tail", with_timeout(missing_filter, 1));
+    assert_empty_tail(&bounded);
+    assert!(started.elapsed() < Duration::from_secs(3));
 }
 
-fn with_once(mut filter: serde_json::Value) -> serde_json::Value {
-    filter["once"] = json!(true);
+fn with_timeout(mut filter: serde_json::Value, seconds: u64) -> serde_json::Value {
+    filter["timeout"] = json!(seconds);
     filter
+}
+
+fn assert_empty_tail(response: &serde_json::Value) {
+    assert!(response["error"].is_null());
+    assert!(
+        response["result"]["structuredContent"]["messages"]
+            .as_array()
+            .or_panic("mail tail messages is array")
+            .is_empty()
+    );
 }
 
 fn assert_mail_flow_audit(rows: &[AuditRow]) {

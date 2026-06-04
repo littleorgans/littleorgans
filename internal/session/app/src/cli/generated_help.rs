@@ -103,8 +103,6 @@ pub const MAIL_STOP_CHECK_SELECTOR_HELP: &str = "Inbox owner selector used for m
 
 #[rustfmt::skip]
 pub const MAIL_TAIL_ABOUT: &str = "Follow the operator message transcript without draining mail.";
-#[rustfmt::skip]
-pub const MAIL_TAIL_ONCE_HELP: &str = "Return immediately after the current transcript batch.";
 
 #[rustfmt::skip]
 pub const NUDGE_ABOUT: &str = "Send an ephemeral nudge to selected sessions.";

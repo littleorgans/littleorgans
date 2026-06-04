@@ -78,6 +78,8 @@ pub struct MailTailRequest {
     pub after: Option<MailLogCursor>,
     #[serde(default)]
     pub follow: bool,
+    #[serde(default)]
+    pub wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
