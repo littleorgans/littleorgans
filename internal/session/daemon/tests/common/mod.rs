@@ -332,6 +332,7 @@ pub fn mail_request(
         to,
         content: content.to_string(),
         notify: None,
+        timeout_ms: None,
         context_id: context_id.to_string(),
         intent,
         idempotency_key: None,

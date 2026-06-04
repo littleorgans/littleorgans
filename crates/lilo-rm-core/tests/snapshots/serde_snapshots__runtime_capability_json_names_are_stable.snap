@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-core/tests/serde_snapshots.rs
+source: crates/lilo-rm-core/tests/serde_snapshots.rs
+assertion_line: 303
 expression: "lilo_rm_core::RUNTIME_PROTOCOL_CAPABILITIES"
 ---
 [
@@ -14,5 +15,6 @@ expression: "lilo_rm_core::RUNTIME_PROTOCOL_CAPABILITIES"
   "tmux_pane_snapshot",
   "kill_outcomes",
   "spawn_conflicts",
-  "spawn_request_mounts"
+  "spawn_request_mounts",
+  "nudge_wait_timeout"
 ]

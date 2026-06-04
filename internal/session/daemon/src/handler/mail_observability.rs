@@ -62,12 +62,16 @@ impl DaemonState {
         follow: bool,
         wait_ms: Option<u64>,
     ) -> Result<Vec<MessageView>> {
-        let messages = self.message_log_views(filter, after).await?;
-        if !follow || !messages.is_empty() {
-            return Ok(messages);
+        if !follow {
+            return self.message_log_views(filter, after).await;
         }
 
         let mut appends = self.subscribe_mail_appends();
+        let messages = self.message_log_views(filter, after).await?;
+        if !messages.is_empty() {
+            return Ok(messages);
+        }
+
         if let Some(wait_ms) = wait_ms {
             let sleep =
                 time::sleep_until(time::Instant::now() + time::Duration::from_millis(wait_ms));

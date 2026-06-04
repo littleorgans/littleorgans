@@ -134,6 +134,48 @@ impl From<MailNotifyMode> for NudgeMode {
     }
 }
 
+pub fn validate_mail_notify_timeout(
+    notify: Option<MailNotifyMode>,
+    timeout_ms: Option<u64>,
+) -> SmResult<()> {
+    let Some(timeout_ms) = timeout_ms else {
+        return Ok(());
+    };
+    if timeout_ms == 0 {
+        return Err(SmError::Message(
+            "mail send --timeout must be at least 1 second".to_string(),
+        ));
+    }
+    if notify != Some(MailNotifyMode::Wait) {
+        return Err(SmError::Message(
+            "mail send --timeout requires --notify wait".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn mail_timeout_seconds_to_ms(seconds: u64) -> SmResult<u64> {
+    seconds
+        .checked_mul(1_000)
+        .ok_or_else(|| SmError::Message("mail send --timeout is too large".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mail_timeout_seconds_to_ms_converts_seconds() {
+        assert_eq!(mail_timeout_seconds_to_ms(2).unwrap(), 2_000);
+    }
+
+    #[test]
+    fn mail_timeout_seconds_to_ms_rejects_overflow() {
+        let error = mail_timeout_seconds_to_ms(u64::MAX).unwrap_err();
+        assert_eq!(error.to_string(), "mail send --timeout is too large");
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SenderRef {

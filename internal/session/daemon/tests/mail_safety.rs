@@ -270,8 +270,75 @@ async fn notify_runtime_failure_is_warning_not_mail_failure() {
     assert_eq!(mail_count(&state, context, recipient.id).await, 1);
     assert_eq!(
         runtime.nudges(),
-        vec![(recipient.id.to_string(), "you have mail".to_string())]
+        vec![(recipient.id.to_string(), "you have mail".to_string(), None)]
     );
+}
+
+#[tokio::test]
+async fn notify_wait_timeout_is_forwarded_to_runtime_port() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let context = local_context();
+    let sender = spawn_test_session(&daemon, &context, "pm").await;
+    let recipient = spawn_test_session(&daemon, &context, "engineer").await;
+    let runtime = Arc::new(RecordingRuntimePort::new());
+    let state = daemon
+        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
+        .await;
+    let mut request = mail_request(
+        Selector::Id { id: recipient.id },
+        "wake and review",
+        "runtime-notify-timeout-thread",
+        MailIntent::Request,
+    );
+    request.notify = Some(MailNotifyMode::Wait);
+    request.timeout_ms = Some(2_000);
+
+    let response = send_mail(
+        &state,
+        context.with_mcp_caller_session_id(sender.id),
+        request,
+    )
+    .await;
+
+    assert_eq!(response.results[0].mail, MailDeliveryStatus::Ok);
+    assert_eq!(response.results[0].notify, MailNotifyStatus::Ok);
+    assert_eq!(
+        runtime.nudges(),
+        vec![(
+            recipient.id.to_string(),
+            "you have mail".to_string(),
+            Some(2_000)
+        )]
+    );
+}
+
+#[tokio::test]
+async fn notify_timeout_requires_wait_on_handler_path() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let context = local_context();
+    let sender = spawn_test_session(&daemon, &context, "pm").await;
+    let recipient = spawn_test_session(&daemon, &context, "engineer").await;
+    let mut request = mail_request(
+        Selector::Id { id: recipient.id },
+        "wake and review",
+        "runtime-notify-timeout-reject-thread",
+        MailIntent::Request,
+    );
+    request.notify = Some(MailNotifyMode::Steer);
+    request.timeout_ms = Some(2_000);
+
+    let response = send_mail_response(
+        &daemon.state,
+        context.clone().with_mcp_caller_session_id(sender.id),
+        request,
+    )
+    .await;
+
+    let RpcResponse::Error { message } = response else {
+        panic!("expected validation error");
+    };
+    assert!(message.contains("requires --notify wait"), "{message}");
+    assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 0);
 }
 
 #[tokio::test]
@@ -466,11 +533,18 @@ fn message_id_from_view(message: &MessageView) -> MessageId {
 
 #[derive(Default)]
 struct RecordingRuntimePort {
-    nudges: Mutex<Vec<(String, String)>>,
+    nudges: Mutex<Vec<(String, String, Option<u64>)>>,
     nudge_error: Option<String>,
 }
 
 impl RecordingRuntimePort {
+    fn new() -> Self {
+        Self {
+            nudges: Mutex::new(Vec::new()),
+            nudge_error: None,
+        }
+    }
+
     fn failing_nudge(message: &str) -> Self {
         Self {
             nudges: Mutex::new(Vec::new()),
@@ -478,7 +552,7 @@ impl RecordingRuntimePort {
         }
     }
 
-    fn nudges(&self) -> Vec<(String, String)> {
+    fn nudges(&self) -> Vec<(String, String, Option<u64>)> {
         self.nudges.lock().or_panic("nudge lock").clone()
     }
 }
@@ -518,12 +592,14 @@ impl RuntimePort for RecordingRuntimePort {
         session_id: &'a str,
         content: &'a str,
         _mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> TestRuntimeFuture<'a, NudgeResult> {
         Box::pin(async move {
-            self.nudges
-                .lock()
-                .or_panic("nudge lock")
-                .push((session_id.to_string(), content.to_string()));
+            self.nudges.lock().or_panic("nudge lock").push((
+                session_id.to_string(),
+                content.to_string(),
+                timeout_ms,
+            ));
             match &self.nudge_error {
                 Some(message) => Err(RuntimeError::local(message)),
                 None => Ok(NudgeResult {

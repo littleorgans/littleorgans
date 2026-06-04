@@ -17,7 +17,7 @@ async fn rtmd_nudge_maps_delivered_outcome() {
     let (driver, server) = mock_rtmd_nudge(session_id, NudgeOutcome::Delivered);
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate)
+        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate, None)
         .await
         .or_panic("nudge delegates to rtmd");
 
@@ -35,7 +35,7 @@ async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
     );
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate)
+        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate, None)
         .await
         .or_panic("failed nudge outcome remains a response");
 
@@ -59,6 +59,7 @@ fn mock_rtmd_nudge(session_id: SessionId, outcome: NudgeOutcome) -> (RtmdDriver,
                     session_id,
                     content: "hello".to_string(),
                     mode: NudgeMode::Immediate,
+                    timeout_ms: None,
                 },
             }
         );

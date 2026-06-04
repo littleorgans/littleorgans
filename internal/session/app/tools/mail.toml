@@ -1,7 +1,7 @@
 [tools.mail_send]
 cli_name        = "mail send"
 mcp_description = "Send durable mail to running sessions selected by selector."
-cli_about       = "Send durable mail to selected running sessions."
+cli_about       = "Send durable mail to selected running sessions; summary MAIL reports inbox acceptance; summary NOTIFY reports wake delivery: ok when the nudge landed, err when it failed or timed out, skipped when no notify was requested."
 mcp_namespace_scope = true
 output_schema   = '''
 {
@@ -36,9 +36,18 @@ name            = "notify"
 type            = "string"
 required        = false
 enum_values     = ["wait", "steer"]
-mcp_description = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait."
-cli_help        = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait."
+mcp_description = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait. Summary NOTIFY reports wake delivery status. Summary MAIL reports inbox acceptance."
+cli_help        = "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait; summary NOTIFY reports wake delivery: ok when the nudge landed, err when it failed or timed out, skipped when no notify was requested; summary MAIL reports inbox acceptance."
 cli_flag        = "--notify"
+
+[[tools.mail_send.params]]
+name            = "timeout"
+type            = "integer"
+required        = false
+mcp_description = "Maximum seconds to wait for notify=wait to reach an idle recipient. Requires notify=wait."
+cli_help        = "Maximum seconds to wait for --notify wait. Requires --notify wait."
+cli_flag        = "--timeout"
+mcp_schema      = '{"type":"integer","minimum":1}'
 
 [[tools.mail_send.params]]
 name            = "context_id"

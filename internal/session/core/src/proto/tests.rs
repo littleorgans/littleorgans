@@ -115,6 +115,7 @@ fn mail_request_round_trips_as_tagged_json() {
             },
             content: "review the spec".to_string(),
             notify: None,
+            timeout_ms: None,
             context_id: "review-thread".to_string(),
             intent: MailIntent::Request,
             idempotency_key: Some("send-1".to_string()),

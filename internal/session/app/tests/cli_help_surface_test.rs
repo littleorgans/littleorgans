@@ -200,7 +200,13 @@ fn capture_help_targets_one_session_id() {
 #[test]
 fn mail_help_matches_protocol_v1_surface() {
     let send = help(&["mail", "send", "--help"]);
-    for expected in ["--notify", "--context-id", "--intent", "--idempotency-key"] {
+    for expected in [
+        "--notify",
+        "--timeout",
+        "--context-id",
+        "--intent",
+        "--idempotency-key",
+    ] {
         assert!(
             send.contains(expected),
             "mail send help missing {expected:?}\n{send}"

@@ -10,6 +10,8 @@ use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SqliteStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::Notify;
+use tokio::task::{JoinError, JoinSet};
 
 use crate::handler::DaemonState;
 use crate::identity_client::{IdentityClient, RequestContext};
@@ -62,7 +64,7 @@ pub async fn run_daemon_with_db(
     let lifecycle = LifecycleTask::spawn(Arc::clone(&state));
     let events = crate::events::RuntimeEventTask::spawn(Arc::clone(&state));
 
-    let result = serve(listener, &state).await;
+    let result = serve(listener, Arc::clone(&state)).await;
     drop(events);
     drop(lifecycle);
     state.runtime.terminate_all();
@@ -70,23 +72,43 @@ pub async fn run_daemon_with_db(
     result
 }
 
-async fn serve(listener: lilo_sys::ipc::IpcListener, state: &DaemonState) -> Result<()> {
+async fn serve(listener: lilo_sys::ipc::IpcListener, state: Arc<DaemonState>) -> Result<()> {
+    let shutdown = Arc::new(Notify::new());
+    let mut connections = JoinSet::new();
     loop {
-        let stream = listener.accept().await.context("failed to accept client")?;
-        if handle_connection(stream, state).await? {
-            return Ok(());
+        tokio::select! {
+            stream = listener.accept() => {
+                let stream = stream.context("failed to accept client")?;
+                let state = Arc::clone(&state);
+                let shutdown = Arc::clone(&shutdown);
+                connections.spawn(async move {
+                    handle_connection(stream, state, shutdown).await
+                });
+            }
+            () = shutdown.notified() => {
+                break;
+            }
+            Some(result) = connections.join_next(), if !connections.is_empty() => {
+                log_connection_result(result);
+            }
         }
     }
+    connections.abort_all();
+    while let Some(result) = connections.join_next().await {
+        log_connection_result(result);
+    }
+    Ok(())
 }
 
 async fn handle_connection(
     mut stream: lilo_sys::ipc::IpcStream,
-    state: &DaemonState,
-) -> Result<bool> {
+    state: Arc<DaemonState>,
+    shutdown: Arc<Notify>,
+) -> Result<()> {
     let principal = match lilo_im_core::peer_creds::extract(&stream).await {
         Ok(principal) => principal,
         Err(error) => {
-            return write_response(
+            write_response(
                 stream,
                 crate::handler::HandlerResult {
                     response: RpcResponse::Error {
@@ -95,7 +117,8 @@ async fn handle_connection(
                     shutdown: false,
                 },
             )
-            .await;
+            .await?;
+            return Ok(());
         }
     };
 
@@ -115,7 +138,10 @@ async fn handle_connection(
         },
     };
 
-    write_response(stream, result).await
+    if write_response(stream, result).await? {
+        shutdown.notify_one();
+    }
+    Ok(())
 }
 
 async fn write_response(
@@ -133,6 +159,19 @@ async fn write_response(
         .context("failed to close response")?;
 
     Ok(result.shutdown)
+}
+
+fn log_connection_result(result: Result<Result<()>, JoinError>) {
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(error = ?error, "session daemon connection failed");
+        }
+        Err(error) if error.is_cancelled() => {}
+        Err(error) => {
+            tracing::warn!(error = ?error, "session daemon connection task failed");
+        }
+    }
 }
 
 fn cleanup_paths(paths: &LiloPaths, endpoint: &DaemonEndpoint) {

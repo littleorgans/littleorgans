@@ -62,6 +62,7 @@ fn runtime_rpc_json_shapes_are_stable() {
                 session_id,
                 content: "wake up".to_owned(),
                 mode: NudgeMode::Immediate,
+                timeout_ms: None,
             },
         },
         RuntimeRpc::Capture {

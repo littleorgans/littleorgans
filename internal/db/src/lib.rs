@@ -1,12 +1,14 @@
 #![deny(unsafe_code)]
 
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use lilo_paths::LiloPaths;
+use sqlx::pool::PoolConnection;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::{Database, Sqlite, SqliteConnection, SqlitePool, TransactionManager};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: u32 = 5;
@@ -72,6 +74,47 @@ impl LiloDb {
     }
 }
 
+pub struct ImmediateTx {
+    conn: PoolConnection<Sqlite>,
+    open: bool,
+}
+
+impl ImmediateTx {
+    async fn commit(mut self) -> sqlx::Result<()> {
+        sqlx::query("COMMIT").execute(&mut *self).await?;
+        self.open = false;
+        Ok(())
+    }
+
+    async fn rollback(mut self) -> sqlx::Result<()> {
+        sqlx::query("ROLLBACK").execute(&mut *self).await?;
+        self.open = false;
+        Ok(())
+    }
+}
+
+impl Deref for ImmediateTx {
+    type Target = SqliteConnection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
+}
+
+impl DerefMut for ImmediateTx {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.conn
+    }
+}
+
+impl Drop for ImmediateTx {
+    fn drop(&mut self) {
+        if self.open {
+            <Sqlite as Database>::TransactionManager::start_rollback(&mut self.conn);
+        }
+    }
+}
+
 pub async fn begin_immediate_tx(conn: &mut SqliteConnection, label: &str) -> Result<()> {
     sqlx::query("BEGIN IMMEDIATE")
         .execute(&mut *conn)
@@ -95,6 +138,31 @@ pub async fn finish_immediate_tx<T>(
         }
         Err(error) => {
             let _ = sqlx::query("ROLLBACK").execute(conn).await;
+            Err(error)
+        }
+    }
+}
+
+pub async fn begin_immediate_pool_tx(pool: &SqlitePool) -> sqlx::Result<ImmediateTx> {
+    let mut conn = pool.acquire().await?;
+    sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
+    Ok(ImmediateTx { conn, open: true })
+}
+
+pub async fn finish_immediate_pool_tx<T, E>(
+    transaction: ImmediateTx,
+    result: std::result::Result<T, E>,
+) -> std::result::Result<T, E>
+where
+    E: From<sqlx::Error>,
+{
+    match result {
+        Ok(value) => {
+            transaction.commit().await.map_err(E::from)?;
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = transaction.rollback().await;
             Err(error)
         }
     }

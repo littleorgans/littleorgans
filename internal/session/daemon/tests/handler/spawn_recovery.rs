@@ -218,6 +218,7 @@ impl RuntimePort for FaultingRuntimePort {
         _session_id: &'a str,
         _content: &'a str,
         _mode: NudgeMode,
+        _timeout_ms: Option<u64>,
     ) -> PortFuture<'a, NudgeResult> {
         unsupported("nudge")
     }

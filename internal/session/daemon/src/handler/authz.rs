@@ -174,6 +174,7 @@ mod tests {
                     to: Selector::All,
                     content: "hello".to_string(),
                     notify: None,
+                    timeout_ms: None,
                     context_id: "authz-thread".to_string(),
                     intent: MailIntent::Inform,
                     idempotency_key: None,

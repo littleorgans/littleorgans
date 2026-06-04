@@ -1,5 +1,6 @@
 ---
-source: crates/rtm-core/tests/serde_snapshots.rs
+source: crates/lilo-rm-core/tests/serde_snapshots.rs
+assertion_line: 146
 expression: responses
 ---
 [
@@ -216,7 +217,7 @@ expression: responses
       "version": {
         "version": "0.1.6",
         "git_sha": "0123456",
-        "protocol_version": "0.6",
+        "protocol_version": "0.7",
         "capabilities": [
           "structured_protocol_errors",
           "headless_stdio_log_paths",
@@ -229,7 +230,8 @@ expression: responses
           "tmux_pane_snapshot",
           "kill_outcomes",
           "spawn_conflicts",
-          "spawn_request_mounts"
+          "spawn_request_mounts",
+          "nudge_wait_timeout"
         ]
       }
     }
@@ -241,7 +243,7 @@ expression: responses
         "version": {
           "version": "0.1.6",
           "git_sha": "0123456",
-          "protocol_version": "0.6",
+          "protocol_version": "0.7",
           "capabilities": [
             "structured_protocol_errors",
             "headless_stdio_log_paths",
@@ -254,7 +256,8 @@ expression: responses
             "tmux_pane_snapshot",
             "kill_outcomes",
             "spawn_conflicts",
-            "spawn_request_mounts"
+            "spawn_request_mounts",
+            "nudge_wait_timeout"
           ]
         },
         "socket_path": "/tmp/rtmd.sock",

@@ -2,6 +2,7 @@ pub use crate::label::{Label, LabelMutation};
 pub use crate::mail::{
     Channel, Mail, MailCountView, MailDeliveryStatus, MailIntent, MailNotifyMode, MailNotifyStatus,
     MailSendResult, MailStatus, MessageView, RecipientSummary, SenderRef, SenderView,
+    mail_timeout_seconds_to_ms, validate_mail_notify_timeout,
 };
 pub use crate::namespace::{
     DEFAULT_NAMESPACE, NAMESPACE_MAX_LEN, Namespace, NamespaceError, NamespaceRecord,

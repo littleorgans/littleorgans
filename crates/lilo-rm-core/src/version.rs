@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::string_serde::{deserialize_string_parsed, serialize_string};
 
-pub const RUNTIME_PROTOCOL_VERSION: &str = "0.6";
+pub const RUNTIME_PROTOCOL_VERSION: &str = "0.7";
 
 pub const RUNTIME_PROTOCOL_CAPABILITIES: &[RuntimeCapability] = &[
     RuntimeCapability::StructuredProtocolErrors,
@@ -20,6 +20,7 @@ pub const RUNTIME_PROTOCOL_CAPABILITIES: &[RuntimeCapability] = &[
     RuntimeCapability::KillOutcomes,
     RuntimeCapability::SpawnConflicts,
     RuntimeCapability::SpawnRequestMounts,
+    RuntimeCapability::NudgeWaitTimeout,
 ];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -72,6 +73,8 @@ pub enum RuntimeCapability {
     SpawnConflicts,
     /// Spawn requests can carry declared host to container bind mounts.
     SpawnRequestMounts,
+    /// Nudge wait requests can override the default wait-for-idle timeout.
+    NudgeWaitTimeout,
 }
 
 impl RuntimeCapability {
@@ -89,6 +92,7 @@ impl RuntimeCapability {
             Self::KillOutcomes => "kill_outcomes",
             Self::SpawnConflicts => "spawn_conflicts",
             Self::SpawnRequestMounts => "spawn_request_mounts",
+            Self::NudgeWaitTimeout => "nudge_wait_timeout",
         }
     }
 }
@@ -116,6 +120,7 @@ impl FromStr for RuntimeCapability {
             "kill_outcomes" => Ok(Self::KillOutcomes),
             "spawn_conflicts" => Ok(Self::SpawnConflicts),
             "spawn_request_mounts" => Ok(Self::SpawnRequestMounts),
+            "nudge_wait_timeout" => Ok(Self::NudgeWaitTimeout),
             other => Err(format!("unknown runtime capability {other}")),
         }
     }
@@ -146,17 +151,18 @@ mod tests {
     };
 
     #[test]
-    fn protocol_version_advertises_v06_spawn_conflict_contract() {
-        assert_eq!(RUNTIME_PROTOCOL_VERSION, "0.6");
-        assert_eq!(VersionInfo::new("rtm", "git").protocol_version, "0.6");
+    fn protocol_version_advertises_v07_nudge_wait_timeout_contract() {
+        assert_eq!(RUNTIME_PROTOCOL_VERSION, "0.7");
+        assert_eq!(VersionInfo::new("rtm", "git").protocol_version, "0.7");
     }
 
     #[test]
-    fn protocol_capabilities_advertise_spawn_request_mounts() {
+    fn protocol_capabilities_advertise_nudge_wait_timeout() {
         assert!(RUNTIME_PROTOCOL_CAPABILITIES.contains(&RuntimeCapability::SpawnRequestMounts));
+        assert!(RUNTIME_PROTOCOL_CAPABILITIES.contains(&RuntimeCapability::NudgeWaitTimeout));
         assert_eq!(
-            RuntimeCapability::SpawnRequestMounts.as_str(),
-            "spawn_request_mounts"
+            RuntimeCapability::NudgeWaitTimeout.as_str(),
+            "nudge_wait_timeout"
         );
     }
 }

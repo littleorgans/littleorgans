@@ -156,7 +156,7 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
         response.daemon_version.as_deref(),
         Some(TEST_DAEMON_VERSION)
     );
-    assert!(response.runtime.starts_with("rtmd (lilo-rm-client 0.6.x"));
+    assert!(response.runtime.starts_with("rtmd (lilo-rm-client 0.7.x"));
     assert_eq!(response.runtime_matters.status, "ok");
     assert_eq!(response.runtime_matters.socket_path, None);
     assert_eq!(response.runtime_matters.code, None);

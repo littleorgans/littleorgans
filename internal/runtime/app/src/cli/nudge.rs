@@ -36,6 +36,7 @@ pub async fn run(args: NudgeArgs) -> Result<()> {
                 session_id: args.session_id,
                 content: args.content,
                 mode,
+                timeout_ms: None,
             },
         },
     )

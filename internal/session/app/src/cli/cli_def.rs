@@ -14,6 +14,8 @@ const NAMESPACE_DELETE_HELP: &str = "Namespace slug to delete.";
 const CONFIG_ABOUT: &str = "Manage session-matters user configuration";
 const MAIL_TAIL_TIMEOUT_HELP: &str =
     "Maximum seconds to follow. Use 0 to return after the current transcript batch.";
+const MAIL_SEND_TIMEOUT_ERROR: &str =
+    "--timeout must be at least 1 second; 0 is not meaningful with --notify wait";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -295,9 +297,17 @@ pub struct MailSendArgs {
         num_args = 0..=1,
         default_missing_value = MailNotifyMode::WAIT_VALUE,
         value_parser = clap::builder::PossibleValuesParser::new(MailNotifyMode::CLIENT_VALUES),
-        help = generated_help::MAIL_SEND_NOTIFY_HELP
+        help = generated_help::MAIL_SEND_NOTIFY_HELP,
+        long_help = generated_help::MAIL_SEND_NOTIFY_HELP
     )]
     pub notify: Option<String>,
+    #[arg(
+        long,
+        requires = "notify",
+        value_parser = parse_mail_send_timeout,
+        help = generated_help::MAIL_SEND_TIMEOUT_HELP
+    )]
+    pub timeout: Option<u64>,
     #[arg(long, help = generated_help::MAIL_SEND_CONTEXT_ID_HELP)]
     pub context_id: String,
     #[arg(long, help = generated_help::MAIL_SEND_INTENT_HELP)]
@@ -371,6 +381,14 @@ pub struct NudgeArgs {
 #[derive(Debug, Args)]
 pub struct McpArgs {}
 
+fn parse_mail_send_timeout(value: &str) -> Result<u64, String> {
+    let seconds = value.parse::<u64>().map_err(|error| error.to_string())?;
+    if seconds == 0 {
+        return Err(MAIL_SEND_TIMEOUT_ERROR.to_string());
+    }
+    Ok(seconds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,5 +414,74 @@ mod tests {
             panic!("expected mail tail command");
         };
         assert_eq!(args.timeout, Some(2));
+    }
+
+    #[test]
+    fn mail_send_timeout_requires_notify_and_positive_value() {
+        let parsed = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--notify",
+            "wait",
+            "--timeout",
+            "2",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ])
+        .expect("parse mail send timeout");
+        let Command::Mail(MailArgs {
+            action: MailAction::Send(args),
+        }) = parsed.command
+        else {
+            panic!("expected mail send command");
+        };
+        assert_eq!(args.timeout, Some(2));
+
+        let missing_notify = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--timeout",
+            "2",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ]);
+        assert!(missing_notify.is_err());
+
+        let zero = Cli::try_parse_from([
+            "sm",
+            "mail",
+            "send",
+            "--to",
+            "role:engineer",
+            "--content",
+            "body",
+            "--notify",
+            "wait",
+            "--timeout",
+            "0",
+            "--context-id",
+            "thread",
+            "--intent",
+            "inform",
+        ]);
+        let error = zero.expect_err("zero timeout fails");
+        assert!(
+            error.to_string().contains(MAIL_SEND_TIMEOUT_ERROR),
+            "{error}"
+        );
     }
 }

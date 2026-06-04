@@ -42,6 +42,7 @@ pub trait RuntimePort: Send + Sync {
         session_id: &'a str,
         content: &'a str,
         mode: NudgeMode,
+        timeout_ms: Option<u64>,
     ) -> RuntimePortFuture<'a, NudgeResult>;
 
     fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>>;

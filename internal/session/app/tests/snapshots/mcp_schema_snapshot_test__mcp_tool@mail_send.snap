@@ -1,5 +1,6 @@
 ---
 source: internal/session/app/tests/mcp_schema_snapshot_test.rs
+assertion_line: 23
 expression: tool
 ---
 {
@@ -37,12 +38,17 @@ expression: tool
         "type": "string"
       },
       "notify": {
-        "description": "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait.",
+        "description": "Wake mode after mail is persisted: wait (until the recipient is idle) or steer (interrupt, then deliver); defaults to wait. Summary NOTIFY reports wake delivery status. Summary MAIL reports inbox acceptance.",
         "enum": [
           "wait",
           "steer"
         ],
         "type": "string"
+      },
+      "timeout": {
+        "description": "Maximum seconds to wait for notify=wait to reach an idle recipient. Requires notify=wait.",
+        "minimum": 1,
+        "type": "integer"
       },
       "to": {
         "description": "Recipient selector used for matching running sessions.\n\nGrammar:\n  all\n  <uuid-or-prefix>\n  id:<uuid>\n  role:<name>\n  namespace:<slug>\n  dir:<path>\n  label:<key>=<value>\n  label:<key> in (v1, v2)\nExamples:\n  all\n  019e44f9-...\n  019e44f\n  role:engineer\n  namespace:default\n  dir:/tmp/project\n  label:app=nginx\n  \"label:app in (web, api)\"",

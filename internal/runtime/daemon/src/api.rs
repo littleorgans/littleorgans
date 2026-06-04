@@ -285,6 +285,7 @@ mod tests {
             session_id: nudge_session_id,
             content: "wake".to_owned(),
             mode: NudgeMode::Immediate,
+            timeout_ms: None,
         };
         let direct_nudge = service
             .nudge_runtime(nudge_request.clone())

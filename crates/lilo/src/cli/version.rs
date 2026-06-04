@@ -60,10 +60,11 @@ mod tests {
         VersionInfo {
             version: "1.2.3".to_owned(),
             git_sha: "abcdef123456".to_owned(),
-            protocol_version: "0.6".to_owned(),
+            protocol_version: "0.7".to_owned(),
             capabilities: vec![
                 RuntimeCapability::StructuredProtocolErrors,
                 RuntimeCapability::SpawnRequestMounts,
+                RuntimeCapability::NudgeWaitTimeout,
             ],
         }
     }
@@ -74,7 +75,7 @@ mod tests {
 
         assert!(rendered.contains("version: 1.2.3"));
         assert!(rendered.contains("git_sha: abcdef123456"));
-        assert!(rendered.contains("protocol_version: 0.6"));
+        assert!(rendered.contains("protocol_version: 0.7"));
         assert!(rendered.contains("structured_protocol_errors"));
         assert!(rendered.contains("spawn_request_mounts"));
     }
@@ -87,10 +88,14 @@ mod tests {
 
         assert_eq!(value["version"], "1.2.3");
         assert_eq!(value["git_sha"], "abcdef123456");
-        assert_eq!(value["protocol_version"], "0.6");
+        assert_eq!(value["protocol_version"], "0.7");
         assert_eq!(
             value["capabilities"],
-            serde_json::json!(["structured_protocol_errors", "spawn_request_mounts"])
+            serde_json::json!([
+                "structured_protocol_errors",
+                "spawn_request_mounts",
+                "nudge_wait_timeout"
+            ])
         );
     }
 }

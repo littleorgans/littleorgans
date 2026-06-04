@@ -9,7 +9,8 @@ use std::{
 use lilo_session_core::{
     CallerContextRequest, MailIntent, MailLogCursor, MailLogFilter, MailNotifyMode,
     MailPeekRequest, MailReadRequest, MailSendRequest, MailStopCheckRequest, MailTailRequest,
-    MailTailResponse, RpcResponse, SessionRpc,
+    MailTailResponse, RpcResponse, SessionRpc, mail_timeout_seconds_to_ms,
+    validate_mail_notify_timeout,
 };
 
 use crate::cli::cli_def::{
@@ -17,7 +18,8 @@ use crate::cli::cli_def::{
     MailTailArgs,
 };
 use crate::cli::output::{
-    print_conversation_overview, print_mail_send_summary, print_messages, print_messages_short_ids,
+    MessageTableStream, print_conversation_overview, print_mail_send_summary,
+    print_mail_send_summary_short_ids, print_messages, print_messages_short_ids,
 };
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
 
@@ -32,15 +34,19 @@ pub async fn run(args: MailArgs, json_output: bool) -> Result<()> {
 }
 
 async fn send(args: MailSendArgs, json_output: bool) -> Result<()> {
+    let notify = args
+        .notify
+        .as_deref()
+        .map(MailNotifyMode::from_str)
+        .transpose()?;
+    let timeout_ms = args.timeout.map(mail_timeout_seconds_to_ms).transpose()?;
+    validate_mail_notify_timeout(notify, timeout_ms)?;
     let response = send_daemon_request(SessionRpc::MailSend {
         request: MailSendRequest {
             to: required_scoped_selector(&args.to, &args.scope)?,
             content: args.content,
-            notify: args
-                .notify
-                .as_deref()
-                .map(MailNotifyMode::from_str)
-                .transpose()?,
+            notify,
+            timeout_ms,
             context_id: args.context_id,
             intent: MailIntent::from_client_send_str(&args.intent)?,
             idempotency_key: args.idempotency_key,
@@ -55,7 +61,12 @@ async fn send(args: MailSendArgs, json_output: bool) -> Result<()> {
                     response: response.clone(),
                 })?;
             } else {
-                print_mail_send_summary(&response.results);
+                match crate::cli::short_ids::load().await {
+                    Ok(short_ids) => {
+                        print_mail_send_summary_short_ids(&response.results, &short_ids);
+                    }
+                    Err(_) => print_mail_send_summary(&response.results),
+                }
             }
             Ok(())
         }
@@ -78,7 +89,10 @@ async fn read(_args: MailReadArgs, json_output: bool) -> Result<()> {
             if json_output {
                 print_json(&RpcResponse::MailRead { response })?;
             } else {
-                print_messages(&response.messages);
+                match crate::cli::short_ids::load().await {
+                    Ok(short_ids) => print_messages_short_ids(&response.messages, &short_ids),
+                    Err(_) => print_messages(&response.messages),
+                }
                 print_errors(&response.errors);
             }
             Ok(())
@@ -162,6 +176,13 @@ async fn tail(args: MailTailArgs, json_output: bool) -> Result<()> {
     let filter = observation_filter(&args.observation)?;
     let mut after = None;
     let mode = tail_mode(args.timeout, json_output, Instant::now());
+    let mut stream = if json_output {
+        None
+    } else {
+        Some(MessageTableStream::new(
+            crate::cli::short_ids::load().await?,
+        ))
+    };
     loop {
         let Some(response) =
             tail_once_until(filter.clone(), after.clone(), mode.follow, mode.deadline).await?
@@ -180,7 +201,10 @@ async fn tail(args: MailTailArgs, json_output: bool) -> Result<()> {
         if json_output {
             print_json(&RpcResponse::MailTail { response })?;
         } else {
-            print_messages(&response.messages);
+            stream
+                .as_mut()
+                .expect("non-json tail has a message stream")
+                .print(&response.messages);
         }
         if mode.single_shot {
             return Ok(());

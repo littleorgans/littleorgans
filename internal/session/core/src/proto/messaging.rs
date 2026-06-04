@@ -11,6 +11,8 @@ pub struct MailSendRequest {
     pub to: Selector,
     pub content: String,
     pub notify: Option<MailNotifyMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
     pub context_id: String,
     pub intent: MailIntent,
     pub idempotency_key: Option<String>,
