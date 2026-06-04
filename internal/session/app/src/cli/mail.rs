@@ -18,7 +18,8 @@ use crate::cli::cli_def::{
     MailTailArgs,
 };
 use crate::cli::output::{
-    print_conversation_overview, print_mail_send_summary, print_messages, print_messages_short_ids,
+    MessageTableStream, print_conversation_overview, print_mail_send_summary,
+    print_mail_send_summary_short_ids, print_messages, print_messages_short_ids,
 };
 use crate::cli::selector_scope::{required_scoped_selector, scoped_selector};
 
@@ -60,7 +61,12 @@ async fn send(args: MailSendArgs, json_output: bool) -> Result<()> {
                     response: response.clone(),
                 })?;
             } else {
-                print_mail_send_summary(&response.results);
+                match crate::cli::short_ids::load().await {
+                    Ok(short_ids) => {
+                        print_mail_send_summary_short_ids(&response.results, &short_ids);
+                    }
+                    Err(_) => print_mail_send_summary(&response.results),
+                }
             }
             Ok(())
         }
@@ -83,7 +89,10 @@ async fn read(_args: MailReadArgs, json_output: bool) -> Result<()> {
             if json_output {
                 print_json(&RpcResponse::MailRead { response })?;
             } else {
-                print_messages(&response.messages);
+                match crate::cli::short_ids::load().await {
+                    Ok(short_ids) => print_messages_short_ids(&response.messages, &short_ids),
+                    Err(_) => print_messages(&response.messages),
+                }
                 print_errors(&response.errors);
             }
             Ok(())
@@ -167,6 +176,13 @@ async fn tail(args: MailTailArgs, json_output: bool) -> Result<()> {
     let filter = observation_filter(&args.observation)?;
     let mut after = None;
     let mode = tail_mode(args.timeout, json_output, Instant::now());
+    let mut stream = if json_output {
+        None
+    } else {
+        Some(MessageTableStream::new(
+            crate::cli::short_ids::load().await?,
+        ))
+    };
     loop {
         let Some(response) =
             tail_once_until(filter.clone(), after.clone(), mode.follow, mode.deadline).await?
@@ -185,7 +201,10 @@ async fn tail(args: MailTailArgs, json_output: bool) -> Result<()> {
         if json_output {
             print_json(&RpcResponse::MailTail { response })?;
         } else {
-            print_messages(&response.messages);
+            stream
+                .as_mut()
+                .expect("non-json tail has a message stream")
+                .print(&response.messages);
         }
         if mode.single_shot {
             return Ok(());

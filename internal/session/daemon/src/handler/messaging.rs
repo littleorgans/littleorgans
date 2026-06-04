@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
+use futures_util::future::join_all;
 use lilo_common::id::{MessageId, SessionId};
 use lilo_im_core::Action;
 use lilo_rm_core::NudgeMode;
@@ -259,13 +260,17 @@ impl DaemonState {
                     self.emit_mail_appends(&outcome.mail);
                 }
                 let views = message_view::message_views(self, outcome.mail).await?;
-                for view in views {
+                let notified = join_all(views.into_iter().map(|view| async move {
                     let notify = if inserted {
                         self.notify_result(context, request, view.recipient.session_id)
                             .await
                     } else {
                         NotifyResult::skipped()
                     };
+                    (view, notify)
+                }))
+                .await;
+                for (view, notify) in notified {
                     if let Some(error) = notify.error.clone() {
                         response.errors.push(TargetError {
                             target: view.recipient.session_id.to_string(),

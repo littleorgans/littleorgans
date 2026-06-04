@@ -6,6 +6,15 @@ use lilo_session_core::{Label, MailSendResult, MessageView, SenderView, Session}
 
 const CONTENT_PREVIEW_MAX_CHARS: usize = 120;
 const PREVIEW_ELLIPSIS: &str = "...";
+const MESSAGE_HEADERS: [&str; 7] = [
+    "SENDER",
+    "RECIPIENT",
+    "RECIPIENT-ID",
+    "CONTEXT",
+    "INTENT",
+    "STATUS",
+    "AGE",
+];
 
 #[derive(Debug, Clone)]
 pub struct ShortSessionIdSet {
@@ -25,6 +34,10 @@ impl ShortSessionIdSet {
 
     #[must_use]
     pub fn render(&self, id: &SessionId) -> String {
+        let full_id = id.to_string();
+        if !self.full_ids.iter().any(|candidate| candidate == &full_id) {
+            return id.short();
+        }
         id.short_with(|prefix| self.match_count(prefix) == 1)
     }
 
@@ -33,6 +46,39 @@ impl ShortSessionIdSet {
             .iter()
             .filter(|candidate| candidate.starts_with(prefix))
             .count()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MessageTableStream {
+    short_ids: ShortSessionIdSet,
+    widths: Option<Vec<usize>>,
+}
+
+impl MessageTableStream {
+    #[must_use]
+    pub fn new(short_ids: ShortSessionIdSet) -> Self {
+        Self {
+            short_ids,
+            widths: None,
+        }
+    }
+
+    pub fn print(&mut self, messages: &[MessageView]) {
+        print!("{}", self.render(messages));
+    }
+
+    fn render(&mut self, messages: &[MessageView]) -> String {
+        if messages.is_empty() {
+            return String::new();
+        }
+        let rows = message_rows_short_ids(messages, &self.short_ids);
+        let table_rows = rows.iter().map(|row| row.0.clone()).collect::<Vec<_>>();
+        let include_header = self.widths.is_none();
+        let widths = self
+            .widths
+            .get_or_insert_with(|| column_widths(&MESSAGE_HEADERS, &table_rows));
+        render_table_rows_with_details(&rows, widths, include_header)
     }
 }
 
@@ -156,34 +202,52 @@ where
         return;
     }
     let rows = messages.iter().map(row).collect::<Vec<_>>();
-    print_table_with_details(
-        &[
-            "SENDER",
-            "RECIPIENT",
-            "RECIPIENT-ID",
-            "CONTEXT",
-            "INTENT",
-            "STATUS",
-            "AGE",
-        ],
-        &rows,
-    );
+    print_table_with_details(&MESSAGE_HEADERS, &rows);
 }
 
 pub fn print_mail_send_summary(results: &[MailSendResult]) {
+    print_mail_send_summary_with_ids(results, None);
+}
+
+pub fn print_mail_send_summary_short_ids(
+    results: &[MailSendResult],
+    short_ids: &ShortSessionIdSet,
+) {
+    print_mail_send_summary_with_ids(results, Some(short_ids));
+}
+
+fn print_mail_send_summary_with_ids(
+    results: &[MailSendResult],
+    short_ids: Option<&ShortSessionIdSet>,
+) {
     if results.is_empty() {
         println!("No recipients matched.");
         return;
     }
     let include_error = results.iter().any(|result| result.error.is_some());
     let headers = if include_error {
-        vec!["RECIPIENT", "MAIL", "NOTIFY", "CONTEXT", "INTENT", "ERROR"]
+        vec![
+            "RECIPIENT-ID",
+            "ROLE",
+            "CONTEXT",
+            "INTENT",
+            "NOTIFY",
+            "MAIL",
+            "ERROR",
+        ]
     } else {
-        vec!["RECIPIENT", "MAIL", "NOTIFY", "CONTEXT", "INTENT"]
+        vec![
+            "RECIPIENT-ID",
+            "ROLE",
+            "CONTEXT",
+            "INTENT",
+            "NOTIFY",
+            "MAIL",
+        ]
     };
     let rows = results
         .iter()
-        .map(|result| mail_send_cells(result, include_error))
+        .map(|result| mail_send_cells(result, include_error, short_ids))
         .collect::<Vec<_>>();
     print_table(&headers, &rows);
 }
@@ -236,6 +300,16 @@ fn message_row_short_id(
     message_row_with_recipient_id(item, short_ids.render(&item.recipient.session_id))
 }
 
+fn message_rows_short_ids(
+    messages: &[MessageView],
+    short_ids: &ShortSessionIdSet,
+) -> Vec<(Vec<String>, String)> {
+    messages
+        .iter()
+        .map(|message| message_row_short_id(message, short_ids))
+        .collect()
+}
+
 fn message_row_with_recipient_id(
     item: &MessageView,
     recipient_id: String,
@@ -252,16 +326,25 @@ fn message_row_with_recipient_id(
     (cells, content_preview(&item.content))
 }
 
-fn mail_send_cells(result: &MailSendResult, include_error: bool) -> Vec<String> {
+fn mail_send_cells(
+    result: &MailSendResult,
+    include_error: bool,
+    short_ids: Option<&ShortSessionIdSet>,
+) -> Vec<String> {
     let message = result.message.as_ref();
+    let recipient_id = short_ids.map_or_else(
+        || result.recipient.session_id.to_string(),
+        |short_ids| short_ids.render(&result.recipient.session_id),
+    );
     let mut cells = vec![
-        result.recipient.display_label.clone(),
-        result.mail.to_string(),
-        result.notify.to_string(),
+        recipient_id,
+        result.recipient.role.clone(),
         message
             .map_or("-", |message| message.context_id.as_str())
             .to_string(),
         message.map_or_else(|| "-".to_string(), |message| message.intent.to_string()),
+        result.notify.to_string(),
+        result.mail.to_string(),
     ];
     if include_error {
         cells.push(result.error.as_deref().unwrap_or("-").to_string());
@@ -364,19 +447,44 @@ fn render_table_with_details(headers: &[&str], rows: &[(Vec<String>, String)]) -
     let table_rows = rows.iter().map(|row| row.0.clone()).collect::<Vec<_>>();
     let widths = column_widths(headers, &table_rows);
     let mut output = String::new();
+    append_table_header(&mut output, headers, &widths);
+    append_table_rows_with_details(&mut output, rows, &widths);
+    output
+}
+
+fn render_table_rows_with_details(
+    rows: &[(Vec<String>, String)],
+    widths: &[usize],
+    include_header: bool,
+) -> String {
+    let mut output = String::new();
+    if include_header {
+        append_table_header(&mut output, &MESSAGE_HEADERS, widths);
+    }
+    append_table_rows_with_details(&mut output, rows, widths);
+    output
+}
+
+fn append_table_header(output: &mut String, headers: &[&str], widths: &[usize]) {
     append_table_row(
-        &mut output,
+        output,
         &headers
             .iter()
             .map(std::string::ToString::to_string)
             .collect::<Vec<_>>(),
-        &widths,
+        widths,
     );
+}
+
+fn append_table_rows_with_details(
+    output: &mut String,
+    rows: &[(Vec<String>, String)],
+    widths: &[usize],
+) {
     for (cells, detail) in rows {
-        append_table_row(&mut output, cells, &widths);
-        append_detail_line(&mut output, detail);
+        append_table_row(output, cells, widths);
+        append_detail_line(output, detail);
     }
-    output
 }
 
 fn append_detail_line(output: &mut String, detail: &str) {
@@ -454,121 +562,4 @@ fn truncate_preview(content: &str, max_chars: usize) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-    use std::time::Duration;
-
-    use chrono::Utc;
-    use lilo_session_core::{Namespace, RuntimeKind, Session, SessionState};
-
-    use super::{ShortSessionIdSet, format_duration_age, render_table};
-
-    #[test]
-    fn render_table_aligns_columns_and_preserves_last_column_text() {
-        let rows = vec![
-            vec![
-                "pm".to_string(),
-                "ok".to_string(),
-                "skipped".to_string(),
-                "what are you saying?".to_string(),
-            ],
-            vec![
-                "reviewer".to_string(),
-                "err".to_string(),
-                "skipped".to_string(),
-                "mail denied".to_string(),
-            ],
-        ];
-
-        assert_eq!(
-            render_table(&["RECIPIENT", "MAIL", "NOTIFY", "CONTENT"], &rows),
-            concat!(
-                "RECIPIENT  MAIL  NOTIFY   CONTENT\n",
-                "pm         ok    skipped  what are you saying?\n",
-                "reviewer   err   skipped  mail denied\n",
-            )
-        );
-    }
-
-    #[test]
-    fn message_row_places_recipient_session_id_after_recipient() {
-        use chrono::Utc;
-        use lilo_common::id::{MessageId, SessionId};
-        use lilo_session_core::{
-            MailIntent, MailStatus, MessageView, Namespace, RecipientSummary, SenderView,
-        };
-        let recipient_id = SessionId::from_uuid(uuid::Uuid::from_u128(1));
-        let view = MessageView {
-            id: MessageId::from_uuid(uuid::Uuid::from_u128(2)),
-            content: "what are we working on?".to_string(),
-            sent_at: Utc::now(),
-            read_at: None,
-            status: MailStatus::Unread,
-            sender: SenderView::System,
-            recipient: RecipientSummary {
-                session_id: recipient_id,
-                role: "pm".to_string(),
-                display_label: "pm".to_string(),
-                namespace: Namespace::default(),
-            },
-            context_id: "testing".to_string(),
-            intent: MailIntent::Inform,
-        };
-
-        let (cells, _detail) = super::message_row(&view);
-
-        // Columns: SENDER, RECIPIENT, RECIPIENT-ID, CONTEXT, INTENT, STATUS, AGE
-        assert_eq!(cells[0], "system");
-        assert_eq!(cells[1], "pm");
-        assert_eq!(cells[2], recipient_id.to_string());
-        assert_eq!(cells[3], "testing");
-        assert_eq!(cells[4], "inform");
-        assert_eq!(cells[5], "unread");
-        assert_eq!(cells.len(), 7);
-    }
-
-    #[test]
-    fn short_session_ids_widen_past_forced_collision() {
-        let first = test_session("12345678-1234-4234-9234-123456789abc");
-        let second = test_session("12345679-1234-4234-9234-123456789abc");
-        let short_ids = ShortSessionIdSet::from_sessions(&[first.clone(), second.clone()]);
-
-        assert_eq!(short_ids.render(&first.id), "12345678");
-        assert_eq!(short_ids.render(&second.id), "12345679");
-    }
-
-    #[test]
-    fn format_duration_age_uses_compact_resource_units() {
-        assert_eq!(format_duration_age(Duration::from_secs(0)), "0s");
-        assert_eq!(format_duration_age(Duration::from_secs(59)), "59s");
-        assert_eq!(format_duration_age(Duration::from_mins(1)), "1m");
-        assert_eq!(format_duration_age(Duration::from_hours(1)), "1h");
-        assert_eq!(format_duration_age(Duration::from_hours(24)), "1d");
-    }
-
-    fn test_session(id: &str) -> Session {
-        let now = Utc::now();
-        Session {
-            id: lilo_common::id::SessionId::from_uuid(
-                uuid::Uuid::parse_str(id).expect("uuid parses"),
-            ),
-            runtime: RuntimeKind::Claude,
-            role: "engineer".to_string(),
-            workspace: "test".to_string(),
-            namespace: Namespace::default(),
-            dir: PathBuf::from("test"),
-            state: SessionState::Running,
-            runtime_pid: 42,
-            runtime_session: None,
-            transcript_path: None,
-            tmux_pane: None,
-            agent_config: None,
-            created_at: now,
-            started_at: now,
-            terminated_at: None,
-            exit_code: None,
-            updated_at: now,
-            labels: Vec::new(),
-        }
-    }
-}
+mod tests;
