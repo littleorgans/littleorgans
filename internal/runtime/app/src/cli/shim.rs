@@ -42,6 +42,7 @@ pub fn run_for_session_blocking(session_id: SessionId) -> Result<()> {
             launch_request.clone(),
         )
     })?;
+    nudge_cursor_off_top_row();
     let mut child = runtime_command(&launch)?
         .spawn()
         .context("failed to spawn runtime")?;
@@ -92,6 +93,27 @@ where
         }
     }
     bail!("{label} failed: reconnect loop exhausted without success or final failure")
+}
+
+/// Emit one newline to the pane before the runtime takes over.
+///
+/// Inline TUIs like Codex anchor their redraw region to the cursor row captured
+/// at startup (a single `ESC[6n` query). `tmux respawn-pane` hands the runtime a
+/// freshly reset pane with the cursor on row 1; anchored at the very top, Codex
+/// strands its boot-banner reprints (loading -> MCP -> model resolved) in the
+/// scrollback instead of overwriting them, so the pane shows three stacked
+/// banners. A leading newline puts the cursor on row 2, exactly as a shell prompt
+/// would for a hand-run `codex`, and the reprints overwrite cleanly.
+///
+/// Guarded on `is_terminal()` so headless launches with piped stdout are not
+/// polluted with a stray newline.
+fn nudge_cursor_off_top_row() {
+    use std::io::{IsTerminal, Write};
+    let mut stdout = std::io::stdout();
+    if stdout.is_terminal() {
+        let _ = stdout.write_all(b"\n");
+        let _ = stdout.flush();
+    }
 }
 
 fn runtime_command(launch: &LaunchSpec) -> Result<Command> {
