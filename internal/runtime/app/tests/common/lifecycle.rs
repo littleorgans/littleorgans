@@ -27,7 +27,7 @@ pub fn persist_running_with_start_time(
         .expect("tokio runtime")
         .block_on(async {
             let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
-            let store = LifecycleStore::open(&db);
+            let store = LifecycleStore::from_db(&db);
             let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
             store.insert_forking(&lifecycle).await.expect("insert");
             lifecycle.mark_running(ShimReady {

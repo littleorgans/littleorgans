@@ -85,7 +85,8 @@ impl DaemonFixture {
         let db = lilo_db::LiloDb::open_path(self.audit_path())
             .await
             .or_panic("audit db opens");
-        lilo_im_store::query_audit(db.identity_pool(), lilo_im_store::AuditFilters::default())
+        lilo_im_store::AuditStore::with_pool(db.identity_pool().clone())
+            .query_audit(lilo_im_store::AuditFilters::default())
             .await
             .or_panic("audit query succeeds")
     }

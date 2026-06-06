@@ -68,15 +68,15 @@ async fn stub_and_in_tx_paths_agree_on_denial_for_non_local_principal() {
 
     // In-transaction path: records a Deny row via the passed connection, then
     // returns an error derived from the same decision.
-    let mut conn = db
-        .identity_pool()
-        .acquire()
+    let mut tx = lilo_db::begin_immediate_pool_tx(db.identity_pool())
         .await
-        .expect("acquire identity connection");
+        .expect("begin identity tx");
     let in_tx_result = client
-        .authorize_in_tx(&mut conn, &principal, Action::Spawn, &resource)
+        .authorize_in_tx(&mut tx, &principal, Action::Spawn, &resource)
         .await;
-    drop(conn);
+    lilo_db::finish_immediate_pool_tx(tx, Ok::<(), sqlx::Error>(()))
+        .await
+        .expect("commit identity audit tx");
     assert!(
         in_tx_result.is_err(),
         "in-tx path must deny a non-local principal"

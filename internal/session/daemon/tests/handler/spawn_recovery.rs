@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use lilo_common::id::SessionId;
+use lilo_db::LiloDb;
 use lilo_rm_core::{
     EventBatch, EventsRequest, IsolationPolicy, Lifecycle, NudgeMode,
     RuntimeKind as RuntimeRuntimeKind, ShimReady, StatusFilter,
@@ -15,7 +16,6 @@ use lilo_session_driver::{
     CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch,
     SpawnedProcess,
 };
-use lilo_session_store::SqliteStore;
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_request};
 
@@ -27,7 +27,7 @@ const TEST_RUNTIME_PID: u32 = 42_424;
 pub(crate) async fn tx_b_failure_aborts_started_runtime_and_spawn_intent() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let runtime = Arc::new(FaultingRuntimePort::new(
-        daemon.state.store.clone(),
+        daemon.db.clone(),
         SpawnFault::FailTxBResolve,
     ));
     let state = daemon
@@ -57,20 +57,18 @@ pub(crate) async fn tx_b_failure_aborts_started_runtime_and_spawn_intent() {
     let session_id = runtime.spawned_session_id();
     assert!(runtime.terminated(session_id));
     assert_eq!(
-        spawn_intent_status(&state.store, session_id)
-            .await
-            .as_deref(),
+        spawn_intent_status(&daemon.db, session_id).await.as_deref(),
         Some("aborted")
     );
-    assert_no_lifecycle(&state.store, session_id).await;
-    assert_eq!(session_row_count(&state.store, session_id).await, 0);
+    assert_no_lifecycle(&daemon.db, session_id).await;
+    assert_eq!(session_row_count(&daemon.db, session_id).await, 0);
 }
 
 #[tokio::test]
 pub(crate) async fn abort_spawn_intent_clears_forking_and_marks_intent_aborted() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let runtime = Arc::new(FaultingRuntimePort::new(
-        daemon.state.store.clone(),
+        daemon.db.clone(),
         SpawnFault::FailRuntimeSpawn,
     ));
     let state = daemon
@@ -99,13 +97,11 @@ pub(crate) async fn abort_spawn_intent_clears_forking_and_marks_intent_aborted()
     );
     let session_id = runtime.spawned_session_id();
     assert_eq!(
-        spawn_intent_status(&state.store, session_id)
-            .await
-            .as_deref(),
+        spawn_intent_status(&daemon.db, session_id).await.as_deref(),
         Some("aborted")
     );
-    assert_no_lifecycle(&state.store, session_id).await;
-    assert_eq!(session_row_count(&state.store, session_id).await, 0);
+    assert_no_lifecycle(&daemon.db, session_id).await;
+    assert_eq!(session_row_count(&daemon.db, session_id).await, 0);
 }
 
 #[derive(Clone, Copy)]
@@ -115,16 +111,16 @@ enum SpawnFault {
 }
 
 struct FaultingRuntimePort {
-    store: SqliteStore,
+    db: LiloDb,
     fault: SpawnFault,
     spawned_session_id: Mutex<Option<SessionId>>,
     terminated_session_ids: Mutex<Vec<SessionId>>,
 }
 
 impl FaultingRuntimePort {
-    fn new(store: SqliteStore, fault: SpawnFault) -> Self {
+    fn new(db: LiloDb, fault: SpawnFault) -> Self {
         Self {
-            store,
+            db,
             fault,
             spawned_session_id: Mutex::new(None),
             terminated_session_ids: Mutex::new(Vec::new()),
@@ -157,7 +153,7 @@ impl FaultingRuntimePort {
             .or_panic("spawned id lock succeeds") = Some(session_id);
         match self.fault {
             SpawnFault::FailTxBResolve => {
-                install_tx_b_resolve_failure(&self.store, session_id).await?;
+                install_tx_b_resolve_failure(&self.db, session_id).await?;
                 Ok(spawned_process(
                     session_id,
                     launch.runtime,
@@ -284,7 +280,7 @@ fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
 }
 
 async fn install_tx_b_resolve_failure(
-    store: &SqliteStore,
+    db: &LiloDb,
     session_id: SessionId,
 ) -> Result<(), RuntimeError> {
     sqlx::query(
@@ -292,7 +288,7 @@ async fn install_tx_b_resolve_failure(
             session_id TEXT PRIMARY KEY NOT NULL
         )",
     )
-    .execute(store.pool())
+    .execute(db.session_pool())
     .await
     .map_err(|error| RuntimeError::local(format!("failed to create Tx-B fault table: {error}")))?;
     sqlx::query(
@@ -309,37 +305,37 @@ async fn install_tx_b_resolve_failure(
                );
          END",
     )
-    .execute(store.pool())
+    .execute(db.session_pool())
     .await
     .map_err(|error| {
         RuntimeError::local(format!("failed to create Tx-B fault trigger: {error}"))
     })?;
     sqlx::query("INSERT INTO ws5_forced_resolve_failures (session_id) VALUES (?)")
         .bind(session_id.to_string())
-        .execute(store.pool())
+        .execute(db.session_pool())
         .await
         .map_err(|error| RuntimeError::local(format!("failed to install Tx-B fault: {error}")))?;
     Ok(())
 }
 
-async fn spawn_intent_status(store: &SqliteStore, session_id: SessionId) -> Option<String> {
+async fn spawn_intent_status(db: &LiloDb, session_id: SessionId) -> Option<String> {
     sqlx::query_scalar("SELECT status FROM session_spawn_intents WHERE session_id = ?")
         .bind(session_id.to_string())
-        .fetch_optional(store.pool())
+        .fetch_optional(db.session_pool())
         .await
         .or_panic("spawn intent status query succeeds")
 }
 
-async fn session_row_count(store: &SqliteStore, session_id: SessionId) -> i64 {
+async fn session_row_count(db: &LiloDb, session_id: SessionId) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM session_sessions WHERE id = ?")
         .bind(session_id.to_string())
-        .fetch_one(store.pool())
+        .fetch_one(db.session_pool())
         .await
         .or_panic("session row count query succeeds")
 }
 
-async fn assert_no_lifecycle(store: &SqliteStore, session_id: SessionId) {
-    let lifecycle = LifecycleStore::from_pool(store.pool().clone())
+async fn assert_no_lifecycle(db: &LiloDb, session_id: SessionId) {
+    let lifecycle = LifecycleStore::from_db(db)
         .get(session_id)
         .await
         .or_panic("lifecycle query succeeds");

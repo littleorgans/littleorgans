@@ -316,7 +316,7 @@ async fn in_process_fixture(session_id: SessionId, state: LifecycleState) -> InP
 }
 
 async fn persist_lifecycle(db: &LiloDb, session_id: SessionId, state: LifecycleState) {
-    let store = LifecycleStore::open(db);
+    let store = LifecycleStore::from_db(db);
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     store
         .insert_forking(&lifecycle)
