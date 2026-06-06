@@ -5,6 +5,7 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn tools_call_can_send_read_check_mail_and_nudge() {
     let runtime_path = common::fake_runtime_path("codex");
     let daemon = DaemonFixture::start_with_runtime_path(runtime_path.path());

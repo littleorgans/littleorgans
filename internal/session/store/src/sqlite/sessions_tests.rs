@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use lilo_common::id::SessionId;
+use lilo_db::test_support::{TestDb, now_micros};
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
@@ -9,9 +10,11 @@ use crate::test_support::{ErrOrPanic as _, OrPanic as _};
 use super::*;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn inserts_and_lists_sessions() {
-    let (_dir, store) = SessionStore::open_temp().await;
-    let now = Utc::now();
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
+    let now = now_micros();
     let session = Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
@@ -42,18 +45,21 @@ async fn inserts_and_lists_sessions() {
         store.list_sessions(None).await.or_panic("sessions list"),
         vec![session]
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn marks_session_terminated() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let session = test_session("general", "test", Vec::new());
     store
         .insert_session(&session)
         .await
         .or_panic("session inserts");
 
-    let terminated_at = Utc::now();
+    let terminated_at = now_micros();
     let terminated = store
         .mark_session_terminated(&session.id, Some(137), terminated_at)
         .await
@@ -63,11 +69,14 @@ async fn marks_session_terminated() {
     assert_eq!(terminated.state, SessionState::Terminated);
     assert_eq!(terminated.exit_code, Some(137));
     assert_eq!(terminated.terminated_at, Some(terminated_at));
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn records_transcript_path_without_runtime_session() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let session = test_session("engineer", "test", Vec::new());
     store
         .insert_session(&session)
@@ -75,7 +84,7 @@ async fn records_transcript_path_without_runtime_session() {
         .or_panic("session inserts");
     let transcript = std::path::Path::new("/tmp/rtmd-stdout.log");
 
-    let recorded_at = Utc::now();
+    let recorded_at = now_micros();
     let updated = store
         .record_transcript_path(&session.id, transcript, recorded_at)
         .await
@@ -94,11 +103,14 @@ async fn records_transcript_path_without_runtime_session() {
         .or_panic("session exists");
 
     assert_eq!(unchanged.updated_at, recorded_at);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn selector_queries_return_sessions_with_labels() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let auth_pm = test_session(
         "pm",
         "test",
@@ -184,11 +196,14 @@ async fn selector_queries_return_sessions_with_labels() {
         session_ids(&in_area),
         vec![auth_pm.id, auth_engineer.id, ui_engineer.id]
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn selector_queries_filter_by_namespace_dir_and_scope() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let alpha = Namespace::new("alpha").or_panic("namespace");
     let beta = Namespace::new("beta").or_panic("namespace");
     let mut alpha_engineer = test_session("engineer", "/tmp/alpha", Vec::new());
@@ -239,11 +254,14 @@ async fn selector_queries_filter_by_namespace_dir_and_scope() {
         .await
         .or_panic("scoped selector resolves");
     assert_eq!(session_ids(&scoped_engineers), vec![beta_engineer.id]);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn selector_prefix_resolves_unique_and_none() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let first = test_session_with_id(
         "12345678-1234-4234-9234-123456789abc",
         "engineer",
@@ -272,11 +290,14 @@ async fn selector_prefix_resolves_unique_and_none() {
         .await
         .or_panic("missing prefix resolves");
     assert!(missing.is_empty());
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn selector_prefix_rejects_ambiguous_and_invalid_prefixes() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let first = test_session_with_id(
         "12345678-1234-4234-9234-123456789abc",
         "engineer",
@@ -322,33 +343,31 @@ async fn selector_prefix_rejects_ambiguous_and_invalid_prefixes() {
         .await
         .err_or_panic("wildcard prefix fails");
     assert!(matches!(invalid, SessionRowError::InvalidPrefix { .. }));
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
-async fn persists_sessions_across_reopen() {
-    let dir = tempfile::tempdir().or_panic("tempdir creates");
-    let path = dir.path().join("lilo.db");
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn persists_sessions_across_store_handles() {
+    let testdb = TestDb::create().await.or_panic("test db creates");
     let session = test_session("general", "test", Vec::new());
     {
-        let db = lilo_db::LiloDb::open_path(&path).await.or_panic("db opens");
-        let store = SessionStore::from_db(&db);
+        let store = SessionStore::from_db(testdb.db());
         store
             .insert_session(&session)
             .await
             .or_panic("session inserts");
     }
 
-    let db = lilo_db::LiloDb::open_path(&path)
-        .await
-        .or_panic("db reopens");
-    let store = SessionStore::from_db(&db);
+    let store = SessionStore::from_db(testdb.db());
     let sessions = store.list_sessions(None).await.or_panic("sessions list");
 
     assert_eq!(sessions, vec![session]);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
-    let now = Utc::now();
+    let now = now_micros();
     Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,

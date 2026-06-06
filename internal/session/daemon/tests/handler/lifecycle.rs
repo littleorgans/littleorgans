@@ -6,6 +6,7 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn drives_session_through_delete_lifecycle() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -31,9 +32,11 @@ pub(crate) async fn drives_session_through_delete_lifecycle() {
     assert_eq!(response.sessions.len(), 1);
     assert_eq!(response.sessions[0].state, SessionState::Terminated);
     assert!(response.sessions[0].terminated_at.is_some());
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn delete_unknown_id_uses_session_noun() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let id = SessionId::from_uuid(uuid::Uuid::nil());
@@ -56,9 +59,11 @@ pub(crate) async fn delete_unknown_id_uses_session_noun() {
     };
 
     assert_eq!(message, format!("unknown session: {id}"));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn label_empty_selector_uses_session_noun() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
 
@@ -82,4 +87,5 @@ pub(crate) async fn label_empty_selector_uses_session_noun() {
     };
 
     assert_eq!(message, "selector matched no sessions: all");
+    daemon.cleanup().await;
 }

@@ -4,6 +4,7 @@ use lilo_im_core::{Action, AuditDecision};
 use serde_json::json;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn tools_call_can_run_list_get_and_delete_agent() {
     let runtime_path = common::fake_runtime_path("codex");
     let daemon = DaemonFixture::start_with_runtime_path(runtime_path.path());

@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 use crate::backend::RuntimeBackends;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_path_shaped_env_without_mount_is_rejected() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request
         .env
@@ -23,12 +24,14 @@ async fn docker_path_shaped_env_without_mount_is_rejected() {
         error.to_string(),
         "path-shaped env CLAUDE_CONFIG_DIR=/host/path is not covered by a declared Docker mount target; add --mount /host/path:/host/path:ro"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_path_shaped_env_with_same_destination_mount_is_accepted() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let config = path_text(&layout.config);
     let mut request = docker_request(&layout.cwd);
     request
@@ -43,12 +46,14 @@ async fn docker_path_shaped_env_with_same_destination_mount_is_accepted() {
         "same destination mount should pass",
     )
     .await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_path_shaped_env_accepts_subtree_mount_coverage() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let target = path_text(&layout.config);
     let env_value = format!("{target}/subdir");
     let mut request = docker_request(&layout.cwd);
@@ -64,12 +69,14 @@ async fn docker_path_shaped_env_accepts_subtree_mount_coverage() {
         "subtree mount should pass",
     )
     .await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_spawn_without_path_shaped_envs_or_mounts_is_accepted() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request
         .env
@@ -82,12 +89,14 @@ async fn docker_spawn_without_path_shaped_envs_or_mounts_is_accepted() {
         "spawn without path shaped envs should pass",
     )
     .await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_path_shaped_env_relative_value_is_rejected() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request
         .env
@@ -105,12 +114,14 @@ async fn docker_path_shaped_env_relative_value_is_rejected() {
         error.to_string(),
         "path-shaped env CLAUDE_CONFIG_DIR=./local must be an absolute container path"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_duplicate_mount_targets_are_rejected_after_normalization() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let second_config = layout.temp.path().join("config-two");
     std::fs::create_dir_all(&second_config).expect("config two");
     let mut request = docker_request(&layout.cwd);
@@ -131,12 +142,14 @@ async fn docker_duplicate_mount_targets_are_rejected_after_normalization() {
         error.to_string(),
         "docker mount target /config is declared more than once"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_mount_source_descendant_of_cwd_is_rejected() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let nested = layout.cwd.join("config");
     std::fs::create_dir_all(&nested).expect("nested config");
     let mut request = docker_request(&layout.cwd);
@@ -154,12 +167,14 @@ async fn docker_mount_source_descendant_of_cwd_is_rejected() {
         error.to_string().contains("overlaps the cwd auto-mount source"),
         "{error}"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_mount_source_equal_to_cwd_suppresses_cwd_auto_mount() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request.mounts.push(bind_mount(&layout.cwd, "/project"));
 
@@ -177,12 +192,14 @@ async fn docker_mount_source_equal_to_cwd_suppresses_cwd_auto_mount() {
 
     assert!(!launch.argv.contains(&cwd_auto_mount_arg(&request.cwd)));
     assert_eq!(workdir(&launch.argv), "/project");
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_mount_source_ancestor_of_cwd_remaps_workdir() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let root = layout.temp.path().join("repo");
     let cwd = root.join("littleorgans");
     std::fs::create_dir_all(&cwd).expect("cwd");
@@ -203,12 +220,14 @@ async fn docker_mount_source_ancestor_of_cwd_remaps_workdir() {
 
     assert!(!launch.argv.contains(&cwd_auto_mount_arg(&request.cwd)));
     assert_eq!(workdir(&launch.argv), "/workspace/littleorgans");
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_multiple_cwd_covers_with_equal_precedence_are_rejected() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request.mounts = vec![
         bind_mount(&layout.cwd, "/one"),
@@ -229,12 +248,14 @@ async fn docker_multiple_cwd_covers_with_equal_precedence_are_rejected() {
             .contains("multiple docker mount sources cover spawn cwd"),
         "{error}"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_mount_target_overlapping_cwd_auto_mount_is_rejected() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let target = layout.cwd.canonicalize().expect("canonical cwd").join("config");
     let mut request = docker_request(&layout.cwd);
     request.mounts.push(bind_mount(&layout.config, &path_text(&target)));
@@ -251,12 +272,14 @@ async fn docker_mount_target_overlapping_cwd_auto_mount_is_rejected() {
         error.to_string().contains("overlaps the cwd auto-mount target"),
         "{error}"
     );
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_container_paths_are_normalized_without_host_filesystem_lookup() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = docker_request(&layout.cwd);
     request
         .env
@@ -270,13 +293,15 @@ async fn docker_container_paths_are_normalized_without_host_filesystem_lookup() 
         "container target comparison should be lexical",
     )
     .await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[cfg(unix)]
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_cwd_cover_uses_canonical_cwd_for_argv() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let real_root = layout.temp.path().join("real-root");
     let real_cwd = real_root.join("project");
     std::fs::create_dir_all(&real_cwd).expect("real cwd");
@@ -302,13 +327,15 @@ async fn docker_cwd_cover_uses_canonical_cwd_for_argv() {
 
     assert!(!launch.argv.contains(&cwd_auto_mount_arg(&canonical_cwd)));
     assert_eq!(workdir(&launch.argv), "/workspace/project");
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[cfg(unix)]
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_mount_sources_are_canonicalized_before_docker_argv() {
     let layout = MountLayout::new();
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let link = layout.cwd.join("config-link");
     std::os::unix::fs::symlink(&layout.config, &link).expect("symlink");
     let mut request = docker_request(&layout.cwd);
@@ -339,11 +366,13 @@ async fn docker_mount_sources_are_canonicalized_before_docker_argv() {
     );
 
     assert!(launch.argv.contains(&expected), "{:?}", launch.argv);
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn host_isolation_mounts_do_not_reject_direct_rpc_requests() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.env.push(LaunchEnv::new("CLAUDE_CONFIG_DIR", "/host/path"));
     request.mounts.push(MountSpec {
@@ -357,6 +386,7 @@ async fn host_isolation_mounts_do_not_reject_direct_rpc_requests() {
         .expect("host isolation should not reject mounts");
 
     assert_no_preflight_conflict(response.as_ref());
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 struct MountLayout {

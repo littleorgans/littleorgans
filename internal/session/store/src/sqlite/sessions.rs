@@ -3,18 +3,16 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use lilo_common::id::SessionId;
-use lilo_db::ImmediateTx;
 use lilo_session_core::{
     LabelOp, LostEvidence, MIN_SELECTOR_PREFIX_LEN, Namespace, RuntimeKind, Selector, Session,
     SessionState,
 };
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, Sqlite};
+use sqlx::postgres::PgRow;
+use sqlx::{Postgres, Row};
 use thiserror::Error;
 
 use super::SessionStore;
 use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
-use super::time::{parse_optional_timestamp, parse_timestamp};
 
 #[derive(Debug, Error)]
 pub enum SessionRowError {
@@ -51,7 +49,7 @@ impl SessionStore {
 
     pub async fn insert_session_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut lilo_db::LiloTransaction<'_>,
         session: &Session,
     ) -> Result<(), SessionRowError> {
         insert_session_row(&mut **tx, session).await?;
@@ -63,7 +61,7 @@ impl SessionStore {
     pub async fn get_session(&self, id: &SessionId) -> Result<Option<Session>, SessionRowError> {
         let id = id.to_string();
         Ok(self
-            .query_sessions("SELECT * FROM session_sessions WHERE id = ?", [id])
+            .query_sessions("SELECT * FROM session_sessions WHERE id = $1", [id])
             .await?
             .into_iter()
             .next())
@@ -76,7 +74,10 @@ impl SessionStore {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = (0..ids.len()).map(|_| "?").collect::<Vec<_>>().join(", ");
+        let placeholders = (1..=ids.len())
+            .map(|n| format!("${n}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
             "SELECT * FROM session_sessions
              WHERE id IN ({placeholders})
@@ -110,7 +111,7 @@ impl SessionStore {
             }
             Selector::Id { id } => {
                 self.query_sessions(
-                    "SELECT * FROM session_sessions WHERE id = ? ORDER BY created_at",
+                    "SELECT * FROM session_sessions WHERE id = $1 ORDER BY created_at",
                     [id.to_string()],
                 )
                 .await
@@ -118,21 +119,21 @@ impl SessionStore {
             Selector::Prefix { prefix } => self.query_prefix_sessions(prefix).await,
             Selector::Role { name } => {
                 self.query_sessions(
-                    "SELECT * FROM session_sessions WHERE role = ? ORDER BY created_at",
+                    "SELECT * FROM session_sessions WHERE role = $1 ORDER BY created_at",
                     [name.clone()],
                 )
                 .await
             }
             Selector::Namespace { namespace } => {
                 self.query_sessions(
-                    "SELECT * FROM session_sessions WHERE namespace = ? ORDER BY created_at",
+                    "SELECT * FROM session_sessions WHERE namespace = $1 ORDER BY created_at",
                     [namespace.as_str().to_string()],
                 )
                 .await
             }
             Selector::Dir { path } => {
                 self.query_sessions(
-                    "SELECT * FROM session_sessions WHERE dir = ? ORDER BY created_at",
+                    "SELECT * FROM session_sessions WHERE dir = $1 ORDER BY created_at",
                     [path.display().to_string()],
                 )
                 .await
@@ -146,7 +147,7 @@ impl SessionStore {
                     "SELECT s.*
                  FROM session_sessions s
                  JOIN session_labels l ON l.session_id = s.id
-                 WHERE l.key = ? AND l.value = ?
+                 WHERE l.key = $1 AND l.value = $2
                  ORDER BY s.created_at",
                     [key.clone(), value.clone()],
                 )
@@ -164,7 +165,7 @@ impl SessionStore {
         let sessions = self
             .query_sessions(
                 "SELECT * FROM session_sessions
-                 WHERE id LIKE ? || '%'
+                 WHERE id LIKE $1 || '%'
                  ORDER BY created_at",
                 [prefix.to_string()],
             )
@@ -189,15 +190,15 @@ impl SessionStore {
         if values.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = (0..values.len())
-            .map(|_| "?")
+        let placeholders = (2..=values.len() + 1)
+            .map(|n| format!("${n}"))
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
             "SELECT s.*
              FROM session_sessions s
              JOIN session_labels l ON l.session_id = s.id
-             WHERE l.key = ? AND l.value IN ({placeholders})
+             WHERE l.key = $1 AND l.value IN ({placeholders})
              ORDER BY s.created_at"
         );
         let params = std::iter::once(key.to_string())
@@ -260,13 +261,13 @@ impl SessionStore {
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
-             SET state = ?, exit_code = ?, terminated_at = ?, updated_at = ?
-             WHERE id = ?",
+             SET state = $1, exit_code = $2, terminated_at = $3, updated_at = $4
+             WHERE id = $5",
         )
         .bind(SessionState::Terminated.to_string())
-        .bind(exit_code)
-        .bind(terminated_at.to_rfc3339())
-        .bind(terminated_at.to_rfc3339())
+        .bind(exit_code.map(i64::from))
+        .bind(terminated_at)
+        .bind(terminated_at)
         .bind(id.to_string())
         .execute(&mut *transaction)
         .await?;
@@ -284,12 +285,12 @@ impl SessionStore {
         let mut transaction = self.pool.begin().await?;
         sqlx::query(
             "UPDATE session_sessions
-             SET state = ?, lost_evidence = ?, updated_at = ?
-             WHERE id = ?",
+             SET state = $1, lost_evidence = $2, updated_at = $3
+             WHERE id = $4",
         )
         .bind(SessionState::Lost { evidence }.sql_name())
         .bind(lost_evidence_to_sql(evidence))
-        .bind(updated_at.to_rfc3339())
+        .bind(updated_at)
         .bind(id.to_string())
         .execute(&mut *transaction)
         .await?;
@@ -306,12 +307,12 @@ impl SessionStore {
     ) -> Result<Option<Session>, SessionRowError> {
         sqlx::query(
             "UPDATE session_sessions
-             SET transcript_path = ?, updated_at = ?
-             WHERE id = ?
-               AND (transcript_path IS NULL OR transcript_path != ?)",
+             SET transcript_path = $1, updated_at = $2
+             WHERE id = $3
+               AND (transcript_path IS NULL OR transcript_path != $4)",
         )
         .bind(transcript_path.display().to_string())
-        .bind(updated_at.to_rfc3339())
+        .bind(updated_at)
         .bind(id.to_string())
         .bind(transcript_path.display().to_string())
         .execute(&self.pool)
@@ -322,14 +323,14 @@ impl SessionStore {
 
 async fn insert_session_row<'e, E>(executor: E, session: &Session) -> Result<(), SessionRowError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     sqlx::query(
         "INSERT INTO session_sessions
             (id, runtime, role, workspace, namespace, dir, state, lost_evidence, runtime_pid,
              runtime_session, transcript_path, tmux_pane, agent_config, created_at,
              started_at, terminated_at, exit_code, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
     )
     .bind(session.id.to_string())
     .bind(session.runtime.to_string())
@@ -339,7 +340,7 @@ where
     .bind(session.dir.display().to_string())
     .bind(session.state.sql_name())
     .bind(session_lost_evidence(session.state))
-    .bind(session.runtime_pid)
+    .bind(i64::from(session.runtime_pid))
     .bind(session.runtime_session.as_deref())
     .bind(
         session
@@ -349,15 +350,11 @@ where
     )
     .bind(session.tmux_pane.as_deref())
     .bind(session.agent_config.as_deref())
-    .bind(session.created_at.to_rfc3339())
-    .bind(session.started_at.to_rfc3339())
-    .bind(
-        session
-            .terminated_at
-            .map(|timestamp| timestamp.to_rfc3339()),
-    )
-    .bind(session.exit_code)
-    .bind(session.updated_at.to_rfc3339())
+    .bind(session.created_at)
+    .bind(session.started_at)
+    .bind(session.terminated_at)
+    .bind(session.exit_code.map(i64::from))
+    .bind(session.updated_at)
     .execute(executor)
     .await?;
     Ok(())
@@ -419,7 +416,7 @@ fn validate_session_id_prefix(prefix: &str) -> Result<(), SessionRowError> {
     Ok(())
 }
 
-fn session_from_row(row: &SqliteRow) -> Result<Session, SessionRowError> {
+fn session_from_row(row: &PgRow) -> Result<Session, SessionRowError> {
     let runtime_pid = row.try_get::<i64, _>("runtime_pid")?;
     let runtime_pid =
         u32::try_from(runtime_pid).map_err(|_| integer_out_of_range("runtime_pid", runtime_pid))?;
@@ -439,18 +436,16 @@ fn session_from_row(row: &SqliteRow) -> Result<Session, SessionRowError> {
             .map(Into::into),
         tmux_pane: row.try_get("tmux_pane")?,
         agent_config: row.try_get("agent_config")?,
-        created_at: parse_timestamp(&row.try_get::<String, _>("created_at")?)?,
-        started_at: parse_timestamp(&row.try_get::<String, _>("started_at")?)?,
-        terminated_at: parse_optional_timestamp(
-            row.try_get::<Option<String>, _>("terminated_at")?,
-        )?,
+        created_at: row.try_get::<DateTime<Utc>, _>("created_at")?,
+        started_at: row.try_get::<DateTime<Utc>, _>("started_at")?,
+        terminated_at: row.try_get::<Option<DateTime<Utc>>, _>("terminated_at")?,
         exit_code: optional_i32(row, "exit_code")?,
-        updated_at: parse_timestamp(&row.try_get::<String, _>("updated_at")?)?,
+        updated_at: row.try_get::<DateTime<Utc>, _>("updated_at")?,
         labels: Vec::new(),
     })
 }
 
-fn session_state_from_row(row: &SqliteRow) -> Result<SessionState, SessionRowError> {
+fn session_state_from_row(row: &PgRow) -> Result<SessionState, SessionRowError> {
     let lost_evidence = row
         .try_get::<Option<String>, _>("lost_evidence")?
         .as_deref()
@@ -468,7 +463,7 @@ fn session_lost_evidence(state: SessionState) -> Option<&'static str> {
     }
 }
 
-fn optional_i32(row: &SqliteRow, column: &'static str) -> Result<Option<i32>, SessionRowError> {
+fn optional_i32(row: &PgRow, column: &'static str) -> Result<Option<i32>, SessionRowError> {
     row.try_get::<Option<i64>, _>(column)?
         .map(|value| i32::try_from(value).map_err(|_| integer_out_of_range(column, value)))
         .transpose()

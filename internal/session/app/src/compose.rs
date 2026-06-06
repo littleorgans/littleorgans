@@ -77,7 +77,7 @@ pub async fn run_with_shutdown_observer(
 ) -> Result<()> {
     let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
-    let db = LiloDb::open(&paths).await?;
+    let db = LiloDb::open_postgres_resolved().await?;
     let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
     let runtime = Arc::new(
         RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone())).await?,

@@ -68,9 +68,11 @@ impl DockerLiveness for FakeDockerLiveness {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = open_store(temp.path().join("rtm.sqlite")).await;
+    let testdb = open_db().await;
+    let store = LifecycleStore::from_db(testdb.db());
     let dead = persist_running(&store, 101, Utc.timestamp_opt(1_000, 0).unwrap()).await;
     let reused = persist_running(&store, 202, Utc.timestamp_opt(2_000, 0).unwrap()).await;
     let mut already_lost = persist_running(&store, 303, Utc.timestamp_opt(3_000, 0).unwrap()).await;
@@ -81,9 +83,7 @@ async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
         .expect("persist lost");
 
     let state = Arc::new(
-        ServerState::new(test_config(temp.path()), store.clone())
-            .await
-            .expect("state"),
+        ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
     let probe = FakeProbe {
         alive: HashSet::from([202]),
@@ -99,17 +99,18 @@ async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
     assert!(replay.is_empty(), "{replay:?}");
     assert_lost(&store, dead.session_id, LostEvidence::PidNotAlive).await;
     assert_lost(&store, reused.session_id, LostEvidence::PidReuseDetected).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn startup_reconciliation_marks_pid_lost_when_start_time_races_exit() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = open_store(temp.path().join("rtm.sqlite")).await;
+    let testdb = open_db().await;
+    let store = LifecycleStore::from_db(testdb.db());
     let lifecycle = persist_running(&store, 404, Utc.timestamp_opt(4_000, 0).unwrap()).await;
     let state = Arc::new(
-        ServerState::new(test_config(temp.path()), store.clone())
-            .await
-            .expect("state"),
+        ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
     let probe = VanishingProbe {
         alive_checks: AtomicUsize::new(0),
@@ -119,17 +120,18 @@ async fn startup_reconciliation_marks_pid_lost_when_start_time_races_exit() {
 
     assert_eq!(events.len(), 1);
     assert_lost(&store, lifecycle.session_id, LostEvidence::PidNotAlive).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn startup_reconciliation_marks_pid_lost_when_probe_reports_gone() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = open_store(temp.path().join("rtm.sqlite")).await;
+    let testdb = open_db().await;
+    let store = LifecycleStore::from_db(testdb.db());
     let lifecycle = persist_running(&store, 505, Utc.timestamp_opt(5_000, 0).unwrap()).await;
     let state = Arc::new(
-        ServerState::new(test_config(temp.path()), store.clone())
-            .await
-            .expect("state"),
+        ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
 
     let events = reconcile_startup(state, &GoneProbe)
@@ -138,18 +140,19 @@ async fn startup_reconciliation_marks_pid_lost_when_probe_reports_gone() {
 
     assert_eq!(events.len(), 1);
     assert_lost(&store, lifecycle.session_id, LostEvidence::PidNotAlive).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn periodic_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = open_store(temp.path().join("rtm.sqlite")).await;
+    let testdb = open_db().await;
+    let store = LifecycleStore::from_db(testdb.db());
     let dead = persist_running(&store, 101, Utc.timestamp_opt(1_000, 0).unwrap()).await;
     let reused = persist_running(&store, 202, Utc.timestamp_opt(2_000, 0).unwrap()).await;
     let state = Arc::new(
-        ServerState::new(test_config(temp.path()), store.clone())
-            .await
-            .expect("state"),
+        ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
     let probe = FakeProbe {
         alive: HashSet::from([202]),
@@ -185,17 +188,18 @@ async fn periodic_reconciliation_marks_dead_and_reused_pids_lost_once() {
         2
     );
     assert_eq!(store.running().await.expect("running").len(), 0);
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn docker_reconciliation_uses_docker_liveness() {
     let temp = tempfile::TempDir::new().expect("temp dir");
-    let store = open_store(temp.path().join("rtm.sqlite")).await;
+    let testdb = open_db().await;
+    let store = LifecycleStore::from_db(testdb.db());
     let lifecycle = persist_docker_running(&store, 606).await;
     let state = Arc::new(
-        ServerState::new(test_config(temp.path()), store.clone())
-            .await
-            .expect("state"),
+        ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
     let process = FakeProbe {
         alive: HashSet::new(),
@@ -215,6 +219,7 @@ async fn docker_reconciliation_uses_docker_liveness() {
     assert_eq!(docker.checks.load(Ordering::SeqCst), 1);
     assert_eq!(events.len(), 1);
     assert_lost(&store, lifecycle.session_id, LostEvidence::PidNotAlive).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[test]
@@ -307,7 +312,8 @@ fn test_config(root: &Path) -> DaemonConfig {
     }
 }
 
-async fn open_store(path: impl AsRef<Path>) -> LifecycleStore {
-    let db = lilo_db::LiloDb::open_path(path).await.expect("store db");
-    LifecycleStore::from_db(&db)
+async fn open_db() -> lilo_db::test_support::TestDb {
+    lilo_db::test_support::TestDb::create()
+        .await
+        .expect("store db")
 }

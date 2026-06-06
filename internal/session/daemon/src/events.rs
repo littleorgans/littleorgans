@@ -119,7 +119,7 @@ mod tests {
 
     use chrono::Utc;
     use lilo_common::id::SessionId;
-    use lilo_db::LiloDb;
+    use lilo_db::test_support::TestDb;
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         IsolationPolicy, Lifecycle, LifecycleState, LostEvidence, RuntimeEvent, RuntimeKind,
@@ -143,6 +143,7 @@ mod tests {
     struct TestState {
         daemon: DaemonState,
         runtime_lifecycles: LifecycleStore,
+        testdb: TestDb,
     }
 
     type PortFuture<'a, T> =
@@ -231,6 +232,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn handle_batch_applies_events_and_advances_cursor() {
         let test = test_state().await;
         let state = &test.daemon;
@@ -280,9 +282,12 @@ mod tests {
             }
         );
         assert_eq!(stored_cursor(state).await, Some(42));
+
+        test.testdb.cleanup().await.or_panic("cleanup");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn handle_batch_reconciles_status_when_cursor_expires() {
         let test = test_state().await;
         let state = &test.daemon;
@@ -317,11 +322,15 @@ mod tests {
             }
         );
         assert_eq!(stored_cursor(state).await, Some(9));
+
+        test.testdb.cleanup().await.or_panic("cleanup");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn poll_events_error_retries_and_processes_next_batch() {
         let mut state = test_state().await;
+        let testdb = state.testdb;
         let cursor = 42;
         let runtime_port = Arc::new(PollErrorThenBatchRuntimePort::new(EventBatch::Events {
             events: Vec::new(),
@@ -336,19 +345,19 @@ mod tests {
         task.shutdown().await;
 
         assert!(runtime_port.poll_count() >= 2);
+
+        testdb.cleanup().await.or_panic("cleanup");
     }
 
     async fn test_state() -> TestState {
-        let audit_dir = tempfile::tempdir().or_panic("tempdir creates");
-        let identity = IdentityClient::connect(&audit_dir.path().join("audit.sqlite"), 42)
-            .await
-            .or_panic("identity client connects");
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let db = testdb.db();
+        let identity = IdentityClient::from_db(db, 42);
         let dir = tempfile::tempdir().or_panic("store tempdir creates");
         let paths = LiloPaths::new(
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
-        let db = LiloDb::open(&paths).await.or_panic("store db opens");
-        let store = SessionStore::from_db(&db);
+        let store = SessionStore::from_db(db);
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves"),
@@ -357,19 +366,21 @@ mod tests {
             .await
             .or_panic("runtime service builds"),
         );
-        let runtime_lifecycles = LifecycleStore::from_db(&db);
+        let runtime_lifecycles = LifecycleStore::from_db(db);
         let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
         std::mem::forget(dir);
+        let daemon = DaemonState::new(
+            db,
+            store,
+            "test-daemon",
+            runtime_port,
+            Arc::new(identity),
+            runtime,
+        );
         TestState {
-            daemon: DaemonState::new(
-                &db,
-                store,
-                "test-daemon",
-                runtime_port,
-                Arc::new(identity),
-                runtime,
-            ),
+            daemon,
             runtime_lifecycles,
+            testdb,
         }
     }
 

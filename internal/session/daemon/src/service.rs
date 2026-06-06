@@ -41,7 +41,7 @@ impl SessionServiceContext {
         let daemon_version = daemon_version.into();
         let home = LiloHome::from_env().context("failed to resolve lilo home")?;
         let paths = LiloPaths::new(home);
-        let db = LiloDb::open(&paths).await?;
+        let db = LiloDb::open_postgres_resolved().await?;
         let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone())).await?,
@@ -72,7 +72,7 @@ impl SessionService {
         let store = SessionStore::from_db(&db);
         let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
         let identity = IdentityClient::new(
-            AuditStore::with_pool(db.identity_pool().clone()),
+            AuditStore::with_pool(db.pool().clone()),
             lilo_sys::creds::current_uid(),
         );
         let state = Arc::new(DaemonState::new(
@@ -136,7 +136,7 @@ mod tests {
     const TEST_DAEMON_VERSION: &str = "test-daemon";
     use chrono::Utc;
     use lilo_common::id::{IntentId, SessionId};
-    use lilo_db::LiloDb;
+    use lilo_db::test_support::TestDb;
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationPolicy, Lifecycle, RuntimeKind as RuntimeRuntimeKind,
@@ -149,14 +149,15 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn build_preserves_session_paths_for_later_composition() {
         let dir = tempfile::tempdir().expect("tempdir");
         let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-        let db = LiloDb::open(&paths).await.expect("db");
+        let testdb = TestDb::create().await.expect("test db");
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).expect("runtime config"),
-                db.clone(),
+                testdb.db().clone(),
             ))
             .await
             .expect("runtime service"),
@@ -165,19 +166,23 @@ mod tests {
         let service = SessionService::build(SessionServiceContext::new(
             paths.clone(),
             TEST_DAEMON_VERSION,
-            db,
+            testdb.db().clone(),
             runtime,
         ))
         .expect("service builds");
 
         assert_eq!(service.paths().socket_path(), paths.socket_path());
+
+        testdb.cleanup().await.expect("cleanup");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn reconcile_pending_spawn_intent_completes_running_lifecycle() {
         let dir = tempfile::tempdir().expect("tempdir");
         let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).expect("home"));
-        let db = LiloDb::open(&paths).await.expect("db");
+        let testdb = TestDb::create().await.expect("test db");
+        let db = testdb.db();
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).expect("runtime config"),
@@ -186,8 +191,8 @@ mod tests {
             .await
             .expect("runtime service"),
         );
-        let session_store = SessionStore::from_db(&db);
-        let lifecycle_store = LifecycleStore::from_db(&db);
+        let session_store = SessionStore::from_db(db);
+        let lifecycle_store = LifecycleStore::from_db(db);
         let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let draft = SessionDraft::new(&draft_session(session_id));
         session_store
@@ -236,6 +241,8 @@ mod tests {
                 .expect("list pending")
                 .is_empty()
         );
+
+        testdb.cleanup().await.expect("cleanup");
     }
 
     fn draft_session(id: SessionId) -> Session {

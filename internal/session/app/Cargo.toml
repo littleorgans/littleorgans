@@ -50,9 +50,9 @@ serde_json.workspace = true
 assert_cmd.workspace = true
 chrono.workspace = true
 criterion.workspace = true
-lilo-db.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 lilo-im-core.workspace = true
-lilo-im-store = { workspace = true, features = ["sqlite"] }
+lilo-im-store = { workspace = true, features = ["postgres"] }
 insta.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true

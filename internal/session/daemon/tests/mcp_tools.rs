@@ -7,16 +7,19 @@ use common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context};
 use serde_json::{Value, json};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn agent_run_spawns_session_via_runtime_service() {
     assert_run_tool_spawns_session("agent_run").await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn session_run_spawns_session_via_runtime_service() {
     assert_run_tool_spawns_session("session_run").await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn agent_run_unknown_isolation_returns_structured_mcp_error() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -49,9 +52,11 @@ async fn agent_run_unknown_isolation_returns_structured_mcp_error() {
         message.contains("invalid isolation policy kubernetes"),
         "{message}"
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn session_run_mounts_reject_host_isolation() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -79,6 +84,7 @@ async fn session_run_mounts_reject_host_isolation() {
             .contains("--mount is docker-only and cannot be used with --isolation host"),
         "{error}"
     );
+    daemon.cleanup().await;
 }
 
 async fn assert_run_tool_spawns_session(tool_name: &str) {

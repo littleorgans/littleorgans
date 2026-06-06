@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use lilo_common::id::SessionId;
-use lilo_db::finish_immediate_pool_tx;
+use lilo_db::commit_or_rollback;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_rm_core::{RuntimeKind, RuntimeRpc, SpawnRequest, StatusRequest};
@@ -40,7 +40,7 @@ async fn authorize_runtime_spawn(
 ) -> Result<()> {
     let mut tx = state
         .store()
-        .begin_immediate_tx()
+        .begin_tx()
         .await
         .context("failed to acquire runtime spawn authorization connection")?;
     let result = state
@@ -55,7 +55,7 @@ async fn authorize_runtime_spawn(
     // Commit the audit row that authorize_in_tx wrote, regardless of the
     // decision, then surface the decision. One begin, one finish, both
     // pool-scoped: never mix in the connection-scoped helpers on this handle.
-    finish_immediate_pool_tx(tx, Ok::<(), anyhow::Error>(())).await?;
+    commit_or_rollback(tx, Ok::<(), anyhow::Error>(())).await?;
     result
 }
 
@@ -83,9 +83,10 @@ fn runtime_authorization(rpc: &RuntimeRpc) -> (Action, ResourceSpec) {
             (Action::Logs, ResourceSpec::session(request.session_id))
         }
         RuntimeRpc::Status { request } => (Action::List, status_resource(request)),
-        RuntimeRpc::Version | RuntimeRpc::Watchers | RuntimeRpc::Events { .. } => {
-            (Action::Read, ResourceSpec::default())
-        }
+        RuntimeRpc::Version
+        | RuntimeRpc::Watchers
+        | RuntimeRpc::WaitWatchers { .. }
+        | RuntimeRpc::Events { .. } => (Action::Read, ResourceSpec::default()),
         RuntimeRpc::Doctor => (Action::Doctor, ResourceSpec::default()),
         RuntimeRpc::Stop | RuntimeRpc::McpBridge { .. } => {
             (Action::Daemon, ResourceSpec::default())

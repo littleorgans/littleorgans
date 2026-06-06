@@ -8,6 +8,7 @@ use common::{
 use serde_json::Value;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn create_and_get_namespace_support_human_and_json_output() {
     let daemon = common::DaemonFixture::start();
 
@@ -77,6 +78,7 @@ fn create_and_get_namespace_support_human_and_json_output() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn create_namespace_rejects_default() {
     let daemon = common::DaemonFixture::start();
 
@@ -137,6 +139,7 @@ fn delete_namespace_rejects_default_before_daemon_connect() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn delete_namespace_cascades_sessions_and_clears_binding() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -185,6 +188,7 @@ fn delete_namespace_cascades_sessions_and_clears_binding() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn delete_namespace_clears_stale_binding_when_catalog_entry_is_absent() {
     let daemon = common::DaemonFixture::start();
     let binding = daemon
@@ -209,6 +213,7 @@ fn delete_namespace_clears_stale_binding_when_catalog_entry_is_absent() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn delete_namespace_surfaces_binding_clear_failure_and_retry_converges() {
     let daemon = common::DaemonFixture::start();
     create_namespace(&daemon, "foo");

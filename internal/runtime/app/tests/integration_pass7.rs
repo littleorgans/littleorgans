@@ -12,11 +12,12 @@ use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass7_periodic_reconciliation_marks_lost_and_doctor_reports_it() {
     let harness = RtmHarness::start_with_fast_periodic_probe();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
     let runtime_pid = unused_pid();
-    persist_running(harness.db_path(), session_id, runtime_pid);
+    persist_running(harness.database_url(), session_id, runtime_pid);
 
     let status = wait_for_status_timeout(
         &harness,
@@ -52,13 +53,14 @@ fn pass7_periodic_reconciliation_marks_lost_and_doctor_reports_it() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn raw_runtime_spawn_does_not_write_session_tables() {
     let harness = RtmHarness::start();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
 
     spawn_ok(&harness, &session_id.to_string(), "claude");
 
-    let counts = session_table_counts(harness.db_path(), session_id);
+    let counts = session_table_counts(harness.database_url(), session_id);
     assert_eq!(counts.spawn_intents, 0);
     assert_eq!(counts.sessions, 0);
     assert_eq!(counts.lifecycles, 1);
@@ -72,27 +74,29 @@ struct SessionTableCounts {
     lifecycles: i64,
 }
 
-fn session_table_counts(path: &std::path::Path, session_id: SessionId) -> SessionTableCounts {
+fn session_table_counts(database_url: &str, session_id: SessionId) -> SessionTableCounts {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async move {
-        let db = lilo_db::LiloDb::open_path(path).await.expect("open db");
+        let db = lilo_db::LiloDb::open_postgres(lilo_db::DbConfig::from_url(database_url))
+            .await
+            .expect("open db");
         let id = session_id.to_string();
         SessionTableCounts {
             spawn_intents: count_rows(
-                db.session_pool(),
-                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ?",
+                db.pool(),
+                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1",
                 &id,
             )
             .await,
             sessions: count_rows(
-                db.session_pool(),
-                "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
+                db.pool(),
+                "SELECT COUNT(*) FROM session_sessions WHERE id = $1",
                 &id,
             )
             .await,
             lifecycles: count_rows(
-                db.runtime_pool(),
-                "SELECT COUNT(*) FROM runtime_lifecycle WHERE session_id = ?",
+                db.pool(),
+                "SELECT COUNT(*) FROM runtime_lifecycle WHERE session_id = $1",
                 &id,
             )
             .await,
@@ -100,7 +104,7 @@ fn session_table_counts(path: &std::path::Path, session_id: SessionId) -> Sessio
     })
 }
 
-async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> i64 {
+async fn count_rows(pool: &sqlx::PgPool, sql: &str, id: &str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(id)
         .fetch_one(pool)

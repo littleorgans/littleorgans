@@ -1,6 +1,6 @@
 use super::*;
 use crate::identity_client::IdentityClient;
-use lilo_db::LiloDb;
+use lilo_db::test_support::TestDb;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     EventBatch, EventsRequest, IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, ShimReady,
@@ -23,10 +23,12 @@ type PortFuture<'a, T> =
     Pin<Box<dyn Future<Output = std::result::Result<T, RuntimeError>> + Send + 'a>>;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = LiloPaths::new(LiloHome::from_path(temp.path().join("lilo")).expect("home"));
-    let db = LiloDb::open(&paths).await.expect("db");
+    let testdb = TestDb::create().await.expect("test db");
+    let db = testdb.db();
     let mut config = DaemonConfig::from_lilo_paths(&paths).expect("runtime config");
     config.reconcile.sweep_interval = Duration::from_mins(1);
     config.reconcile.resume_poll_interval = Duration::from_mins(1);
@@ -37,11 +39,11 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     );
     let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
     let state = DaemonState::new(
-        &db,
-        SessionStore::from_db(&db),
+        db,
+        SessionStore::from_db(db),
         "test-daemon",
         runtime_port,
-        Arc::new(IdentityClient::from_db(&db, lilo_sys::creds::current_uid())),
+        Arc::new(IdentityClient::from_db(db, lilo_sys::creds::current_uid())),
         Arc::clone(&runtime),
     );
     let mut child = ChildGuard::spawn(temp.path());
@@ -54,7 +56,7 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
         .insert_pending_spawn_intent(&intent)
         .await
         .expect("pending intent inserts");
-    let lifecycle_store = LifecycleStore::from_db(&db);
+    let lifecycle_store = LifecycleStore::from_db(db);
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
     lifecycle_store
         .insert_forking(&lifecycle)
@@ -92,14 +94,16 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
             .is_none()
     );
     runtime.shutdown().await.expect("runtime shuts down");
-    db.close().await;
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = LiloPaths::new(LiloHome::from_path(temp.path().join("lilo")).expect("home"));
-    let db = LiloDb::open(&paths).await.expect("db");
+    let testdb = TestDb::create().await.expect("test db");
+    let db = testdb.db();
     let runtime = Arc::new(
         RuntimeService::build(RuntimeServiceContext::new(
             DaemonConfig::from_lilo_paths(&paths).expect("runtime config"),
@@ -108,8 +112,8 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         .await
         .expect("runtime service builds"),
     );
-    let store = SessionStore::from_db(&db);
-    let lifecycle_store = LifecycleStore::from_db(&db);
+    let store = SessionStore::from_db(db);
+    let lifecycle_store = LifecycleStore::from_db(db);
     let bad_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let good_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let bad_request = spawn_request(
@@ -137,11 +141,11 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         good_lifecycle,
     ]));
     let state = DaemonState::new(
-        &db,
+        db,
         store.clone(),
         "test-daemon",
         runtime_port.clone(),
-        Arc::new(IdentityClient::from_db(&db, lilo_sys::creds::current_uid())),
+        Arc::new(IdentityClient::from_db(db, lilo_sys::creds::current_uid())),
         Arc::clone(&runtime),
     );
 
@@ -173,7 +177,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
             .is_empty()
     );
     runtime.shutdown().await.expect("runtime shuts down");
-    db.close().await;
+    testdb.cleanup().await.expect("cleanup");
 }
 
 struct ChildGuard {

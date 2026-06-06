@@ -5,6 +5,7 @@ use common::{assert_success, create_namespace, run_session, set_context, stderr,
 use std::path::{Path, PathBuf};
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn namespace_scope_applies_to_selector_consuming_cli_surfaces() {
     let fixture = scoped_sessions();
 
@@ -273,6 +274,7 @@ fn assert_label_and_delete_scope(fixture: &ScopeFixture) {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn legacy_workspace_selector_is_rejected_by_cli() {
     let daemon = common::DaemonFixture::start();
 

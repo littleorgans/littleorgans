@@ -5,7 +5,7 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use lilo_common::id::SessionId;
-use lilo_db::ImmediateTx;
+use lilo_db::LiloTransaction;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_session_core::{RuntimeKind, SpawnRequest};
 
@@ -21,7 +21,7 @@ pub trait IdentityPort: Send + Sync {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        tx: &'a mut ImmediateTx,
+        tx: &'a mut LiloTransaction<'_>,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,
@@ -52,7 +52,7 @@ impl IdentityPort for IdentityClient {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        tx: &'a mut ImmediateTx,
+        tx: &'a mut LiloTransaction<'_>,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,

@@ -10,11 +10,27 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, ensure};
+use chrono::{DateTime, Duration, DurationRound, Utc};
 use lilo_paths::Settings;
 use lilo_paths::env::resolve_test_database_url;
 use sqlx::{Connection, Executor, PgConnection};
 
 use crate::{DbConfig, LiloDb, redacted};
+
+/// Current time truncated to microsecond resolution, matching Postgres
+/// `TIMESTAMPTZ` storage precision.
+///
+/// Use this instead of `Utc::now()` in any test that asserts equality on a
+/// timestamp read back from Postgres. `Utc::now()` carries sub-microsecond
+/// nanoseconds on Linux (but not macOS), and `TIMESTAMPTZ` truncates them on
+/// write, so a raw `Utc::now()` fixture round-trips unequally in CI while
+/// passing locally.
+#[must_use]
+pub fn now_micros() -> DateTime<Utc> {
+    Utc::now()
+        .duration_trunc(Duration::microseconds(1))
+        .expect("microsecond truncation of the current time is always valid")
+}
 
 /// Short, greppable prefix so a leaked fixture database is easy to identify.
 const TEST_DB_PREFIX: &str = "lilo_test_";

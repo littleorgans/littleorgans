@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn status_json_output_is_stable() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -23,6 +24,7 @@ fn status_json_output_is_stable() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn session_facing_cli_json_outputs_are_stable() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -68,6 +70,7 @@ fn session_facing_cli_json_outputs_are_stable() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn doctor_output_is_stable() {
     let harness = RtmHarness::start();
     let output = harness.cli(&["doctor", "--format", "human"]);
@@ -77,6 +80,7 @@ fn doctor_output_is_stable() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn doctor_json_response_is_stable() {
     let harness = RtmHarness::start();
     let response = tokio::runtime::Runtime::new()
@@ -97,6 +101,7 @@ fn doctor_json_response_is_stable() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn mcp_responses_are_stable() {
     let harness = RtmHarness::start();
     let initialize = mcp_json(&harness, request(1, "initialize", json!({})));

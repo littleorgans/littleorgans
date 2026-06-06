@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use lilo_db::{ImmediateTx, LiloDb};
+use lilo_db::{LiloDb, LiloTransaction};
 use lilo_im_core::{
     Action, AuditDecision, AuditRow, Authorizer, AuthzError, Principal, ResourceSpec,
 };
@@ -24,14 +24,7 @@ impl IdentityClient {
 
     #[must_use]
     pub fn from_db(db: &LiloDb, local_uid: u32) -> Self {
-        Self::new(AuditStore::with_pool(db.identity_pool().clone()), local_uid)
-    }
-
-    pub async fn connect(path: impl AsRef<std::path::Path>, local_uid: u32) -> Result<Self> {
-        let db = LiloDb::open_path(path)
-            .await
-            .context("failed to open identity audit database")?;
-        Ok(Self::from_db(&db, local_uid))
+        Self::new(AuditStore::with_pool(db.pool().clone()), local_uid)
     }
 
     #[must_use]
@@ -58,7 +51,7 @@ impl IdentityClient {
 
     pub async fn authorize_in_tx(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut LiloTransaction<'_>,
         principal: &Principal,
         action: Action,
         resource: &ResourceSpec,

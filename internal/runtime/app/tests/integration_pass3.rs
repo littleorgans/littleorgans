@@ -6,6 +6,7 @@ use common::{RtmHarness, assert_process_alive, output_stderr, output_stdout, par
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass3_spawn_dispatches_claude_and_codex_launchers() {
     let harness = RtmHarness::start();
 
@@ -28,6 +29,7 @@ fn pass3_spawn_dispatches_claude_and_codex_launchers() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass3_unknown_runtime_returns_clean_registry_error() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();

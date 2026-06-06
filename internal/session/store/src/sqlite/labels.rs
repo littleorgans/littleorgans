@@ -1,6 +1,6 @@
 use lilo_common::id::SessionId;
 use lilo_session_core::{Label, LabelMutation, Session};
-use sqlx::{Executor, Row, Sqlite, SqliteConnection};
+use sqlx::{Executor, PgConnection, Postgres, Row};
 
 use super::{SessionRowError, SessionStore};
 
@@ -30,7 +30,7 @@ impl SessionStore {
 
     pub(crate) async fn insert_session_labels_in(
         &self,
-        conn: &mut SqliteConnection,
+        conn: &mut PgConnection,
         id: &SessionId,
         labels: &[Label],
     ) -> Result<(), SessionRowError> {
@@ -47,7 +47,7 @@ impl SessionStore {
         let rows = sqlx::query(
             "SELECT key, value
              FROM session_labels
-             WHERE session_id = ?1
+             WHERE session_id = $1
              ORDER BY key",
         )
         .bind(id.to_string())
@@ -68,7 +68,7 @@ impl SessionStore {
     }
 
     async fn remove_label(&self, id: &SessionId, key: &str) -> Result<(), SessionRowError> {
-        sqlx::query("DELETE FROM session_labels WHERE session_id = ? AND key = ?")
+        sqlx::query("DELETE FROM session_labels WHERE session_id = $1 AND key = $2")
             .bind(id.to_string())
             .bind(key)
             .execute(&self.pool)
@@ -78,7 +78,7 @@ impl SessionStore {
 }
 
 async fn upsert_label_in(
-    conn: &mut SqliteConnection,
+    conn: &mut PgConnection,
     id: &SessionId,
     label: &Label,
 ) -> Result<(), SessionRowError> {
@@ -91,11 +91,11 @@ async fn upsert_label_with<'e, E>(
     label: &Label,
 ) -> Result<(), SessionRowError>
 where
-    E: Executor<'e, Database = Sqlite>,
+    E: Executor<'e, Database = Postgres>,
 {
     sqlx::query(
         "INSERT INTO session_labels (session_id, key, value)
-         VALUES (?, ?, ?)
+         VALUES ($1, $2, $3)
          ON CONFLICT(session_id, key) DO UPDATE SET value = excluded.value",
     )
     .bind(id.to_string())

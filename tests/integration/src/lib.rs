@@ -21,6 +21,7 @@ pub struct IntegrationFixture {
     _dir: TempDir,
     pub paths: LiloPaths,
     pub db: LiloDb,
+    testdb: lilo_db::test_support::TestDb,
 }
 
 impl IntegrationFixture {
@@ -28,12 +29,31 @@ impl IntegrationFixture {
         let dir = tempfile::tempdir()?;
         let home = LiloHome::from_path(dir.path().join("lilo"))?;
         let paths = LiloPaths::new(home);
-        let db = LiloDb::open(&paths).await?;
+        let testdb = lilo_db::test_support::TestDb::create().await?;
+        let db = testdb.db().clone();
         Ok(Self {
             _dir: dir,
             paths,
             db,
+            testdb,
         })
+    }
+
+    /// The throwaway Postgres handle backing this fixture.
+    pub fn db(&self) -> &LiloDb {
+        self.testdb.db()
+    }
+
+    /// Postgres connection URL for the throwaway database. In-process or
+    /// subprocess daemons resolve the same database by setting
+    /// `LILO_DATABASE_URL` to this value.
+    pub fn database_url(&self) -> &str {
+        self.testdb.database_url()
+    }
+
+    /// Drop the throwaway database. Call at the end of each test.
+    pub async fn cleanup(self) -> Result<()> {
+        self.testdb.cleanup().await
     }
 }
 
@@ -125,11 +145,11 @@ pub fn event_log_line_count(paths: &LiloPaths) -> Result<usize> {
     }
 }
 
-pub async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> Result<i64> {
+pub async fn count_rows(pool: &sqlx::PgPool, sql: &str, id: &str) -> Result<i64> {
     Ok(sqlx::query_scalar(sql).bind(id).fetch_one(pool).await?)
 }
 
-pub async fn count_all(pool: &sqlx::SqlitePool, sql: &str) -> Result<i64> {
+pub async fn count_all(pool: &sqlx::PgPool, sql: &str) -> Result<i64> {
     Ok(sqlx::query_scalar(sql).fetch_one(pool).await?)
 }
 

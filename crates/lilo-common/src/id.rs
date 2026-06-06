@@ -169,30 +169,40 @@ mod tests {
         assert_eq!(id.short_with(|candidate| candidate.len() == 9), "12345678-");
     }
 
+    // The typed-id sqlx impl is `#[sqlx(transparent)]` over `uuid::Uuid`, so it
+    // round-trips through a native Postgres `uuid` column. #[ignore]d like the
+    // other DB-backed tests: set LILO_TEST_DATABASE_URL and run with
+    // --run-ignored. A connection-scoped TEMP table avoids cross-test collision.
     #[cfg(feature = "sqlx")]
     #[tokio::test]
-    async fn sqlx_sqlite_insert_select_roundtrip() {
-        let id = SessionId::from_uuid(fixed_uuid());
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("connect sqlite");
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+    async fn sqlx_postgres_insert_select_roundtrip() {
+        use sqlx::Connection;
 
-        sqlx::query("CREATE TABLE ids (id BLOB NOT NULL)")
-            .execute(&pool)
+        let id = SessionId::from_uuid(fixed_uuid());
+        let url = std::env::var("LILO_TEST_DATABASE_URL")
+            .expect("LILO_TEST_DATABASE_URL must be set for this test");
+        let mut conn = sqlx::PgConnection::connect(&url)
+            .await
+            .expect("connect postgres");
+
+        sqlx::query("CREATE TEMP TABLE ids (id uuid NOT NULL)")
+            .execute(&mut conn)
             .await
             .expect("create ids table");
 
-        sqlx::query("INSERT INTO ids (id) VALUES (?)")
+        sqlx::query("INSERT INTO ids (id) VALUES ($1)")
             .bind(id)
-            .execute(&pool)
+            .execute(&mut conn)
             .await
             .expect("insert id");
 
         let selected: SessionId = sqlx::query_scalar("SELECT id FROM ids")
-            .fetch_one(&pool)
+            .fetch_one(&mut conn)
             .await
             .expect("select id");
 
+        conn.close().await.ok();
         assert_eq!(selected.into_uuid(), id.into_uuid());
     }
 }

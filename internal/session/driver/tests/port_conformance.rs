@@ -27,6 +27,7 @@ use tokio::io::BufReader;
 use tokio::task::JoinHandle;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_map_nudge_headless_outcome_identically() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -57,9 +58,11 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
     assert_eq!(direct.delivered, via_socket.delivered);
     assert_eq!(direct.message, via_socket.message);
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_map_capture_headless_response_identically() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -77,9 +80,11 @@ async fn runtime_ports_map_capture_headless_response_identically() {
 
     assert_eq!(direct.response, via_socket.response);
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_status_shapes_match() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let filter = StatusFilter::for_session(session_id);
@@ -95,9 +100,11 @@ async fn runtime_ports_status_shapes_match() {
 
     assert_eq!(direct, via_socket);
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_poll_events_shapes_match() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -123,9 +130,11 @@ async fn runtime_ports_poll_events_shapes_match() {
 
     assert_eq!(direct, via_socket);
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_doctor_shapes_match_on_stable_fields() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -151,9 +160,11 @@ async fn runtime_ports_doctor_shapes_match_on_stable_fields() {
     assert!(direct.socket_path.is_none());
     assert!(via_socket.socket_path.is_some());
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_spawn_conflict_error_variant_matches() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -175,9 +186,11 @@ async fn runtime_ports_spawn_conflict_error_variant_matches() {
 
     assert_fault_parity(direct, via_socket);
     socket.server.await.or_panic("socket server exits");
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_invalid_session_id_fault_matches() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -198,9 +211,11 @@ async fn runtime_ports_invalid_session_id_fault_matches() {
         .expect_err("socket invalid session id faults");
 
     assert_fault_parity(direct, via_socket);
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_invalid_signal_fault_matches() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -225,9 +240,11 @@ async fn runtime_ports_invalid_signal_fault_matches() {
     .expect_err("socket invalid signal faults");
 
     assert_fault_parity(direct, via_socket);
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_ports_invalid_target_fault_matches() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
@@ -244,9 +261,11 @@ async fn runtime_ports_invalid_target_fault_matches() {
         .expect_err("socket invalid target faults");
 
     assert_fault_parity(direct, via_socket);
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn runtime_port_reap_exited_is_at_most_once() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(
@@ -265,6 +284,7 @@ async fn runtime_port_reap_exited_is_at_most_once() {
     assert_eq!(first.len(), 1);
     assert_eq!(first[0].session_id, session_id.to_string());
     assert!(second.is_empty());
+    in_process.cleanup().await;
 }
 
 #[tokio::test]
@@ -290,12 +310,22 @@ struct InProcessFixture {
     port: InProcessRuntime,
     runtime: Arc<RuntimeService>,
     dir: tempfile::TempDir,
+    testdb: lilo_db::test_support::TestDb,
+}
+
+impl InProcessFixture {
+    async fn cleanup(self) {
+        self.testdb.cleanup().await.or_panic("test db cleans up");
+    }
 }
 
 async fn in_process_fixture(session_id: SessionId, state: LifecycleState) -> InProcessFixture {
     let dir = tempfile::tempdir().or_panic("tempdir");
     let paths = LiloPaths::new(LiloHome::from_path(dir.path().join("lilo")).or_panic("home"));
-    let db = LiloDb::open(&paths).await.or_panic("db opens");
+    let testdb = lilo_db::test_support::TestDb::create()
+        .await
+        .or_panic("db opens");
+    let db = testdb.db().clone();
     let mut config = DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config");
     config.reconcile = ReconcileConfig {
         sweep_interval: Duration::from_hours(1),
@@ -312,6 +342,7 @@ async fn in_process_fixture(session_id: SessionId, state: LifecycleState) -> InP
         port: InProcessRuntime::new(Arc::clone(&runtime)),
         runtime,
         dir,
+        testdb,
     }
 }
 

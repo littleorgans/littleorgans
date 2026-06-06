@@ -1,16 +1,21 @@
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_common::id::SessionId;
+use lilo_db::test_support::{TestDb, now_micros};
+use lilo_db::{DbConfig, LiloDb};
 use lilo_rm_core::{
     IsolationPolicy, IsolationProfile, Lifecycle, LifecycleState, LostEvidence, RuntimeKind,
     ShimReady, StatusFilter,
 };
-use tempfile::TempDir;
 
 use super::LifecycleStore;
 
+const REQUIRES_POSTGRES: &str =
+    "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all";
+
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn persists_lifecycle_transitions() {
-    let (_temp, store) = lifecycle_store().await;
+    let (testdb, store) = lifecycle_store().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
 
@@ -24,11 +29,13 @@ async fn persists_lifecycle_transitions() {
         LifecycleState::Lost(LostEvidence::PidNotAlive)
     );
     assert_eq!(store.running().await.expect("running").len(), 0);
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
-async fn tmux_pane_round_trips_through_sqlite() {
-    let (_temp, store) = lifecycle_store().await;
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn tmux_pane_round_trips() {
+    let (testdb, store) = lifecycle_store().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.mark_running(ShimReady {
@@ -47,11 +54,13 @@ async fn tmux_pane_round_trips_through_sqlite() {
 
     let restored = store.get(session_id).await.expect("get").expect("row");
     assert_eq!(restored.tmux_pane, lifecycle.tmux_pane);
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
-async fn isolation_policy_round_trips_through_sqlite() {
-    let (_temp, store) = lifecycle_store().await;
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn isolation_policy_round_trips() {
+    let (testdb, store) = lifecycle_store().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     lifecycle.isolation = IsolationPolicy::Docker(IsolationProfile {
@@ -62,11 +71,13 @@ async fn isolation_policy_round_trips_through_sqlite() {
 
     let restored = store.get(session_id).await.expect("get").expect("row");
     assert_eq!(restored.isolation, lifecycle.isolation);
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn lists_lifecycles_with_composed_status_filters() {
-    let (_temp, store) = lifecycle_store().await;
+    let (testdb, store) = lifecycle_store().await;
     let old_claude = SessionId::from_uuid(uuid::Uuid::now_v7());
     let wanted = SessionId::from_uuid(uuid::Uuid::now_v7());
     let wrong_state = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -91,18 +102,20 @@ async fn lists_lifecycles_with_composed_status_filters() {
 
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].session_id, wanted);
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
-    let (_temp, store) = lifecycle_store().await;
+    let (testdb, store) = lifecycle_store().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     store.insert_forking(&lifecycle).await.expect("insert");
     lifecycle.mark_lost(LostEvidence::PidNotAlive);
     store.update_lifecycle(&lifecycle).await.expect("lost");
 
-    let swept_at = Utc::now();
+    let swept_at = now_micros();
     store
         .record_probe_sweep(swept_at)
         .await
@@ -124,17 +137,19 @@ async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
     assert_eq!(recent.len(), 1);
     assert_eq!(recent[0].session_id, session_id);
     assert_eq!(recent[0].evidence, LostEvidence::PidNotAlive);
+    testdb.cleanup().await.expect("cleanup");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn migration_is_idempotent() {
-    let temp = TempDir::new().expect("temp dir");
-    let path = temp.path().join("rtm.sqlite");
-
-    LifecycleStore::path_open(path.clone())
+    let testdb = TestDb::create().await.expect("create test db");
+    // TestDb::create already ran migrations once; reopening the same database
+    // re-runs the migrator, which must be a no-op.
+    LiloDb::open_postgres(DbConfig::from_url(testdb.database_url().to_owned()))
         .await
-        .expect("first open");
-    LifecycleStore::path_open(path).await.expect("second open");
+        .expect("second open");
+    testdb.cleanup().await.expect("cleanup");
 }
 
 async fn insert_running(
@@ -163,21 +178,18 @@ async fn insert_lost(store: &LifecycleStore, session_id: SessionId, runtime: Run
 }
 
 async fn set_updated_at(store: &LifecycleStore, session_id: SessionId, updated_at: DateTime<Utc>) {
-    sqlx::query("UPDATE runtime_lifecycle SET updated_at = ? WHERE session_id = ?")
-        .bind(updated_at.to_rfc3339())
+    sqlx::query("UPDATE runtime_lifecycle SET updated_at = $1 WHERE session_id = $2")
+        .bind(updated_at)
         .bind(session_id.to_string())
         .execute(store.pool())
         .await
         .expect("set updated_at");
 }
 
-async fn lifecycle_store() -> (TempDir, LifecycleStore) {
-    let temp = TempDir::new().expect("temp dir");
-    let store = LifecycleStore::path_open(temp.path().join("rtm.sqlite"))
-        .await
-        .expect("store");
-
-    (temp, store)
+async fn lifecycle_store() -> (TestDb, LifecycleStore) {
+    let testdb = TestDb::create().await.expect(REQUIRES_POSTGRES);
+    let store = LifecycleStore::from_db(testdb.db());
+    (testdb, store)
 }
 
 fn test_time(seconds: i64) -> DateTime<Utc> {

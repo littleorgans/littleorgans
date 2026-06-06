@@ -109,6 +109,13 @@ pub enum RuntimeRpc {
     },
     Version,
     Watchers,
+    /// Block until the daemon reports at least `min_event_waiters` event
+    /// long-poll waiters (or `timeout_ms` elapses), then return current counts.
+    /// A read-only observation aid that lets callers await waiter registration
+    /// deterministically instead of polling `Watchers` and racing a transient.
+    WaitWatchers {
+        request: WaitWatchersRequest,
+    },
     Doctor,
     Events {
         #[serde(default, flatten)]
@@ -194,6 +201,16 @@ pub struct VersionPayload {
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
 pub struct WatchersPayload {
     pub watchers: WatcherCounts,
+}
+
+/// Request for [`RuntimeRpc::WaitWatchers`]: block until at least
+/// `min_event_waiters` event long-poll waiters are registered, bounded by
+/// `timeout_ms`. The response is a [`WatchersPayload`] with the counts observed
+/// when the wait resolves (either the threshold was met or the timeout fired).
+#[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
+pub struct WaitWatchersRequest {
+    pub min_event_waiters: usize,
+    pub timeout_ms: u64,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]

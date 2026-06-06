@@ -9,6 +9,7 @@ use lilo_session_core::{
 use lilo_session_daemon::identity_client::RequestContext;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn namespace_create_get_and_list_are_idempotent() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -90,9 +91,11 @@ async fn namespace_create_get_and_list_are_idempotent() {
             .collect::<Vec<_>>(),
         vec!["alpha", "default"]
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn namespace_create_rejects_reserved_and_bad_slugs() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -114,9 +117,11 @@ async fn namespace_create_rejects_reserved_and_bad_slugs() {
         };
         assert!(message.contains("namespace"));
     }
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_uses_strict_create_before_spawn_policy() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -162,9 +167,11 @@ async fn spawn_uses_strict_create_before_spawn_policy() {
         panic!("expected spawn response");
     };
     assert_eq!(response.session.namespace.as_str(), "alpha");
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn namespace_delete_terminates_and_removes_namespace_sessions() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -223,9 +230,11 @@ async fn namespace_delete_terminates_and_removes_namespace_sessions() {
         response.sessions.is_empty(),
         "session {session_id} remained"
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn namespace_delete_rejects_default_and_unknown_namespaces() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -247,6 +256,7 @@ async fn namespace_delete_rejects_default_and_unknown_namespaces() {
         };
         assert!(message.contains("namespace"));
     }
+    daemon.cleanup().await;
 }
 
 async fn create_namespace(daemon: &TestDaemon, context: &RequestContext, slug: &str) {

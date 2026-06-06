@@ -6,6 +6,7 @@ use common::{RtmHarness, assert_process_alive, output_stdout, parse_runtime_pid,
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass1_spawn_records_running_lifecycle_and_event() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();

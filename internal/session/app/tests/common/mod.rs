@@ -15,6 +15,8 @@ pub struct DaemonFixture {
     pub dir: tempfile::TempDir,
     child: Child,
     lilo_socket: PathBuf,
+    testdb: Option<lilo_db::test_support::TestDb>,
+    database_url: String,
 }
 
 impl DaemonFixture {
@@ -29,6 +31,12 @@ impl DaemonFixture {
     fn start_with_path_prefix(path_prefix: Option<&Path>) -> Self {
         let dir = tempfile::tempdir().or_panic("tempdir creates");
         let lilo_socket = dir.path().join("lilod.sock");
+        // Provision a throwaway Postgres database and hand its URL to the daemon
+        // subprocess via LILO_DATABASE_URL; the daemon resolves it through
+        // open_postgres_resolved().
+        let testdb =
+            block_on(lilo_db::test_support::TestDb::create()).or_panic("test database provisions");
+        let database_url = testdb.database_url().to_owned();
         let mut command = Command::new(lilo_bin());
         command
             .arg("daemon")
@@ -36,6 +44,7 @@ impl DaemonFixture {
             .env_remove("CLAUDE_CONFIG_DIR")
             .env("LILO_HOME", dir.path())
             .env("LILO_SOCKET_PATH", &lilo_socket)
+            .env("LILO_DATABASE_URL", &database_url)
             .env("HOME", dir.path())
             .env("PATH", test_path(path_prefix));
         let mut child = command
@@ -49,6 +58,8 @@ impl DaemonFixture {
             dir,
             child,
             lilo_socket,
+            testdb: Some(testdb),
+            database_url,
         }
     }
 
@@ -77,15 +88,17 @@ impl DaemonFixture {
         .with_pipes()
     }
 
-    pub fn audit_path(&self) -> PathBuf {
-        self.dir.path().join("data").join("lilo.db")
+    /// Postgres connection URL for the daemon's throwaway database. Tests that
+    /// inspect persisted rows directly open a pool against this URL.
+    pub fn database_url(&self) -> &str {
+        &self.database_url
     }
 
     pub async fn audit_rows(&self) -> Vec<lilo_im_core::AuditRow> {
-        let db = lilo_db::LiloDb::open_path(self.audit_path())
+        let db = lilo_db::LiloDb::open_postgres(lilo_db::DbConfig::from_url(self.database_url()))
             .await
             .or_panic("audit db opens");
-        lilo_im_store::AuditStore::with_pool(db.identity_pool().clone())
+        lilo_im_store::AuditStore::with_pool(db.pool().clone())
             .query_audit(lilo_im_store::AuditFilters::default())
             .await
             .or_panic("audit query succeeds")
@@ -123,6 +136,9 @@ impl DaemonFixture {
             .stderr(Stdio::null())
             .status();
         let _ = self.child.wait();
+        if let Some(testdb) = self.testdb.take() {
+            let _ = block_on(testdb.cleanup());
+        }
     }
 
     pub fn lilo_command(&self) -> Command {
@@ -297,6 +313,29 @@ fn lilo_bin() -> PathBuf {
         return PathBuf::from(path);
     }
     assert_cmd::cargo::cargo_bin("lilo")
+}
+
+/// Drive `future` to completion from the sync fixture, whether or not the
+/// caller is already inside a tokio runtime. Runs on a dedicated OS thread with
+/// its own current-thread runtime so it works from a sync `#[test]` and from an
+/// async `#[tokio::test]` (single- or multi-threaded) without nesting runtimes.
+fn block_on<F>(future: F) -> F::Output
+where
+    F: std::future::Future + Send,
+    F::Output: Send,
+{
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .or_panic("tokio runtime builds")
+                    .block_on(future)
+            })
+            .join()
+            .or_panic("fixture runtime thread joins")
+    })
 }
 
 fn test_path(prefix: Option<&Path>) -> std::ffi::OsString {

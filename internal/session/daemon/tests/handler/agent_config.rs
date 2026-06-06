@@ -7,6 +7,7 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -55,9 +56,11 @@ pub(crate) async fn agent_config_persists_resolved_path_on_runtime_spawn() {
     );
     assert_eq!(response.session.dir, daemon.dir.path());
     assert!(response.session.runtime_pid > 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn named_agent_config_persists_resolved_path() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -125,6 +128,7 @@ pub(crate) async fn named_agent_config_persists_resolved_path() {
 
     assert_eq!(response.sessions.len(), 1);
     assert_eq!(response.sessions[0].agent_config, Some(expected_path));
+    daemon.cleanup().await;
 }
 
 pub(crate) struct HomeEnvGuard {

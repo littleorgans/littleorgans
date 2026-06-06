@@ -35,6 +35,9 @@ pub(crate) struct EventLog {
     inner: Mutex<EventLogInner>,
     append_notify: Notify,
     waiter_count: AtomicUsize,
+    /// Fires on every event-waiter register/release so observers can await a
+    /// waiter-count threshold deterministically instead of polling.
+    waiter_state_changed: Notify,
 }
 
 struct EventLogInner {
@@ -112,6 +115,7 @@ impl EventLog {
             path,
             append_notify: Notify::new(),
             waiter_count: AtomicUsize::new(0),
+            waiter_state_changed: Notify::new(),
             inner: Mutex::new(EventLogInner {
                 file,
                 events,
@@ -206,7 +210,7 @@ impl EventLog {
             return Ok(second_check);
         }
 
-        let _guard = EventWaiterGuard::new(&self.waiter_count);
+        let _guard = EventWaiterGuard::new(self);
         tokio::select! {
             () = notified => self.events_since(since).await,
             () = tokio::time::sleep(Duration::from_millis(u64::from(wait_ms))) => Ok(second_check),
@@ -215,6 +219,34 @@ impl EventLog {
 
     pub(crate) fn waiter_count(&self) -> usize {
         self.waiter_count.load(Ordering::SeqCst)
+    }
+
+    /// Block until at least `min` event long-poll waiters are registered, or
+    /// `timeout` elapses. Notify-backed (no polling): wakes on every waiter
+    /// register/release and re-checks. Returns the waiter count observed when
+    /// the wait resolves. Lets callers await waiter registration without racing
+    /// a transient via repeated `waiter_count()` sampling.
+    pub(crate) async fn wait_for_min_waiters(&self, min: usize, timeout: Duration) -> usize {
+        let deadline = Instant::now() + timeout;
+        loop {
+            // Arm the notification BEFORE reading the count so a change that
+            // races our check is not lost.
+            let changed = self.waiter_state_changed.notified();
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let count = self.waiter_count();
+            if count >= min {
+                return count;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return self.waiter_count();
+            }
+            tokio::select! {
+                () = changed => {}
+                () = tokio::time::sleep(remaining) => return self.waiter_count(),
+            }
+        }
     }
 
     #[cfg(test)]
@@ -228,19 +260,21 @@ impl EventLog {
 }
 
 struct EventWaiterGuard<'a> {
-    waiter_count: &'a AtomicUsize,
+    event_log: &'a EventLog,
 }
 
 impl<'a> EventWaiterGuard<'a> {
-    fn new(waiter_count: &'a AtomicUsize) -> Self {
-        waiter_count.fetch_add(1, Ordering::SeqCst);
-        Self { waiter_count }
+    fn new(event_log: &'a EventLog) -> Self {
+        event_log.waiter_count.fetch_add(1, Ordering::SeqCst);
+        event_log.waiter_state_changed.notify_waiters();
+        Self { event_log }
     }
 }
 
 impl Drop for EventWaiterGuard<'_> {
     fn drop(&mut self) {
-        self.waiter_count.fetch_sub(1, Ordering::SeqCst);
+        self.event_log.waiter_count.fetch_sub(1, Ordering::SeqCst);
+        self.event_log.waiter_state_changed.notify_waiters();
     }
 }
 

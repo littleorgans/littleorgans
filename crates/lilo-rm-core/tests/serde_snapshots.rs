@@ -10,6 +10,7 @@ use lilo_rm_core::{
     ShimLaunchRequest, SpawnConflictKind, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     SpawnedPayload, StatusRequest, TerminationEvidence, TmuxSpawnTarget, ValidateTargetOutcome,
     ValidateTargetPayload, ValidateTargetRequest, ValidateTargetResponse, VersionPayload,
+    WaitWatchersRequest,
 };
 use serde_json::json;
 use support::{
@@ -82,6 +83,12 @@ fn runtime_rpc_json_shapes_are_stable() {
         },
         RuntimeRpc::Version,
         RuntimeRpc::Watchers,
+        RuntimeRpc::WaitWatchers {
+            request: WaitWatchersRequest {
+                min_event_waiters: 1,
+                timeout_ms: 5_000,
+            },
+        },
         RuntimeRpc::Doctor,
         RuntimeRpc::Events {
             request: EventsRequest {

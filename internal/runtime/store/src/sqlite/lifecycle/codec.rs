@@ -20,7 +20,7 @@ pub(super) struct LifecycleRow {
     state: String,
     shim_pid: Option<i64>,
     runtime_pid: Option<i64>,
-    start_time: Option<String>,
+    start_time: Option<DateTime<Utc>>,
     tmux_pane: Option<String>,
     exit_code: Option<i64>,
     exit_signal: Option<i64>,
@@ -37,7 +37,7 @@ pub(super) struct StateCountRow {
 pub(super) struct RecentLostRow {
     session_id: String,
     lost_evidence: Option<String>,
-    updated_at: String,
+    updated_at: DateTime<Utc>,
 }
 
 pub(super) struct EncodedLifecycle {
@@ -47,12 +47,12 @@ pub(super) struct EncodedLifecycle {
     pub(super) state: &'static str,
     pub(super) shim_pid: Option<i64>,
     pub(super) runtime_pid: Option<i64>,
-    pub(super) start_time: Option<String>,
+    pub(super) start_time: Option<DateTime<Utc>>,
     pub(super) tmux_pane: Option<String>,
     pub(super) exit_code: Option<i64>,
     pub(super) exit_signal: Option<i64>,
     pub(super) lost_evidence: Option<&'static str>,
-    pub(super) now: String,
+    pub(super) now: DateTime<Utc>,
 }
 
 type EncodedState = (&'static str, Option<i32>, Option<i32>, Option<&'static str>);
@@ -67,12 +67,12 @@ impl EncodedLifecycle {
             state,
             shim_pid: lifecycle.shim_pid.map(i64::from),
             runtime_pid: lifecycle.runtime_pid.map(i64::from),
-            start_time: lifecycle.start_time.map(|time| time.to_rfc3339()),
+            start_time: lifecycle.start_time,
             tmux_pane: encode_tmux_pane(lifecycle.tmux_pane.as_ref())?,
             exit_code: exit_code.map(i64::from),
             exit_signal: exit_signal.map(i64::from),
             lost_evidence,
-            now: Utc::now().to_rfc3339(),
+            now: Utc::now(),
         })
     }
 }
@@ -88,7 +88,7 @@ impl TryFrom<LifecycleRow> for Lifecycle {
             state: decode_state(&row)?,
             shim_pid: decode_u32(row.shim_pid, "shim_pid")?,
             runtime_pid: decode_u32(row.runtime_pid, "runtime_pid")?,
-            start_time: row.start_time.map(|time| parse_time(&time)).transpose()?,
+            start_time: row.start_time,
             tmux_pane: decode_tmux_pane(row.tmux_pane)?,
             log_availability: None,
         })
@@ -102,7 +102,7 @@ impl TryFrom<RecentLostRow> for RecentLostEvent {
         Ok(Self {
             session_id: row.session_id.parse()?,
             evidence: decode_lost(row.lost_evidence.as_deref())?,
-            occurred_at: parse_time(&row.updated_at)?,
+            occurred_at: row.updated_at,
         })
     }
 }
@@ -194,8 +194,4 @@ fn decode_i32(value: Option<i64>, field: &'static str) -> Result<Option<i32>> {
     value
         .map(|inner| i32::try_from(inner).with_context(|| format!("{field} out of range")))
         .transpose()
-}
-
-pub(super) fn parse_time(value: &str) -> Result<DateTime<Utc>> {
-    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
 }

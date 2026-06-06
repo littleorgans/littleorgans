@@ -5,20 +5,21 @@
 //! [`AuditError`]. Consumers query audit data through a concrete sink that
 //! implements [`AuditSink`].
 //!
-//! The concrete SQLite-backed [`AuditStore`] and its filtered `query_audit`
-//! API compile only under the `sqlite` feature. `SQLite` is a transition backend;
-//! Phase 2 adds a `postgres` feature. Because the default build enables no
-//! backend, the published crate carries no concrete `sqlx` type and never
-//! depends on the unpublished `lilo-db`. Owns the reserved schema fields
+//! The concrete Postgres-backed [`AuditStore`] and its filtered `query_audit`
+//! API compile only under the `postgres` feature. Because the default build
+//! enables no backend, the published crate carries no concrete `sqlx` type and
+//! never depends on the unpublished `lilo-db`. Owns the reserved schema fields
 //! (`policy_id`, `evaluation_trace`, `denial_reason`) that v2+ policy
 //! evaluation can populate without a migration.
 
 pub mod schema;
 
-#[cfg(feature = "sqlite")]
+// Module path stays `sqlite` until the Phase 5 cosmetic rename; the body is
+// Postgres.
+#[cfg(feature = "postgres")]
 pub mod sqlite;
 
 pub use lilo_im_core::{AuditError, AuditRow, AuditSink};
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "postgres")]
 pub use sqlite::{AuditFilters, AuditStore, AuditTableColumn, StoreError};

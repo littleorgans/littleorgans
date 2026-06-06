@@ -4,6 +4,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
+use lilo_db::test_support::TestDb;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, AuditDecision, AuditRow, Principal};
 use lilo_im_store::{AuditFilters, AuditStore};
@@ -21,7 +22,7 @@ const LOCAL_UID: u32 = 42;
 
 struct TestRuntime {
     state: Arc<ServerState>,
-    db: LiloDb,
+    testdb: TestDb,
     paths: LiloPaths,
     _temp: tempfile::TempDir,
 }
@@ -30,17 +31,17 @@ impl TestRuntime {
     async fn new() -> Self {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = LiloPaths::new(LiloHome::from_path(temp.path().join("lilo")).expect("home"));
-        let db = LiloDb::open(&paths).await.expect("db");
-        let store = LifecycleStore::from_db(&db);
-        let identity =
-            IdentityClient::new(AuditStore::with_pool(db.identity_pool().clone()), LOCAL_UID);
+        let testdb = TestDb::create().await.expect("db");
+        let db = testdb.db();
+        let store = LifecycleStore::from_db(db);
+        let identity = IdentityClient::new(AuditStore::with_pool(db.pool().clone()), LOCAL_UID);
         let state = Arc::new(
             ServerState::new_with_identity(config(&paths, temp.path()), store, identity)
                 .expect("state"),
         );
         Self {
             state,
-            db,
+            testdb,
             paths,
             _temp: temp,
         }
@@ -51,14 +52,19 @@ impl TestRuntime {
     }
 
     async fn audit_rows(&self) -> Vec<AuditRow> {
-        AuditStore::with_pool(self.db.identity_pool().clone())
+        AuditStore::with_pool(self.testdb.db().pool().clone())
             .query_audit(AuditFilters::default())
             .await
             .expect("audit rows")
     }
+
+    async fn cleanup(self) {
+        self.testdb.cleanup().await.expect("test db cleans up");
+    }
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn non_local_spawn_and_kill_are_denied_before_runtime_work() {
     let runtime = TestRuntime::new().await;
     let principal = Principal::Local(LOCAL_UID + 1);
@@ -87,9 +93,11 @@ async fn non_local_spawn_and_kill_are_denied_before_runtime_work() {
     let rows = runtime.audit_rows().await;
     assert_decision(&rows[0], Action::Spawn, spawn_id, false);
     assert_decision(&rows[1], Action::Kill, kill_id, false);
+    runtime.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn local_spawn_and_kill_are_audited_before_runtime_errors() {
     let runtime = TestRuntime::new().await;
     let principal = Principal::Local(LOCAL_UID);
@@ -118,10 +126,12 @@ async fn local_spawn_and_kill_are_audited_before_runtime_errors() {
     let rows = runtime.audit_rows().await;
     assert_decision(&rows[0], Action::Spawn, spawn_id, true);
     assert_decision(&rows[1], Action::Kill, kill_id, true);
-    assert_session_tables_empty(&runtime.db, spawn_id).await;
+    assert_session_tables_empty(runtime.testdb.db(), spawn_id).await;
+    runtime.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn shim_callbacks_use_named_local_only_policy() {
     let runtime = TestRuntime::new().await;
 
@@ -154,6 +164,7 @@ async fn shim_callbacks_use_named_local_only_policy() {
             .count(),
         3
     );
+    runtime.cleanup().await;
 }
 
 fn config(paths: &LiloPaths, temp: &Path) -> DaemonConfig {
@@ -254,8 +265,8 @@ async fn assert_session_tables_empty(db: &LiloDb, session_id: SessionId) {
     let id = session_id.to_string();
     assert_eq!(
         count_rows(
-            db.session_pool(),
-            "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ?",
+            db.pool(),
+            "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1",
             &id,
         )
         .await,
@@ -263,8 +274,8 @@ async fn assert_session_tables_empty(db: &LiloDb, session_id: SessionId) {
     );
     assert_eq!(
         count_rows(
-            db.session_pool(),
-            "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
+            db.pool(),
+            "SELECT COUNT(*) FROM session_sessions WHERE id = $1",
             &id,
         )
         .await,
@@ -272,7 +283,7 @@ async fn assert_session_tables_empty(db: &LiloDb, session_id: SessionId) {
     );
 }
 
-async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> i64 {
+async fn count_rows(pool: &sqlx::PgPool, sql: &str, id: &str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(id)
         .fetch_one(pool)

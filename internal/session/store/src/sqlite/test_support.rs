@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use chrono::Utc;
 use lilo_common::id::SessionId;
+use lilo_db::test_support::now_micros;
 use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
 
 pub(crate) fn running_session(role: &str, workspace: &str) -> Session {
-    let now = Utc::now();
+    let now = now_micros();
     Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,

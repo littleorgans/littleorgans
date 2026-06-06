@@ -15,17 +15,20 @@ name = "lilo_db"
 path = "src/lib.rs"
 
 [features]
-# Exposes the Postgres `TestDb` fixture to other crates' tests. The fixture is
-# always available inside this crate's own tests via `cfg(test)`.
-test-support = []
+# Exposes the Postgres `TestDb` fixture (and `now_micros`) to other crates'
+# tests. The fixtures are always available inside this crate's own tests via
+# `cfg(test)`; `chrono` powers the microsecond-precision time helper.
+test-support = ["dep:chrono"]
 
 [dependencies]
 anyhow.workspace = true
+chrono = { workspace = true, optional = true }
 lilo-paths.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+chrono.workspace = true
 tempfile.workspace = true
 
 [lints]

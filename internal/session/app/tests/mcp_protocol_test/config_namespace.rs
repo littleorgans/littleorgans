@@ -3,6 +3,7 @@ use crate::{call_tool, create_namespace};
 use serde_json::{Value, json};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn session_run_agent_config_path_is_canonicalized_against_request_dir() {
     let runtime_path = crate::common::fake_runtime_path("codex");
     let daemon = DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -38,6 +39,7 @@ pub(crate) async fn session_run_agent_config_path_is_canonicalized_against_reque
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn namespace_tools_list_and_get_records() {
     let daemon = DaemonFixture::start();
     create_namespace(&daemon, "alpha");

@@ -24,15 +24,14 @@ type PortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + 
 const TEST_RUNTIME_PID: u32 = 42_424;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn tx_b_failure_aborts_started_runtime_and_spawn_intent() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let runtime = Arc::new(FaultingRuntimePort::new(
-        daemon.db.clone(),
+        daemon.testdb.db().clone(),
         SpawnFault::FailTxBResolve,
     ));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
-        .await;
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
 
     let result = state
         .handle(
@@ -57,23 +56,25 @@ pub(crate) async fn tx_b_failure_aborts_started_runtime_and_spawn_intent() {
     let session_id = runtime.spawned_session_id();
     assert!(runtime.terminated(session_id));
     assert_eq!(
-        spawn_intent_status(&daemon.db, session_id).await.as_deref(),
+        spawn_intent_status(daemon.testdb.db(), session_id)
+            .await
+            .as_deref(),
         Some("aborted")
     );
-    assert_no_lifecycle(&daemon.db, session_id).await;
-    assert_eq!(session_row_count(&daemon.db, session_id).await, 0);
+    assert_no_lifecycle(daemon.testdb.db(), session_id).await;
+    assert_eq!(session_row_count(daemon.testdb.db(), session_id).await, 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn abort_spawn_intent_clears_forking_and_marks_intent_aborted() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let runtime = Arc::new(FaultingRuntimePort::new(
-        daemon.db.clone(),
+        daemon.testdb.db().clone(),
         SpawnFault::FailRuntimeSpawn,
     ));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
-        .await;
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
 
     let result = state
         .handle(
@@ -97,11 +98,14 @@ pub(crate) async fn abort_spawn_intent_clears_forking_and_marks_intent_aborted()
     );
     let session_id = runtime.spawned_session_id();
     assert_eq!(
-        spawn_intent_status(&daemon.db, session_id).await.as_deref(),
+        spawn_intent_status(daemon.testdb.db(), session_id)
+            .await
+            .as_deref(),
         Some("aborted")
     );
-    assert_no_lifecycle(&daemon.db, session_id).await;
-    assert_eq!(session_row_count(&daemon.db, session_id).await, 0);
+    assert_no_lifecycle(daemon.testdb.db(), session_id).await;
+    assert_eq!(session_row_count(daemon.testdb.db(), session_id).await, 0);
+    daemon.cleanup().await;
 }
 
 #[derive(Clone, Copy)]
@@ -288,48 +292,62 @@ async fn install_tx_b_resolve_failure(
             session_id TEXT PRIMARY KEY NOT NULL
         )",
     )
-    .execute(db.session_pool())
+    .execute(db.pool())
     .await
     .map_err(|error| RuntimeError::local(format!("failed to create Tx-B fault table: {error}")))?;
     sqlx::query(
-        "CREATE TRIGGER IF NOT EXISTS ws5_fail_spawn_intent_resolve
+        "CREATE OR REPLACE FUNCTION ws5_fail_spawn_intent_resolve()
+         RETURNS trigger AS $$
+         BEGIN
+             IF NEW.status = 'resolved'
+                AND EXISTS (
+                    SELECT 1
+                    FROM ws5_forced_resolve_failures
+                    WHERE session_id = NEW.session_id
+                )
+             THEN
+                 RAISE EXCEPTION 'forced Tx-B resolve failure';
+             END IF;
+             RETURN NEW;
+         END;
+         $$ LANGUAGE plpgsql",
+    )
+    .execute(db.pool())
+    .await
+    .map_err(|error| {
+        RuntimeError::local(format!("failed to create Tx-B fault function: {error}"))
+    })?;
+    sqlx::query(
+        "CREATE OR REPLACE TRIGGER ws5_fail_spawn_intent_resolve_trigger
          BEFORE UPDATE OF status ON session_spawn_intents
          FOR EACH ROW
-         BEGIN
-             SELECT RAISE(ABORT, 'forced Tx-B resolve failure')
-             WHERE NEW.status = 'resolved'
-               AND EXISTS (
-                   SELECT 1
-                   FROM ws5_forced_resolve_failures
-                   WHERE session_id = NEW.session_id
-               );
-         END",
+         EXECUTE FUNCTION ws5_fail_spawn_intent_resolve()",
     )
-    .execute(db.session_pool())
+    .execute(db.pool())
     .await
     .map_err(|error| {
         RuntimeError::local(format!("failed to create Tx-B fault trigger: {error}"))
     })?;
-    sqlx::query("INSERT INTO ws5_forced_resolve_failures (session_id) VALUES (?)")
+    sqlx::query("INSERT INTO ws5_forced_resolve_failures (session_id) VALUES ($1)")
         .bind(session_id.to_string())
-        .execute(db.session_pool())
+        .execute(db.pool())
         .await
         .map_err(|error| RuntimeError::local(format!("failed to install Tx-B fault: {error}")))?;
     Ok(())
 }
 
 async fn spawn_intent_status(db: &LiloDb, session_id: SessionId) -> Option<String> {
-    sqlx::query_scalar("SELECT status FROM session_spawn_intents WHERE session_id = ?")
+    sqlx::query_scalar("SELECT status FROM session_spawn_intents WHERE session_id = $1")
         .bind(session_id.to_string())
-        .fetch_optional(db.session_pool())
+        .fetch_optional(db.pool())
         .await
         .or_panic("spawn intent status query succeeds")
 }
 
 async fn session_row_count(db: &LiloDb, session_id: SessionId) -> i64 {
-    sqlx::query_scalar("SELECT COUNT(*) FROM session_sessions WHERE id = ?")
+    sqlx::query_scalar("SELECT COUNT(*) FROM session_sessions WHERE id = $1")
         .bind(session_id.to_string())
-        .fetch_one(db.session_pool())
+        .fetch_one(db.pool())
         .await
         .or_panic("session row count query succeeds")
 }

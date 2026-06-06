@@ -20,6 +20,7 @@ use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::{IdentityPort, RequestContext};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_round_trip_marks_read() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -77,9 +78,11 @@ async fn mail_round_trip_marks_read() {
     assert_eq!(response.messages.len(), 1);
     assert_eq!(response.messages[0].content, "review the spec");
     assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn operator_send_uses_operator_sender_view() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -118,9 +121,11 @@ async fn operator_send_uses_operator_sender_view() {
         *principal,
         serde_json::to_value(Principal::Local(LOCAL_UID)).or_panic("principal serializes")
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_read_drains_only_caller_mailbox() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -166,9 +171,11 @@ async fn mail_read_drains_only_caller_mailbox() {
         0
     );
     assert_eq!(mail_count(&daemon.state, context, second.id).await, 1);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn selector_mail_and_nudge_fan_out_to_matching_sessions() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -265,9 +272,11 @@ async fn selector_mail_and_nudge_fan_out_to_matching_sessions() {
         panic!("expected nudge response");
     };
     assert_eq!(response.nudges.len(), 3);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_send_rejects_unknown_recipient() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let sent = daemon
@@ -291,9 +300,11 @@ async fn mail_send_rejects_unknown_recipient() {
         panic!("expected error response");
     };
     assert!(message.contains("unknown recipient session"));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_send_rejects_client_receipt_intent() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -317,9 +328,11 @@ async fn mail_send_rejects_client_receipt_intent() {
         panic!("expected error response");
     };
     assert!(message.contains("receipt is reserved"));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_send_uses_injected_identity_port() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -367,9 +380,11 @@ async fn mail_send_uses_injected_identity_port() {
     assert_eq!(calls[0].principal, Principal::Local(LOCAL_UID));
     assert_eq!(calls[0].action, Action::MailSend);
     assert_eq!(calls[0].resource.session_id, Some(recipient.id));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_send_targets_only_running_recipients() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -430,9 +445,11 @@ async fn mail_send_targets_only_running_recipients() {
         mail_count(&daemon.state, local_context(), spawning.id).await,
         0
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nudge_reports_runtime_headless_outcome() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -460,9 +477,11 @@ async fn nudge_reports_runtime_headless_outcome() {
         response.nudges[0].message,
         "headless runtime does not support nudges"
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn successful_mutations_write_allow_audit_rows() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -489,9 +508,11 @@ async fn successful_mutations_write_allow_audit_rows() {
         ],
     );
     assert!(rows.iter().all(|row| row.decision == AuditDecision::Allow));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn denied_mutation_is_audited_without_mutating_store() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let denied_context = RequestContext::new(Principal::Local(LOCAL_UID + 1));
@@ -541,6 +562,7 @@ async fn denied_mutation_is_audited_without_mutating_store() {
         .await
         .or_panic("session list succeeds");
     assert!(sessions.is_empty());
+    daemon.cleanup().await;
 }
 
 async fn send_read_nudge_delete(

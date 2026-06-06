@@ -159,6 +159,14 @@ async fn handle_rpc_result(
         RuntimeRpc::Watchers => Ok(RuntimeResponse::Watchers(WatchersPayload {
             watchers: state.watcher_counts().await,
         })),
+        RuntimeRpc::WaitWatchers { request } => Ok(RuntimeResponse::Watchers(WatchersPayload {
+            watchers: state
+                .wait_for_event_waiters(
+                    request.min_event_waiters,
+                    std::time::Duration::from_millis(request.timeout_ms),
+                )
+                .await,
+        })),
         RuntimeRpc::Doctor => Ok(RuntimeResponse::Doctor(DoctorPayload {
             doctor: doctor_domain(state).await?,
         })),

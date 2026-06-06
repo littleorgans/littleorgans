@@ -13,6 +13,7 @@ use tokio::task::JoinHandle;
 pub struct TestDaemon {
     pub client: RuntimeClient,
     task: JoinHandle<()>,
+    testdb: Option<lilo_db::test_support::TestDb>,
     _tempdir: tempfile::TempDir,
 }
 
@@ -26,6 +27,16 @@ impl TestDaemon {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let socket_path = tempdir.path().join("rtmd.sock");
         prepare_data(tempdir.path());
+        // The in-process daemon resolves its pool from LILO_DATABASE_URL via
+        // open_postgres_resolved(); point it at a throwaway database. Safe under
+        // nextest, which runs each test in its own process.
+        let testdb = lilo_db::test_support::TestDb::create()
+            .await
+            .expect("provision test database");
+        // SAFETY: single-threaded test process; no concurrent env readers.
+        unsafe {
+            std::env::set_var("LILO_DATABASE_URL", testdb.database_url());
+        }
         let config = DaemonConfig {
             endpoint: lilo_paths::RuntimeEndpoint::unix_socket(socket_path.clone()),
             shim_path: std::env::current_exe().expect("current test executable"),
@@ -44,6 +55,7 @@ impl TestDaemon {
         Self {
             client: RuntimeClient::new(socket_path),
             task,
+            testdb: Some(testdb),
             _tempdir: tempdir,
         }
     }
@@ -52,7 +64,7 @@ impl TestDaemon {
         self.client.clone()
     }
 
-    pub async fn stop(self) {
+    pub async fn stop(mut self) {
         let response = self
             .client
             .request(RuntimeRpc::Stop)
@@ -60,6 +72,9 @@ impl TestDaemon {
             .expect("stop daemon");
         assert_eq!(response, RuntimeResponse::Stopping);
         self.task.await.expect("daemon task");
+        if let Some(testdb) = self.testdb.take() {
+            testdb.cleanup().await.expect("test db cleans up");
+        }
     }
 }
 

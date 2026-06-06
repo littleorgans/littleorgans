@@ -9,7 +9,7 @@ use crate::handler;
 use super::{DaemonConfig, prepare_runtime_bootstrap, start_runtime_reconcile};
 
 pub async fn run_daemon(config: DaemonConfig) -> Result<()> {
-    let db = LiloDb::open_path(&config.store.db_path).await?;
+    let db = LiloDb::open_postgres_resolved().await?;
     run_daemon_with_db(config, db).await
 }
 

@@ -2,14 +2,13 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_common::id::{IntentId, SessionId};
-use lilo_db::{ImmediateTx, begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_rm_core::{Lifecycle, LifecycleState, SpawnRequest as RuntimeSpawnRequest};
 use lilo_session_core::{
     Label, Namespace, RuntimeKind, Session, SessionState, paths::lifecycle_transcript_path,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, Sqlite};
+use sqlx::postgres::PgRow;
+use sqlx::{Postgres, Row};
 use thiserror::Error;
 
 use super::SessionStore;
@@ -200,14 +199,14 @@ impl SessionStore {
         &self,
         intent: &PendingSpawnIntent,
     ) -> Result<(), SpawnIntentError> {
-        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
         let result = insert_pending_spawn_intent_with(&mut *transaction, intent).await;
-        finish_immediate_pool_tx(transaction, result).await
+        lilo_db::commit_or_rollback(transaction, result).await
     }
 
     pub async fn insert_pending_spawn_intent_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut lilo_db::LiloTransaction<'_>,
         intent: &PendingSpawnIntent,
     ) -> Result<(), SpawnIntentError> {
         insert_pending_spawn_intent_with(&mut **tx, intent).await
@@ -217,16 +216,16 @@ impl SessionStore {
         &self,
         session_id: SessionId,
     ) -> Result<(), SpawnIntentError> {
-        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
         let result =
             resolve_spawn_intent_with(&mut *transaction, session_id, Utc::now().timestamp_millis())
                 .await;
-        finish_immediate_pool_tx(transaction, result).await
+        lilo_db::commit_or_rollback(transaction, result).await
     }
 
     pub async fn resolve_spawn_intent_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut lilo_db::LiloTransaction<'_>,
         session_id: SessionId,
     ) -> Result<(), SpawnIntentError> {
         resolve_spawn_intent_with(&mut **tx, session_id, Utc::now().timestamp_millis()).await
@@ -237,7 +236,7 @@ impl SessionStore {
         session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
-        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
         let result = abort_spawn_intent_with(
             &mut *transaction,
             session_id,
@@ -245,12 +244,12 @@ impl SessionStore {
             Utc::now().timestamp_millis(),
         )
         .await;
-        finish_immediate_pool_tx(transaction, result).await
+        lilo_db::commit_or_rollback(transaction, result).await
     }
 
     pub async fn abort_spawn_intent_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut lilo_db::LiloTransaction<'_>,
         session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
@@ -264,7 +263,7 @@ impl SessionStore {
             "SELECT session_id, operation_id, status, spawn_request_json, session_draft_json,
                     created_at, updated_at, resolved_at, aborted_reason
              FROM session_spawn_intents
-             WHERE status = ?
+             WHERE status = $1
              ORDER BY created_at",
         )
         .bind(SpawnIntentStatus::Pending.as_str())
@@ -279,7 +278,7 @@ async fn insert_pending_spawn_intent_with<'e, E>(
     intent: &PendingSpawnIntent,
 ) -> Result<(), SpawnIntentError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     let spawn_request_json = serde_json::to_string(&intent.spawn_request)?;
     let session_draft_json = serde_json::to_string(&intent.session_draft)?;
@@ -287,7 +286,7 @@ where
         "INSERT INTO session_spawn_intents
             (session_id, operation_id, status, spawn_request_json, session_draft_json,
              created_at, updated_at, resolved_at, aborted_reason)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NULL)",
     )
     .bind(intent.session_id.to_string())
     .bind(intent.operation_id.to_string())
@@ -307,7 +306,7 @@ async fn resolve_spawn_intent_with<'e, E>(
     now_ms: i64,
 ) -> Result<(), SpawnIntentError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     update_spawn_intent_status_with(
         executor,
@@ -325,7 +324,7 @@ async fn abort_spawn_intent_with<'e, E>(
     now_ms: i64,
 ) -> Result<(), SpawnIntentError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     update_spawn_intent_status_with(
         executor,
@@ -343,13 +342,13 @@ async fn update_spawn_intent_status_with<'e, E>(
     update: SpawnIntentStatusUpdate<'_>,
 ) -> Result<(), SpawnIntentError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     let aborted_reason = update.aborted_reason().map(str::to_owned);
     sqlx::query(
         "UPDATE session_spawn_intents
-         SET status = ?, updated_at = ?, resolved_at = ?, aborted_reason = ?
-         WHERE session_id = ?",
+         SET status = $1, updated_at = $2, resolved_at = $3, aborted_reason = $4
+         WHERE session_id = $5",
     )
     .bind(update.status().as_str())
     .bind(now_ms)
@@ -361,7 +360,7 @@ where
     Ok(())
 }
 
-fn intent_from_row(row: &SqliteRow) -> Result<SessionSpawnIntent, SpawnIntentError> {
+fn intent_from_row(row: &PgRow) -> Result<SessionSpawnIntent, SpawnIntentError> {
     Ok(SessionSpawnIntent {
         session_id: row.try_get::<String, _>("session_id")?.parse()?,
         operation_id: row.try_get::<String, _>("operation_id")?.parse()?,
@@ -385,16 +384,20 @@ fn timestamp_millis(value: i64) -> Result<DateTime<Utc>, SpawnIntentError> {
 mod tests {
     use std::path::PathBuf;
 
+    use lilo_db::test_support::TestDb;
     use lilo_rm_core::{
         HeadlessSpawnTarget, IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, SpawnTarget,
     };
     use lilo_session_core::{Namespace, RuntimeKind};
 
     use super::*;
+    use crate::test_support::OrPanic as _;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn intent_repository_inserts_and_lists_pending() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let intent = test_intent();
 
         store
@@ -411,11 +414,14 @@ mod tests {
         assert_eq!(pending[0].status, SpawnIntentStatus::Pending);
         assert_eq!(pending[0].spawn_request, intent.spawn_request);
         assert_eq!(pending[0].session_draft, intent.session_draft);
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn intent_repository_resolves_pending_intent() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let intent = test_intent();
         store
             .insert_pending_spawn_intent(&intent)
@@ -432,11 +438,14 @@ mod tests {
             .await
             .expect("list pending intents");
         assert!(pending.is_empty());
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn intent_repository_aborts_pending_intent() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let intent = test_intent();
         store
             .insert_pending_spawn_intent(&intent)
@@ -453,6 +462,7 @@ mod tests {
             .await
             .expect("list pending intents");
         assert!(pending.is_empty());
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     fn test_intent() -> PendingSpawnIntent {

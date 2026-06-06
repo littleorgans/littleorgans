@@ -7,11 +7,13 @@ use crate::common::{
 use lilo_session_core::{Namespace, RpcResponse, Session, SpawnRequest};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_accepts_new_dir_and_namespace_without_legacy_workspace() {
     assert_spawn_uses_requested_dir(String::new()).await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_prefers_new_dir_when_legacy_workspace_is_also_present() {
     let legacy_workspace = tempfile::tempdir().or_panic("legacy workspace creates");
     assert_spawn_uses_requested_dir(legacy_workspace.path().display().to_string()).await;
@@ -32,6 +34,7 @@ async fn assert_spawn_uses_requested_dir(workspace: String) {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_rejects_unknown_namespace_before_launch() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let namespace = Namespace::new("missing").or_panic("namespace validates");
@@ -47,9 +50,11 @@ pub(crate) async fn spawn_rejects_unknown_namespace_before_launch() {
         panic!("expected error response");
     };
     assert!(message.contains("namespace not found: missing"));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_persists_dir_as_received_without_daemon_canonicalisation() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let child = daemon.dir.path().join("child");
@@ -67,6 +72,7 @@ pub(crate) async fn spawn_persists_dir_as_received_without_daemon_canonicalisati
         .or_panic("session namespace loads")
         .or_panic("session namespace exists");
     assert_eq!(session_namespace.dir.display().to_string(), raw_dir);
+    daemon.cleanup().await;
 }
 
 async fn spawn_session(daemon: &TestDaemon, request: SpawnRequest) -> Session {

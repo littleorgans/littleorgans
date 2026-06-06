@@ -14,6 +14,7 @@ use uuid::Uuid;
 const E2E_ENV: &str = "LILO_TEST_E2E_DOCKER";
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn real_docker_spawn_lifecycle_is_opt_in() {
     if !opted_in() {
         eprintln!("skipping real Docker E2E; set {E2E_ENV}=1 to run");
@@ -47,6 +48,7 @@ fn real_docker_spawn_lifecycle_is_opt_in() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn real_docker_spawn_remaps_workdir_when_mount_covers_cwd() {
     if !opted_in() {
         eprintln!("skipping real Docker E2E; set {E2E_ENV}=1 to run");

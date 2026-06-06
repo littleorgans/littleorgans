@@ -13,6 +13,7 @@ use common::{
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn kill_rpc_terminates_runtime_by_session_id() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -54,6 +55,7 @@ fn kill_rpc_terminates_runtime_by_session_id() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn kill_rpc_reports_already_exited_as_json_success() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -69,6 +71,7 @@ fn kill_rpc_reports_already_exited_as_json_success() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn direct_sigkill_runtime_is_reported_as_exited() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -81,6 +84,7 @@ fn direct_sigkill_runtime_is_reported_as_exited() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn process_exit_watcher_reports_lost_when_shim_dies_before_exit_report() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();

@@ -9,7 +9,7 @@ anyhow.workspace = true
 assert_cmd.workspace = true
 chrono.workspace = true
 lilo-common.workspace = true
-lilo-db.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 lilo-paths.workspace = true
 lilo-rm-core.workspace = true
 lilo-session-app.workspace = true

@@ -48,12 +48,14 @@ pub(crate) struct ServerState {
 
 impl ServerState {
     #[cfg(test)]
-    pub(crate) async fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
-        // Build the test identity from the same database the store opened so
-        // audit writes land in the unified DB, without reaching the store's
-        // now crate-private SQLite pool across the crate boundary.
-        let db = lilo_db::LiloDb::open_path(&config.store.db_path).await?;
-        let identity = IdentityClient::from_db(&db, lilo_sys::creds::current_uid());
+    pub(crate) fn new(
+        db: &lilo_db::LiloDb,
+        config: DaemonConfig,
+        store: LifecycleStore,
+    ) -> Result<Self> {
+        // Build the test identity from the same shared pool the store uses so
+        // audit writes land in the unified DB.
+        let identity = IdentityClient::from_db(db, lilo_sys::creds::current_uid());
         Self::new_with_identity(config, store, identity)
     }
 
@@ -255,6 +257,27 @@ impl ServerState {
             process_exit_watchers: self.watchers.process_exit_watcher_count().await,
             shim_sockets: self.spawn.pending_shim_socket_count().await,
             event_waiters: self.events.event_waiter_count(),
+        }
+    }
+
+    /// Await at least `min` event long-poll waiters (bounded by `timeout`) and
+    /// report the counts. Backs the `WaitWatchers` RPC so callers observe waiter
+    /// registration deterministically instead of polling.
+    ///
+    /// Returns the `event_waiters` value OBSERVED when the wait resolved, not a
+    /// fresh re-read: a short-lived waiter can drop between satisfying the
+    /// threshold and a second snapshot, which would make the response race the
+    /// very transient the caller is trying to observe.
+    pub(crate) async fn wait_for_event_waiters(
+        &self,
+        min: usize,
+        timeout: std::time::Duration,
+    ) -> WatcherCounts {
+        let event_waiters = self.events.wait_for_min_event_waiters(min, timeout).await;
+        WatcherCounts {
+            process_exit_watchers: self.watchers.process_exit_watcher_count().await,
+            shim_sockets: self.spawn.pending_shim_socket_count().await,
+            event_waiters,
         }
     }
 

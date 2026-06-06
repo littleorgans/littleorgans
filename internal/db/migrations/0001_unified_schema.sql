@@ -1,6 +1,18 @@
+-- Unified Postgres schema for the composed littleorgans daemon.
+--
+-- Owner seam (Phase 0 decision 10): session_sessions, runtime_lifecycle, and
+-- identity_audit carry `owner TEXT NOT NULL DEFAULT 'local'`. v1 writes 'local'
+-- everywhere and enables no row-level security. A future hosting tier can add a
+-- per-owner RLS policy (e.g. USING (owner = current_setting('lilo.owner')))
+-- without a data backfill; `owner` is already folded into the listing indexes.
+
 CREATE TABLE identity_audit (
     id TEXT NOT NULL PRIMARY KEY,
-    timestamp TEXT NOT NULL,
+    -- Monotonic insertion order (replaces the SQLite implicit rowid the audit
+    -- query ordered by). Distinct from `timestamp`, which can collide.
+    seq BIGINT GENERATED ALWAYS AS IDENTITY,
+    owner TEXT NOT NULL DEFAULT 'local',
+    timestamp TIMESTAMPTZ NOT NULL,
     principal TEXT NOT NULL,
     action TEXT NOT NULL,
     resource TEXT NOT NULL,
@@ -12,11 +24,12 @@ CREATE TABLE identity_audit (
     denial_reason TEXT NULL
 );
 
-CREATE INDEX idx_identity_audit_timestamp ON identity_audit(timestamp);
+CREATE INDEX idx_identity_audit_timestamp ON identity_audit(owner, timestamp);
 CREATE INDEX idx_identity_audit_session_ref ON identity_audit(session_ref);
 
 CREATE TABLE session_sessions (
     id TEXT PRIMARY KEY NOT NULL,
+    owner TEXT NOT NULL DEFAULT 'local',
     runtime TEXT NOT NULL,
     role TEXT NOT NULL,
     workspace TEXT NOT NULL,
@@ -29,23 +42,23 @@ CREATE TABLE session_sessions (
     transcript_path TEXT,
     tmux_pane TEXT,
     agent_config TEXT,
-    created_at TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    terminated_at TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL,
+    terminated_at TIMESTAMPTZ,
     exit_code BIGINT,
-    updated_at TEXT NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX idx_session_sessions_namespace_terminated
-    ON session_sessions(namespace, terminated_at);
+    ON session_sessions(owner, namespace, terminated_at);
 
 CREATE TABLE session_namespaces (
     slug TEXT PRIMARY KEY NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TIMESTAMPTZ NOT NULL
 );
 
 INSERT INTO session_namespaces (slug, created_at)
-VALUES ('default', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+VALUES ('default', now());
 
 CREATE TABLE messages (
     message_id TEXT PRIMARY KEY NOT NULL,
@@ -54,7 +67,7 @@ CREATE TABLE messages (
     intent TEXT NOT NULL,
     idempotency_key TEXT,
     content TEXT NOT NULL,
-    sent_at TEXT NOT NULL
+    sent_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE UNIQUE INDEX idx_messages_sender_idempotency
@@ -71,7 +84,7 @@ CREATE TABLE message_deliveries (
     message_id TEXT NOT NULL,
     recipient_session_id TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('unread', 'read', 'undeliverable')),
-    read_at TEXT,
+    read_at TIMESTAMPTZ,
     PRIMARY KEY (message_id, recipient_session_id)
 );
 
@@ -94,9 +107,11 @@ CREATE INDEX idx_session_labels_key_value_session
 CREATE TABLE session_event_cursor (
     id BIGINT PRIMARY KEY CHECK (id = 1),
     cursor BYTEA NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL
 );
 
+-- Spawn-intent timestamps are epoch-millis BIGINT (transient rows, deleted on
+-- resolve, no cross-table time comparison); deliberately not timestamptz.
 CREATE TABLE session_spawn_intents (
     session_id TEXT PRIMARY KEY,
     operation_id TEXT NOT NULL,
@@ -114,25 +129,26 @@ CREATE INDEX idx_session_spawn_intents_status_created
 
 CREATE TABLE runtime_lifecycle (
     session_id TEXT PRIMARY KEY NOT NULL,
+    owner TEXT NOT NULL DEFAULT 'local',
     runtime TEXT NOT NULL,
     isolation TEXT NOT NULL DEFAULT 'host',
     state TEXT NOT NULL,
     shim_pid BIGINT,
     runtime_pid BIGINT,
-    start_time TEXT,
+    start_time TIMESTAMPTZ,
     tmux_pane TEXT,
     exit_code BIGINT,
     exit_signal BIGINT,
     lost_evidence TEXT,
-    spawned_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    spawned_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX idx_runtime_lifecycle_state ON runtime_lifecycle(state);
+CREATE INDEX idx_runtime_lifecycle_state ON runtime_lifecycle(owner, state);
 CREATE INDEX idx_runtime_lifecycle_spawned_at ON runtime_lifecycle(spawned_at);
 
 CREATE TABLE runtime_metadata (
     key TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL
 );

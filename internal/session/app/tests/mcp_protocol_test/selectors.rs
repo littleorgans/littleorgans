@@ -6,6 +6,7 @@ use crate::{
 use serde_json::json;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn tools_call_can_select_and_label_agents() {
     let runtime_path = crate::common::fake_runtime_path("codex");
     let daemon = DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -64,6 +65,7 @@ pub(crate) async fn tools_call_can_select_and_label_agents() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn session_tools_share_agent_handlers_and_namespace_read_scope() {
     let runtime_path = crate::common::fake_runtime_path("codex");
     let daemon = DaemonFixture::start_with_runtime_path(runtime_path.path());

@@ -32,7 +32,7 @@ impl RuntimeServiceContext {
 
     pub async fn from_env() -> Result<Self> {
         let config = DaemonConfig::from_env()?;
-        let db = LiloDb::open_path(&config.store.db_path).await?;
+        let db = LiloDb::open_postgres_resolved().await?;
         Ok(Self::new(config, db))
     }
 
@@ -127,6 +127,7 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn build_preserves_daemon_config_for_later_composition() {
         let fixture = ServiceFixture::new(ReconcileConfig::default()).await;
 
@@ -138,9 +139,11 @@ mod tests {
             service.config().socket_path().expect("socket"),
             fixture.config.socket_path().expect("socket")
         );
+        fixture.cleanup().await;
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn runtime_shutdown_drains_periodic_reconcile_task() {
         let fixture = ServiceFixture::new(ReconcileConfig {
             sweep_interval: Duration::from_mins(1),
@@ -157,6 +160,6 @@ mod tests {
             .expect("shutdown returns before timeout")
             .expect("shutdown succeeds");
         service.shutdown().await.expect("second shutdown succeeds");
-        fixture.db.close().await;
+        fixture.cleanup().await;
     }
 }

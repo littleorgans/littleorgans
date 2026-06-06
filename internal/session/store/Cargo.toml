@@ -26,7 +26,7 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 tokio.workspace = true
 
 [lints]
