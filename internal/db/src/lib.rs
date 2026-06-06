@@ -2,14 +2,11 @@
 
 //! Internal database boundary for the composed littleorgans daemons.
 //!
-//! Phase 1.a introduces the Postgres target ([`LiloDb::open_postgres`],
-//! [`LiloDb::pool`], [`DbConfig`], [`test_support::TestDb`]) alongside a
-//! quarantined `SQLite` transition surface (see [`transition`]) that keeps the
-//! not-yet-migrated typed stores compiling. Phase 2 deletes the transition
-//! surface and collapses [`LiloDb`] to a single `PgPool` field.
+//! [`LiloDb`] owns a single Postgres [`PgPool`]: connection, migration, pool
+//! lifecycle, transactions ([`LiloDb::begin`] / [`commit_or_rollback`]), and a
+//! test fixture ([`test_support::TestDb`]).
 
 mod config;
-mod transition;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
@@ -23,10 +20,6 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{ConnectOptions, Postgres};
 
 pub use config::DbConfig;
-pub use transition::{
-    ImmediateTx, begin_immediate_pool_tx, begin_immediate_tx, finish_immediate_pool_tx,
-    finish_immediate_tx,
-};
 
 /// Target Postgres pool handle. Phase 2 end state for every store caller.
 pub type LiloPool = sqlx::PgPool;
@@ -35,25 +28,10 @@ pub type LiloConnection = sqlx::PgConnection;
 /// Target Postgres transaction type.
 pub type LiloTransaction<'a> = sqlx::Transaction<'a, Postgres>;
 
-/// Internal database handle.
-///
-/// Holds either the target Postgres backing or a transition `SQLite` backing.
-/// A single handle is one or the other: every current store caller constructs
-/// the `SQLite` backing through [`transition`], and only the Postgres target path
-/// constructs [`Backing::Postgres`]. Phase 2 removes the `SQLite` arm.
+/// Internal database handle: a single shared Postgres pool.
 #[derive(Clone)]
 pub struct LiloDb {
-    pub(crate) backing: Backing,
-}
-
-#[derive(Clone)]
-pub(crate) enum Backing {
-    /// Target Postgres backing. Phase 2 collapses `LiloDb` to just this pool.
-    Postgres(LiloPool),
-    /// TRANSITION SCAFFOLDING, removed in Phase 2. `SQLite` backing retained so
-    /// not-yet-migrated typed stores keep compiling against the `*_pool`
-    /// accessors in [`transition`]. No new code may construct this arm.
-    Sqlite(sqlx::SqlitePool),
+    pool: LiloPool,
 }
 
 impl LiloDb {
@@ -79,9 +57,7 @@ impl LiloDb {
             .await
             .with_context(|| format!("failed to run postgres migrations on {descriptor}"))?;
 
-        Ok(Self {
-            backing: Backing::Postgres(pool),
-        })
+        Ok(Self { pool })
     }
 
     /// Open the target Postgres database from resolved config
@@ -90,24 +66,14 @@ impl LiloDb {
         Self::open_postgres(DbConfig::resolve()?).await
     }
 
-    /// Shared Postgres pool accessor (target API).
-    ///
-    /// # Panics
-    /// Panics when called on a transition SQLite-backed handle.
+    /// Shared Postgres pool accessor.
     pub fn pool(&self) -> &LiloPool {
-        match &self.backing {
-            Backing::Postgres(pool) => pool,
-            Backing::Sqlite(_) => {
-                panic!(
-                    "LiloDb::pool() requires the Postgres backing; this handle is transition SQLite scaffolding"
-                )
-            }
-        }
+        &self.pool
     }
 
     /// Acquire a pooled Postgres connection.
     pub async fn acquire(&self) -> Result<PoolConnection<Postgres>> {
-        self.pool()
+        self.pool
             .acquire()
             .await
             .context("failed to acquire postgres connection")
@@ -115,7 +81,7 @@ impl LiloDb {
 
     /// Begin a Postgres transaction, labelled for error context.
     pub async fn begin(&self, label: &str) -> Result<LiloTransaction<'_>> {
-        self.pool()
+        self.pool
             .begin()
             .await
             .with_context(|| format!("failed to begin {label}"))
@@ -123,9 +89,32 @@ impl LiloDb {
 
     /// Close the active pool.
     pub async fn close(&self) {
-        match &self.backing {
-            Backing::Postgres(pool) => pool.close().await,
-            Backing::Sqlite(pool) => pool.close().await,
+        self.pool.close().await;
+    }
+}
+
+/// Commit `tx` when `result` is `Ok`, otherwise drop it (sqlx rolls back on
+/// drop) and return the error. Threads a single pool-scoped transaction across
+/// store crates without naming any locking behavior.
+///
+/// # Errors
+/// Returns the original error on the `Err` path, or a commit failure (mapped
+/// through `E: From<sqlx::Error>`) on the `Ok` path.
+pub async fn commit_or_rollback<T, E>(
+    tx: LiloTransaction<'_>,
+    result: std::result::Result<T, E>,
+) -> std::result::Result<T, E>
+where
+    E: From<sqlx::Error>,
+{
+    match result {
+        Ok(value) => {
+            tx.commit().await.map_err(E::from)?;
+            Ok(value)
+        }
+        Err(error) => {
+            let _ = tx.rollback().await;
+            Err(error)
         }
     }
 }
