@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use crate::settings::Settings;
+
 /// Operator state root override.
 pub const LILO_HOME: &str = "LILO_HOME";
 /// Operator daemon socket override.
@@ -15,6 +17,8 @@ pub const LILO_DOCKER_IMAGE: &str = "LILO_DOCKER_IMAGE";
 pub const LILO_DOCKER_ALLOW_ROOT_IMAGE_USER: &str = "LILO_DOCKER_ALLOW_ROOT_IMAGE_USER";
 /// Operator escape hatch for Docker arm64 manifest checks.
 pub const LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE: &str = "LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE";
+/// Operator Compose host port for the local Postgres service (Compose-only).
+pub const LILO_DOCKER_PG_PORT: &str = "LILO_DOCKER_PG_PORT";
 /// Operator liveness probe sweep override in milliseconds.
 pub const LILO_PROBE_SWEEP_INTERVAL_MS: &str = "LILO_PROBE_SWEEP_INTERVAL_MS";
 /// Operator resume poll interval override in milliseconds.
@@ -91,6 +95,22 @@ pub fn database_url() -> Option<String> {
 /// (`LILO_TEST_DATABASE_URL`). Empty is unset.
 pub fn test_database_url() -> Option<String> {
     non_empty_string(LILO_TEST_DATABASE_URL)
+}
+
+/// Resolve the operator database URL: `LILO_DATABASE_URL` over
+/// `settings.database.url`. Returns `None` when neither is set.
+pub fn resolve_database_url(settings: &Settings) -> Option<String> {
+    database_url().or_else(|| settings.database.url.clone())
+}
+
+/// Resolve the test/admin database URL: `LILO_TEST_DATABASE_URL` over
+/// `LILO_DATABASE_URL` over `settings.database.test_url` over
+/// `settings.database.url`. Returns `None` when nothing is set.
+pub fn resolve_test_database_url(settings: &Settings) -> Option<String> {
+    test_database_url()
+        .or_else(database_url)
+        .or_else(|| settings.database.test_url.clone())
+        .or_else(|| settings.database.url.clone())
 }
 
 fn non_empty_env(name: &str) -> Option<OsString> {

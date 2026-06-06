@@ -5,11 +5,13 @@
 pub mod env;
 mod lilo;
 mod runtime;
+pub mod settings;
 
 pub use lilo::{DaemonEndpoint, LiloHome, LiloPathError, LiloPaths, expand_home_path};
 pub use runtime::{
     RuntimeEndpoint, RuntimePathError, event_log_path, shim_path, shim_path_from_env,
 };
+pub use settings::{DatabaseSettings, Settings, SettingsError};
 
 #[cfg(test)]
 mod tests {

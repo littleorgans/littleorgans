@@ -104,6 +104,10 @@ impl LiloPaths {
         self.data_root().join("lilo.db")
     }
 
+    pub fn settings_path(&self) -> PathBuf {
+        self.home.join("settings.toml")
+    }
+
     pub fn events_log_path(&self) -> PathBuf {
         self.data_root().join("events").join("runtime.jsonl")
     }

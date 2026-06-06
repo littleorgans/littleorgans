@@ -16,9 +16,11 @@ path = "src/lib.rs"
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
