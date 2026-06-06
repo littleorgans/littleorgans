@@ -1,6 +1,6 @@
 [package]
 name = "lilo-db"
-description = "Internal shared SQLite pool for composed littleorgans daemons"
+description = "Internal shared Postgres pool for composed littleorgans daemons"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,14 +14,16 @@ publish = false
 name = "lilo_db"
 path = "src/lib.rs"
 
+[features]
+# Exposes the Postgres `TestDb` fixture to other crates' tests. The fixture is
+# always available inside this crate's own tests via `cfg(test)`.
+test-support = []
+
 [dependencies]
 anyhow.workspace = true
 lilo-paths.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

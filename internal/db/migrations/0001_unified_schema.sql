@@ -24,7 +24,7 @@ CREATE TABLE session_sessions (
     dir TEXT NOT NULL,
     state TEXT NOT NULL,
     lost_evidence TEXT,
-    runtime_pid INTEGER NOT NULL,
+    runtime_pid BIGINT NOT NULL,
     runtime_session TEXT,
     transcript_path TEXT,
     tmux_pane TEXT,
@@ -32,7 +32,7 @@ CREATE TABLE session_sessions (
     created_at TEXT NOT NULL,
     started_at TEXT NOT NULL,
     terminated_at TEXT,
-    exit_code INTEGER,
+    exit_code BIGINT,
     updated_at TEXT NOT NULL
 );
 
@@ -45,7 +45,7 @@ CREATE TABLE session_namespaces (
 );
 
 INSERT INTO session_namespaces (slug, created_at)
-VALUES ('default', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+VALUES ('default', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
 
 CREATE TABLE messages (
     message_id TEXT PRIMARY KEY NOT NULL,
@@ -92,8 +92,8 @@ CREATE INDEX idx_session_labels_key_value_session
     ON session_labels(key, value, session_id);
 
 CREATE TABLE session_event_cursor (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    cursor BLOB NOT NULL,
+    id BIGINT PRIMARY KEY CHECK (id = 1),
+    cursor BYTEA NOT NULL,
     updated_at TEXT NOT NULL
 );
 
@@ -103,9 +103,9 @@ CREATE TABLE session_spawn_intents (
     status TEXT NOT NULL CHECK (status IN ('pending', 'resolved', 'aborted')),
     spawn_request_json TEXT NOT NULL,
     session_draft_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    resolved_at INTEGER,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    resolved_at BIGINT,
     aborted_reason TEXT
 );
 
@@ -117,12 +117,12 @@ CREATE TABLE runtime_lifecycle (
     runtime TEXT NOT NULL,
     isolation TEXT NOT NULL DEFAULT 'host',
     state TEXT NOT NULL,
-    shim_pid INTEGER,
-    runtime_pid INTEGER,
+    shim_pid BIGINT,
+    runtime_pid BIGINT,
     start_time TEXT,
     tmux_pane TEXT,
-    exit_code INTEGER,
-    exit_signal INTEGER,
+    exit_code BIGINT,
+    exit_signal BIGINT,
     lost_evidence TEXT,
     spawned_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
