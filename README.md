@@ -95,14 +95,18 @@ just regression       # unconditional full-workspace gate
 Moon orchestrates the workspace for CI; Cargo remains the Rust source of truth,
 so `cargo build --workspace` and `cargo test --workspace` work directly.
 
-Run `just check && just build && just test` before every commit.
+Run `just check && just build && just test` before every commit. The
+Postgres-backed `lilo-db` tests are `#[ignore]`d (the default suite skips
+them); run them with `just test-db` after setting `LILO_TEST_DATABASE_URL`
+or copying `settings.example.toml`. CI runs them automatically.
 
 ## Configuration
 
 All local state lives under `~/.lilo/` (override the root with `LILO_HOME`):
-config, run files, a single SQLite database at `data/lilo.db`, event JSONL,
-logs, cache, and tmp. `lilo` owns exactly one environment prefix, `LILO_`,
-sub-namespaced by audience. The full contract is
+config, run files, event JSONL, logs, cache, and tmp. The database is Postgres,
+configured by `LILO_DATABASE_URL` (`LILO_HOME` no longer implies a database
+path). `lilo` owns exactly one environment prefix, `LILO_`, sub-namespaced by
+audience. The full contract is
 [`docs/reference/env-vars.md`](docs/reference/env-vars.md).
 
 ## License

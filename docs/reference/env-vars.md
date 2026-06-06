@@ -37,7 +37,10 @@ Status legend: **live** = implemented today.
 
 ## Operator variables: bare `LILO_*`
 
-Set by the human operating `lilo`. All resolve to a sensible default when unset.
+Set by the human operating `lilo`. All resolve to a sensible default when unset,
+except `LILO_DATABASE_URL`, which has no built-in default: `DbConfig::resolve`
+reads it (or `[database] url` in `$LILO_HOME/settings.toml`) and fails with a
+clear operator error when neither is set.
 
 | Variable | Values | Default | Read by | Purpose | Status |
 |---|---|---|---|---|---|
@@ -48,10 +51,12 @@ Set by the human operating `lilo`. All resolve to a sensible default when unset.
 | `LILO_DOCKER_IMAGE` | image ref | unset | `docker_preflight.rs` | Default container image for `--isolation docker`. | live |
 | `LILO_DOCKER_ALLOW_ROOT_IMAGE_USER` | `1`/`true`/`yes` | off | `docker_preflight.rs` | Permit a root-user image. | live |
 | `LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE` | `1`/`true`/`yes` | off | `docker_preflight.rs` | Permit the arm64 manifest workaround. | live |
+| `LILO_DATABASE_DOCKER_PORT` | u16 port | `55432` | `compose.yaml` (Compose host port only; not read by `lilo`) | Host port the local Postgres service binds: `127.0.0.1:$port:5432`. | live |
 | `LILO_PROBE_SWEEP_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Liveness probe sweep interval. | live |
 | `LILO_RESUME_POLL_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Resume poll interval. | live |
 | `LILO_RESUME_GAP_THRESHOLD_MS` | u64 ms | code default | `reconcile.rs` | Resume gap threshold. | live |
 | `LILO_TMUX_SERVER_LABEL` | string | unset | `server/config.rs:92` | Optional tmux server label. | live |
+| `LILO_DATABASE_URL` | postgres URL | required via env or `settings.toml` | `lilo-paths` `resolve_database_url()` → `lilo-db` `DbConfig::resolve` | Operator Postgres connection string; overrides `[database] url` in `settings.toml`. `LILO_HOME` no longer implies a database path. | live |
 
 ### `LILO_LOG_FORMAT`
 
@@ -114,6 +119,7 @@ Read only by the test harness or local dev recipes. No stability promise, but st
 | `LILO_TEST_BENCH_BIN` | `tests/common/mod.rs:183` | Bench binary override. | live |
 | `LILO_TEST_BENCH_SAMPLES` | `tests/common/mod.rs:49` | Bench sample count. | live |
 | `LILO_TEST_BIN` | `tests/common/mod.rs:295` | Test binary override. | live |
+| `LILO_TEST_DATABASE_URL` | `lilo-db` `test_support::admin_url()` | Admin Postgres URL for test database provisioning (resolves over `LILO_DATABASE_URL`, then `settings.toml` `[database]` `test_url`/`url`; errors if none set). | live |
 | `LILO_TEST_FAULT_NAMESPACE_BINDING_CLEAR` | `cli/delete.rs:108` | Fault injection. | live |
 | `LILO_TEST_PRINT_ENV` | `spawn_target.rs:170,286` → `harness.rs:352` | Fake-runtime print env. | live |
 

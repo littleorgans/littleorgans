@@ -1,170 +1,164 @@
 #![deny(unsafe_code)]
 
-use std::ops::{Deref, DerefMut};
-use std::path::Path;
-use std::time::Duration;
+//! Internal database boundary for the composed littleorgans daemons.
+//!
+//! Phase 1.a introduces the Postgres target ([`LiloDb::open_postgres`],
+//! [`LiloDb::pool`], [`DbConfig`], [`test_support::TestDb`]) alongside a
+//! quarantined `SQLite` transition surface (see [`transition`]) that keeps the
+//! not-yet-migrated typed stores compiling. Phase 2 deletes the transition
+//! surface and collapses [`LiloDb`] to a single `PgPool` field.
+
+mod config;
+mod transition;
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
+
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use lilo_paths::LiloPaths;
+use sqlx::migrate::Migrator;
 use sqlx::pool::PoolConnection;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::{Database, Sqlite, SqliteConnection, SqlitePool, TransactionManager};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use sqlx::{ConnectOptions, Postgres};
 
-const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_CONNECTIONS: u32 = 5;
-const WAL_AUTOCHECKPOINT_PAGES: &str = "1000";
+pub use config::DbConfig;
+pub use transition::{
+    ImmediateTx, begin_immediate_pool_tx, begin_immediate_tx, finish_immediate_pool_tx,
+    finish_immediate_tx,
+};
 
+/// Target Postgres pool handle. Phase 2 end state for every store caller.
+pub type LiloPool = sqlx::PgPool;
+/// Target Postgres connection type.
+pub type LiloConnection = sqlx::PgConnection;
+/// Target Postgres transaction type.
+pub type LiloTransaction<'a> = sqlx::Transaction<'a, Postgres>;
+
+/// Internal database handle.
+///
+/// Holds either the target Postgres backing or a transition `SQLite` backing.
+/// A single handle is one or the other: every current store caller constructs
+/// the `SQLite` backing through [`transition`], and only the Postgres target path
+/// constructs [`Backing::Postgres`]. Phase 2 removes the `SQLite` arm.
 #[derive(Clone)]
 pub struct LiloDb {
-    pool: SqlitePool,
+    pub(crate) backing: Backing,
+}
+
+#[derive(Clone)]
+pub(crate) enum Backing {
+    /// Target Postgres backing. Phase 2 collapses `LiloDb` to just this pool.
+    Postgres(LiloPool),
+    /// TRANSITION SCAFFOLDING, removed in Phase 2. `SQLite` backing retained so
+    /// not-yet-migrated typed stores keep compiling against the `*_pool`
+    /// accessors in [`transition`]. No new code may construct this arm.
+    Sqlite(sqlx::SqlitePool),
 }
 
 impl LiloDb {
-    pub async fn open(paths: &LiloPaths) -> Result<Self> {
-        Self::open_path(paths.db_path()).await
-    }
+    /// Open the target Postgres database: connect, bound the pool, migrate.
+    ///
+    /// Connection and migration errors carry a `host:port/database` descriptor
+    /// so the failed target is identifiable without leaking the password.
+    pub async fn open_postgres(config: DbConfig) -> Result<Self> {
+        let options = PgConnectOptions::from_str(&config.database_url)
+            .with_context(|| format!("invalid postgres url {}", redacted(&config.database_url)))?
+            .disable_statement_logging();
+        let descriptor = describe(&options);
 
-    pub async fn open_path(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.with_context(|| {
-                format!("failed to create lilo db directory {}", parent.display())
-            })?;
-        }
-
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal)
-            .busy_timeout(BUSY_TIMEOUT)
-            .pragma("wal_autocheckpoint", WAL_AUTOCHECKPOINT_PAGES);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(MAX_CONNECTIONS)
+        let pool = PgPoolOptions::new()
+            .max_connections(config.max_connections)
+            .acquire_timeout(config.connect_timeout)
             .connect_with(options)
             .await
-            .with_context(|| format!("failed to open sqlite db {}", path.display()))?;
+            .with_context(|| format!("failed to connect to postgres {descriptor}"))?;
 
-        sqlx::migrate!("./migrations")
+        migrator()
             .run(&pool)
             .await
-            .with_context(|| format!("failed to migrate sqlite db {}", path.display()))?;
+            .with_context(|| format!("failed to run postgres migrations on {descriptor}"))?;
 
-        Ok(Self { pool })
+        Ok(Self {
+            backing: Backing::Postgres(pool),
+        })
     }
 
-    pub fn from_pool(pool: SqlitePool) -> Self {
-        Self { pool }
+    /// Open the target Postgres database from resolved config
+    /// (`LILO_DATABASE_URL` over `$LILO_HOME/settings.toml`).
+    pub async fn open_postgres_resolved() -> Result<Self> {
+        Self::open_postgres(DbConfig::resolve()?).await
     }
 
-    pub fn identity_pool(&self) -> &SqlitePool {
-        &self.pool
+    /// Shared Postgres pool accessor (target API).
+    ///
+    /// # Panics
+    /// Panics when called on a transition SQLite-backed handle.
+    pub fn pool(&self) -> &LiloPool {
+        match &self.backing {
+            Backing::Postgres(pool) => pool,
+            Backing::Sqlite(_) => {
+                panic!(
+                    "LiloDb::pool() requires the Postgres backing; this handle is transition SQLite scaffolding"
+                )
+            }
+        }
     }
 
-    pub fn session_pool(&self) -> &SqlitePool {
-        &self.pool
+    /// Acquire a pooled Postgres connection.
+    pub async fn acquire(&self) -> Result<PoolConnection<Postgres>> {
+        self.pool()
+            .acquire()
+            .await
+            .context("failed to acquire postgres connection")
     }
 
-    pub fn runtime_pool(&self) -> &SqlitePool {
-        &self.pool
+    /// Begin a Postgres transaction, labelled for error context.
+    pub async fn begin(&self, label: &str) -> Result<LiloTransaction<'_>> {
+        self.pool()
+            .begin()
+            .await
+            .with_context(|| format!("failed to begin {label}"))
     }
 
+    /// Close the active pool.
     pub async fn close(&self) {
-        self.pool.close().await;
-    }
-}
-
-pub struct ImmediateTx {
-    conn: PoolConnection<Sqlite>,
-    open: bool,
-}
-
-impl ImmediateTx {
-    async fn commit(mut self) -> sqlx::Result<()> {
-        sqlx::query("COMMIT").execute(&mut *self).await?;
-        self.open = false;
-        Ok(())
-    }
-
-    async fn rollback(mut self) -> sqlx::Result<()> {
-        sqlx::query("ROLLBACK").execute(&mut *self).await?;
-        self.open = false;
-        Ok(())
-    }
-}
-
-impl Deref for ImmediateTx {
-    type Target = SqliteConnection;
-
-    fn deref(&self) -> &Self::Target {
-        &self.conn
-    }
-}
-
-impl DerefMut for ImmediateTx {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.conn
-    }
-}
-
-impl Drop for ImmediateTx {
-    fn drop(&mut self) {
-        if self.open {
-            <Sqlite as Database>::TransactionManager::start_rollback(&mut self.conn);
+        match &self.backing {
+            Backing::Postgres(pool) => pool.close().await,
+            Backing::Sqlite(pool) => pool.close().await,
         }
     }
 }
 
-pub async fn begin_immediate_tx(conn: &mut SqliteConnection, label: &str) -> Result<()> {
-    sqlx::query("BEGIN IMMEDIATE")
-        .execute(&mut *conn)
-        .await
-        .with_context(|| format!("failed to begin {label}"))?;
-    Ok(())
+/// The Postgres target migration set (`internal/db/migrations`). The `SQLite`
+/// transition backing runs its own quarantined dir; see [`transition`].
+pub(crate) fn migrator() -> Migrator {
+    sqlx::migrate!("./migrations")
 }
 
-pub async fn finish_immediate_tx<T>(
-    conn: &mut SqliteConnection,
-    result: Result<T>,
-    label: &str,
-) -> Result<T> {
-    match result {
-        Ok(value) => {
-            sqlx::query("COMMIT")
-                .execute(conn)
-                .await
-                .with_context(|| format!("failed to commit {label}"))?;
-            Ok(value)
-        }
-        Err(error) => {
-            let _ = sqlx::query("ROLLBACK").execute(conn).await;
-            Err(error)
-        }
-    }
+/// `host:port/database` descriptor for error context; never includes the password.
+fn describe(options: &PgConnectOptions) -> String {
+    format!(
+        "{}:{}/{}",
+        options.get_host(),
+        options.get_port(),
+        options.get_database().unwrap_or("<unknown>")
+    )
 }
 
-pub async fn begin_immediate_pool_tx(pool: &SqlitePool) -> sqlx::Result<ImmediateTx> {
-    let mut conn = pool.acquire().await?;
-    sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
-    Ok(ImmediateTx { conn, open: true })
-}
-
-pub async fn finish_immediate_pool_tx<T, E>(
-    transaction: ImmediateTx,
-    result: std::result::Result<T, E>,
-) -> std::result::Result<T, E>
-where
-    E: From<sqlx::Error>,
-{
-    match result {
-        Ok(value) => {
-            transaction.commit().await.map_err(E::from)?;
-            Ok(value)
+/// Redact userinfo (`user:pass@`) from a URL so a parse error never echoes a
+/// password. Best effort: used only when the URL fails to parse.
+pub(crate) fn redacted(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let authority_start = scheme_end + 3;
+    match url[authority_start..].find('@') {
+        Some(offset) => {
+            let at = authority_start + offset;
+            format!("{}***@{}", &url[..authority_start], &url[at + 1..])
         }
-        Err(error) => {
-            let _ = transaction.rollback().await;
-            Err(error)
-        }
+        None => url.to_string(),
     }
 }
 
@@ -172,122 +166,111 @@ where
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::*;
-    use lilo_paths::{LiloHome, LiloPaths};
-    use tempfile::TempDir;
+    use anyhow::Result;
+    use sqlx::Connection;
+
+    use crate::test_support::{TestDb, admin_url, database_name_of};
+
+    const EXPECTED_TABLES: [&str; 10] = [
+        "identity_audit",
+        "message_deliveries",
+        "messages",
+        "runtime_lifecycle",
+        "runtime_metadata",
+        "session_event_cursor",
+        "session_labels",
+        "session_namespaces",
+        "session_sessions",
+        "session_spawn_intents",
+    ];
+
+    // The DB-backed tests below are #[ignore]d so the default suite (and
+    // `moon ci`) reports them honestly as skipped when no Postgres is
+    // configured, rather than silently passing. Run them with
+    // `just test-db` (or `cargo nextest run -p lilo-db --run-ignored all`)
+    // after setting LILO_TEST_DATABASE_URL or copying settings.example.toml;
+    // with no database, TestDb::create()'s loud error is the honest failure.
 
     #[tokio::test]
-    async fn open_creates_unified_schema_tables() -> Result<()> {
-        let (_dir, db) = open_temp_db().await?;
-        let tables = schema_tables(&db).await?;
-
-        assert_eq!(
-            tables,
-            BTreeSet::from([
-                "identity_audit".to_string(),
-                "message_deliveries".to_string(),
-                "messages".to_string(),
-                "runtime_lifecycle".to_string(),
-                "runtime_metadata".to_string(),
-                "session_event_cursor".to_string(),
-                "session_labels".to_string(),
-                "session_namespaces".to_string(),
-                "session_sessions".to_string(),
-                "session_spawn_intents".to_string(),
-            ])
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn open_applies_sqlite_pragmas_with_wire_values() -> Result<()> {
-        let (_dir, db) = open_temp_db().await?;
-        let pool = db.session_pool();
-
-        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
-            .fetch_one(pool)
-            .await?;
-        let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
-            .fetch_one(pool)
-            .await?;
-        let synchronous: i64 = sqlx::query_scalar("PRAGMA synchronous")
-            .fetch_one(pool)
-            .await?;
-
-        assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
-        assert_eq!(busy_timeout, 5_000);
-        assert_eq!(synchronous, 1);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn concurrent_accessor_writes_complete_without_busy_errors() -> Result<()> {
-        let (_dir, db) = open_temp_db().await?;
-        let identity_pool = db.identity_pool().clone();
-        let runtime_pool = db.runtime_pool().clone();
-
-        let identity_writes = tokio::spawn(async move {
-            for index in 0..25 {
-                sqlx::query(
-                    r"
-                    INSERT INTO identity_audit (
-                        id, timestamp, principal, action, resource, decision
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                    ",
-                )
-                .bind(format!("audit-{index}"))
-                .bind("2026-05-27T00:00:00Z")
-                .bind("operator:stuart")
-                .bind("allow")
-                .bind(format!("runtime:{index}"))
-                .bind("allow")
-                .execute(&identity_pool)
-                .await?;
-            }
-            Result::<()>::Ok(())
-        });
-        let runtime_writes = tokio::spawn(async move {
-            for index in 0..25 {
-                sqlx::query(
-                    r"
-                    INSERT INTO runtime_metadata (key, value, updated_at)
-                    VALUES (?, ?, ?)
-                    ",
-                )
-                .bind(format!("key-{index}"))
-                .bind(format!("value-{index}"))
-                .bind("2026-05-27T00:00:00Z")
-                .execute(&runtime_pool)
-                .await?;
-            }
-            Result::<()>::Ok(())
-        });
-
-        identity_writes.await??;
-        runtime_writes.await??;
-        Ok(())
-    }
-
-    async fn open_temp_db() -> Result<(TempDir, LiloDb)> {
-        let dir = tempfile::tempdir()?;
-        let home = LiloHome::from_path(dir.path().join("lilo"))?;
-        let paths = LiloPaths::new(home);
-        let db = LiloDb::open(&paths).await?;
-        Ok((dir, db))
-    }
-
-    async fn schema_tables(db: &LiloDb) -> Result<BTreeSet<String>> {
-        let tables = sqlx::query_scalar(
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
+    async fn open_postgres_runs_migrations_and_creates_unified_schema() -> Result<()> {
+        let fixture = TestDb::create().await?;
+        let tables: Vec<String> = sqlx::query_scalar(
             r"
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name NOT LIKE '\_%' ESCAPE '\'
-            ORDER BY name
+            SELECT tablename
+            FROM pg_catalog.pg_tables
+            WHERE schemaname = 'public'
+              AND tablename NOT LIKE '\_%'
+            ORDER BY tablename
             ",
         )
-        .fetch_all(db.session_pool())
+        .fetch_all(fixture.db().pool())
         .await?;
-        Ok(tables.into_iter().collect())
+
+        let expected: BTreeSet<String> = EXPECTED_TABLES.iter().map(ToString::to_string).collect();
+        assert_eq!(tables.into_iter().collect::<BTreeSet<_>>(), expected);
+        fixture.cleanup().await
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
+    async fn open_postgres_yields_a_live_connection() -> Result<()> {
+        let fixture = TestDb::create().await?;
+        let value: i32 = sqlx::query_scalar("SELECT 1")
+            .fetch_one(fixture.db().pool())
+            .await?;
+        assert_eq!(value, 1);
+        fixture.cleanup().await
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
+    async fn cleanup_drops_the_created_database() -> Result<()> {
+        let fixture = TestDb::create().await?;
+        let name = database_name_of(fixture.database_url())?;
+        fixture.cleanup().await?;
+
+        let mut admin = sqlx::PgConnection::connect(&admin_url()?).await?;
+        let exists: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)")
+                .bind(&name)
+                .fetch_one(&mut admin)
+                .await?;
+        admin.close().await?;
+
+        assert!(!exists, "cleanup must drop the test database {name}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
+    async fn parallel_fixtures_do_not_collide() -> Result<()> {
+        let handles: Vec<_> = (0..4).map(|_| tokio::spawn(TestDb::create())).collect();
+        let mut fixtures = Vec::with_capacity(handles.len());
+        for handle in handles {
+            fixtures.push(handle.await??);
+        }
+
+        let names: BTreeSet<String> = fixtures
+            .iter()
+            .map(|f| f.database_url().to_string())
+            .collect();
+        assert_eq!(
+            names.len(),
+            fixtures.len(),
+            "test database urls must be unique"
+        );
+
+        for fixture in &fixtures {
+            let value: i32 = sqlx::query_scalar("SELECT 1")
+                .fetch_one(fixture.db().pool())
+                .await?;
+            assert_eq!(value, 1);
+        }
+
+        for fixture in fixtures {
+            fixture.cleanup().await?;
+        }
+        Ok(())
     }
 }

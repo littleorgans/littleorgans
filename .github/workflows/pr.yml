@@ -35,6 +35,27 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
+    # Both vars resolve to the health-checked postgres service below. They make
+    # the lilo-db Postgres tests run in the gate (instead of skipping as they do
+    # locally without a database) and give `lilo doctor` a real backend. The CI
+    # runner's host 5432 is free; the 55432 local-dev override is unrelated.
+    env:
+      LILO_DATABASE_URL: postgres://lilo:lilo@localhost:5432/lilo
+      LILO_TEST_DATABASE_URL: postgres://lilo:lilo@localhost:5432/lilo
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: lilo
+          POSTGRES_PASSWORD: lilo
+          POSTGRES_DB: lilo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lilo -d lilo"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,6 +85,12 @@ jobs:
       # and the LOC/provenance checks (all runInCI tasks in moon.yml).
       - name: Moon CI
         run: moon ci
+
+      # The lilo-db Postgres tests are #[ignore]d (so the default suite skips
+      # them honestly when no DB is present). The job env + postgres service
+      # above make them run for real here against localhost:5432.
+      - name: lilo-db Postgres tests
+        run: cargo nextest run -p lilo-db --run-ignored all
 
       - name: Lilo binary smoke test
         run: |

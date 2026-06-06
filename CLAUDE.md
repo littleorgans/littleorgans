@@ -132,8 +132,10 @@ surface.
 ## Data and environment
 
 All local state lives under `~/.lilo/` unless `LILO_HOME` overrides the root.
-The derived tree includes config, run files, one SQLite database at
-`data/lilo.db`, event JSONL, logs, cache, and tmp directories.
+The derived tree includes config (including an optional operator
+`settings.toml`), run files, event JSONL, logs, cache, and tmp directories. The
+database is Postgres, reached through `LILO_DATABASE_URL`; no database file
+lives under the tree.
 
 littleorgans owns exactly one environment prefix: `LILO_`. The authoritative
 owned name set is the `lilo_paths::env` const registry, and
@@ -146,7 +148,8 @@ The audience model is:
   `LILO_DOCKER_ALLOW_ROOT_IMAGE_USER`,
   `LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE`,
   `LILO_PROBE_SWEEP_INTERVAL_MS`, `LILO_RESUME_POLL_INTERVAL_MS`,
-  `LILO_RESUME_GAP_THRESHOLD_MS`, and `LILO_TMUX_SERVER_LABEL`.
+  `LILO_RESUME_GAP_THRESHOLD_MS`, `LILO_TMUX_SERVER_LABEL`,
+  `LILO_DATABASE_URL`, and `LILO_DATABASE_DOCKER_PORT`.
 - Agent-injected variables: `LILO_AGENT_SESSION_ID`, `LILO_AGENT_RUNTIME`,
   `LILO_AGENT_ROLE`, and `LILO_AGENT_WORKSPACE`.
 - Build/release variables: `LILO_CLI_VERSION`, `LILO_GIT_SHA`, and
@@ -156,8 +159,10 @@ The audience model is:
 
 `LILO_SOCKET_PATH` overrides only the daemon socket. `LILO_LOG` controls the
 tracing filter. `LILO_LOG_FORMAT` accepts `auto`, `pretty`, `json`, and
-`compact`. `LILO_DB_PATH` does not exist, and legacy `RTM_*`, `SM_*`, and
-`AGM_*` variables are not honored.
+`compact`. `LILO_DATABASE_URL` is the operator Postgres connection, overlaid on
+an optional `$LILO_HOME/settings.toml` `[database]` section (env wins).
+`LILO_DB_PATH` does not exist, and legacy `RTM_*`, `SM_*`, and `AGM_*` variables
+are not honored.
 
 No automatic migration is promised from old local roots. Release notes may
 tell Stuart how to stop old daemons and start fresh, but code should not carry
