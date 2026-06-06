@@ -84,9 +84,10 @@ impl LiloDb {
         })
     }
 
-    /// Open the target Postgres database from the `LILO_DATABASE_URL` contract.
-    pub async fn open_postgres_from_env() -> Result<Self> {
-        Self::open_postgres(DbConfig::from_env()?).await
+    /// Open the target Postgres database from resolved config
+    /// (`LILO_DATABASE_URL` over `$LILO_HOME/settings.toml`).
+    pub async fn open_postgres_resolved() -> Result<Self> {
+        Self::open_postgres(DbConfig::resolve()?).await
     }
 
     /// Shared Postgres pool accessor (target API).
@@ -220,7 +221,7 @@ mod tests {
         let name = database_name_of(fixture.database_url())?;
         fixture.cleanup().await?;
 
-        let mut admin = sqlx::PgConnection::connect(&admin_url()).await?;
+        let mut admin = sqlx::PgConnection::connect(&admin_url()?).await?;
         let exists: bool =
             sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)")
                 .bind(&name)
