@@ -1,22 +1,21 @@
 use anyhow::{Context, Result};
-use lilo_db::LiloDb;
+use lilo_db::{ImmediateTx, LiloDb};
 use lilo_im_core::{
     Action, AuditDecision, AuditRow, Authorizer, AuthzError, Principal, ResourceSpec,
 };
-use lilo_im_store::SqliteAuditSink;
+use lilo_im_store::AuditStore;
 use lilo_im_store::sqlite::record_audit_in_tx;
 use lilo_im_stub::StubAuthorizer;
-use sqlx::SqliteConnection;
 
 #[derive(Debug, Clone)]
 pub struct IdentityClient {
-    audit_sink: SqliteAuditSink,
+    audit_sink: AuditStore,
     local_uid: u32,
 }
 
 impl IdentityClient {
     #[must_use]
-    pub fn new(audit_sink: SqliteAuditSink, local_uid: u32) -> Self {
+    pub fn new(audit_sink: AuditStore, local_uid: u32) -> Self {
         Self {
             audit_sink,
             local_uid,
@@ -25,10 +24,7 @@ impl IdentityClient {
 
     #[must_use]
     pub fn from_db(db: &LiloDb, local_uid: u32) -> Self {
-        Self::new(
-            SqliteAuditSink::with_pool(db.identity_pool().clone()),
-            local_uid,
-        )
+        Self::new(AuditStore::with_pool(db.identity_pool().clone()), local_uid)
     }
 
     pub async fn connect(path: impl AsRef<std::path::Path>, local_uid: u32) -> Result<Self> {
@@ -44,7 +40,7 @@ impl IdentityClient {
     }
 
     #[must_use]
-    pub fn audit_sink(&self) -> &SqliteAuditSink {
+    pub fn audit_sink(&self) -> &AuditStore {
         &self.audit_sink
     }
 
@@ -62,7 +58,7 @@ impl IdentityClient {
 
     pub async fn authorize_in_tx(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         principal: &Principal,
         action: Action,
         resource: &ResourceSpec,
@@ -74,7 +70,7 @@ impl IdentityClient {
             resource.clone(),
             decision.clone(),
         );
-        record_audit_in_tx(conn, &row)
+        record_audit_in_tx(tx, &row)
             .await
             .context("authorization failed")?;
         if decision == AuditDecision::Allow {
@@ -84,7 +80,7 @@ impl IdentityClient {
         }
     }
 
-    pub(crate) fn authorizer(&self) -> StubAuthorizer<'_, SqliteAuditSink> {
+    pub(crate) fn authorizer(&self) -> StubAuthorizer<'_, AuditStore> {
         StubAuthorizer::new(&self.audit_sink, self.local_uid)
     }
 

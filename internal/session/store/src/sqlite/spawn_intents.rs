@@ -2,17 +2,17 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_common::id::{IntentId, SessionId};
-use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
+use lilo_db::{ImmediateTx, begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_rm_core::{Lifecycle, LifecycleState, SpawnRequest as RuntimeSpawnRequest};
 use lilo_session_core::{
     Label, Namespace, RuntimeKind, Session, SessionState, paths::lifecycle_transcript_path,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, Sqlite, SqliteConnection};
+use sqlx::{Row, Sqlite};
 use thiserror::Error;
 
-use super::SqliteStore;
+use super::SessionStore;
 
 #[derive(Debug, Error)]
 pub enum SpawnIntentError {
@@ -195,7 +195,7 @@ impl SpawnIntentStatusUpdate<'_> {
     }
 }
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn insert_pending_spawn_intent(
         &self,
         intent: &PendingSpawnIntent,
@@ -207,10 +207,10 @@ impl SqliteStore {
 
     pub async fn insert_pending_spawn_intent_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         intent: &PendingSpawnIntent,
     ) -> Result<(), SpawnIntentError> {
-        insert_pending_spawn_intent_with(conn, intent).await
+        insert_pending_spawn_intent_with(&mut **tx, intent).await
     }
 
     pub async fn resolve_spawn_intent(
@@ -226,10 +226,10 @@ impl SqliteStore {
 
     pub async fn resolve_spawn_intent_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         session_id: SessionId,
     ) -> Result<(), SpawnIntentError> {
-        resolve_spawn_intent_with(conn, session_id, Utc::now().timestamp_millis()).await
+        resolve_spawn_intent_with(&mut **tx, session_id, Utc::now().timestamp_millis()).await
     }
 
     pub async fn abort_spawn_intent(
@@ -250,11 +250,11 @@ impl SqliteStore {
 
     pub async fn abort_spawn_intent_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         session_id: SessionId,
         reason: &str,
     ) -> Result<(), SpawnIntentError> {
-        abort_spawn_intent_with(conn, session_id, reason, Utc::now().timestamp_millis()).await
+        abort_spawn_intent_with(&mut **tx, session_id, reason, Utc::now().timestamp_millis()).await
     }
 
     pub async fn list_pending_spawn_intents(
@@ -394,7 +394,7 @@ mod tests {
 
     #[tokio::test]
     async fn intent_repository_inserts_and_lists_pending() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let intent = test_intent();
 
         store
@@ -415,7 +415,7 @@ mod tests {
 
     #[tokio::test]
     async fn intent_repository_resolves_pending_intent() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let intent = test_intent();
         store
             .insert_pending_spawn_intent(&intent)
@@ -436,7 +436,7 @@ mod tests {
 
     #[tokio::test]
     async fn intent_repository_aborts_pending_intent() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let intent = test_intent();
         store
             .insert_pending_spawn_intent(&intent)

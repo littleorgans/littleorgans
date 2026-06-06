@@ -6,7 +6,7 @@ use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, AuditDecision, AuditRow, Principal};
-use lilo_im_store::{AuditFilters, SqliteAuditSink, query_audit};
+use lilo_im_store::{AuditFilters, AuditStore};
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, KillRequest, RuntimeExit, RuntimeKind, RuntimeResponse,
@@ -31,11 +31,9 @@ impl TestRuntime {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = LiloPaths::new(LiloHome::from_path(temp.path().join("lilo")).expect("home"));
         let db = LiloDb::open(&paths).await.expect("db");
-        let store = LifecycleStore::open(&db);
-        let identity = IdentityClient::new(
-            SqliteAuditSink::with_pool(db.identity_pool().clone()),
-            LOCAL_UID,
-        );
+        let store = LifecycleStore::from_db(&db);
+        let identity =
+            IdentityClient::new(AuditStore::with_pool(db.identity_pool().clone()), LOCAL_UID);
         let state = Arc::new(
             ServerState::new_with_identity(config(&paths, temp.path()), store, identity)
                 .expect("state"),
@@ -53,7 +51,8 @@ impl TestRuntime {
     }
 
     async fn audit_rows(&self) -> Vec<AuditRow> {
-        query_audit(self.db.identity_pool(), AuditFilters::default())
+        AuditStore::with_pool(self.db.identity_pool().clone())
+            .query_audit(AuditFilters::default())
             .await
             .expect("audit rows")
     }

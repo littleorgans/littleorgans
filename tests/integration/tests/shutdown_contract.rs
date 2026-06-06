@@ -13,7 +13,7 @@ use lilo_rm_core::{LifecycleState, RuntimeExit, read_json_line, write_json_line}
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_app::compose::{self, ShutdownObserver, ShutdownStage};
 use lilo_session_core::{RpcResponse, SessionRpc, SessionState};
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::net::UnixStream;
@@ -150,7 +150,7 @@ async fn seed_session(
     session_id: SessionId,
     state: SessionState,
 ) -> Result<()> {
-    let store = SqliteStore::open(&fixture.db);
+    let store = SessionStore::from_db(&fixture.db);
     let mut session = draft_session(session_id);
     session.state = state;
     session.started_at = Utc::now();
@@ -164,7 +164,7 @@ async fn seed_terminal_runtime_lifecycle(
     session_id: SessionId,
     exit_code: Option<i32>,
 ) -> Result<()> {
-    let store = LifecycleStore::open(&fixture.db);
+    let store = LifecycleStore::from_db(&fixture.db);
     let mut lifecycle = running_lifecycle(session_id);
     assert!(lifecycle.mark_exited(RuntimeExit::new(exit_code, None)));
     let mut forking = lifecycle.clone();
@@ -203,7 +203,7 @@ async fn session_state(
     fixture: &IntegrationFixture,
     session_id: SessionId,
 ) -> Result<SessionState> {
-    let store = SqliteStore::open(&fixture.db);
+    let store = SessionStore::from_db(&fixture.db);
     Ok(store
         .get_session(&session_id)
         .await?

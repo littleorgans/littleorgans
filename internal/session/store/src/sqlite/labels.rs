@@ -2,9 +2,9 @@ use lilo_common::id::SessionId;
 use lilo_session_core::{Label, LabelMutation, Session};
 use sqlx::{Executor, Row, Sqlite, SqliteConnection};
 
-use super::{SessionRowError, SqliteStore};
+use super::{SessionRowError, SessionStore};
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn apply_label_mutation(
         &self,
         id: &SessionId,

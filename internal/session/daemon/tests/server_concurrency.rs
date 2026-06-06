@@ -13,7 +13,7 @@ use lilo_session_core::{
     RuntimeKind, Selector, Session, SessionRpc, SessionState,
 };
 use lilo_session_daemon::run_daemon_with_db;
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const THREAD: &str = "serve-follow-thread";
@@ -124,7 +124,7 @@ struct ServerFixture {
     paths: LiloPaths,
     endpoint: DaemonEndpoint,
     db: LiloDb,
-    store: SqliteStore,
+    store: SessionStore,
 }
 
 impl ServerFixture {
@@ -134,7 +134,7 @@ impl ServerFixture {
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
         let db = LiloDb::open(&paths).await.or_panic("db opens");
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
         let endpoint = DaemonEndpoint::from_paths(&paths);
         Self {
             _dir: dir,

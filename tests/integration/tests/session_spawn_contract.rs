@@ -10,14 +10,14 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use lilo_common::id::SessionId;
-use lilo_db::{begin_immediate_tx, finish_immediate_tx};
+use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_integration_tests::{
     IntegrationFixture, count_rows, draft_session, event_log_line_count, fixed_intent_id,
     fixed_session_id, running_event, running_lifecycle, runtime_config, runtime_request,
 };
 use lilo_runtime_daemon::{RuntimeService, RuntimeServiceContext};
 use lilo_runtime_store::LifecycleStore;
-use lilo_session_store::{PendingSpawnIntent, SessionDraft, SqliteStore};
+use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionStore};
 
 const DAEMON_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -53,7 +53,7 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     }
 
     let raw_runtime_id = fixed_session_id(30);
-    LifecycleStore::open(&fixture.db)
+    LifecycleStore::from_db(&fixture.db)
         .insert_forking(&lilo_rm_core::Lifecycle::forking(
             raw_runtime_id,
             lilo_rm_core::RuntimeKind::Claude,
@@ -119,8 +119,8 @@ async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()>
 #[tokio::test]
 async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
-    let session_store = SqliteStore::open(&fixture.db);
-    let lifecycle_store = LifecycleStore::open(&fixture.db);
+    let session_store = SessionStore::from_db(&fixture.db);
+    let lifecycle_store = LifecycleStore::from_db(&fixture.db);
     let session_id = fixed_session_id(1);
     let mut observed = Vec::new();
     let intent = PendingSpawnIntent::new(
@@ -129,8 +129,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         SessionDraft::new(&draft_session(session_id)),
     );
 
-    let mut tx_a = fixture.db.session_pool().acquire().await?;
-    begin_immediate_tx(&mut tx_a, "integration tx a").await?;
+    let mut tx_a = begin_immediate_pool_tx(fixture.db.session_pool()).await?;
     let tx_a_result = async {
         insert_audit(&mut *tx_a, "audit-session-spawn", session_id).await?;
         observed.push("identity-audit");
@@ -148,7 +147,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         Result::<()>::Ok(())
     }
     .await;
-    finish_immediate_tx(&mut tx_a, tx_a_result, "integration tx a").await?;
+    finish_immediate_pool_tx(tx_a, tx_a_result).await?;
 
     assert_eq!(pending_count(&fixture, session_id).await?, 1);
     assert_eq!(resolved_count(&fixture, session_id).await?, 0);
@@ -158,8 +157,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
     lifecycle_store.update_lifecycle(&running).await?;
     observed.push("runtime-kqueue-ready");
 
-    let mut tx_b = fixture.db.session_pool().acquire().await?;
-    begin_immediate_tx(&mut tx_b, "integration tx b").await?;
+    let mut tx_b = begin_immediate_pool_tx(fixture.db.session_pool()).await?;
     let tx_b_result = async {
         let session = intent
             .session_draft
@@ -173,7 +171,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         Result::<()>::Ok(())
     }
     .await;
-    finish_immediate_tx(&mut tx_b, tx_b_result, "integration tx b").await?;
+    finish_immediate_pool_tx(tx_b, tx_b_result).await?;
 
     assert_eq!(
         observed,
@@ -195,7 +193,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
 #[tokio::test]
 async fn raw_runtime_spawn_keeps_session_tables_empty() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
-    let lifecycle_store = LifecycleStore::open(&fixture.db);
+    let lifecycle_store = LifecycleStore::from_db(&fixture.db);
     let session_id = fixed_session_id(10);
 
     insert_audit(
@@ -228,8 +226,8 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
         ))
         .await?,
     );
-    let session_store = SqliteStore::open(&fixture.db);
-    let lifecycle_store = LifecycleStore::open(&fixture.db);
+    let session_store = SessionStore::from_db(&fixture.db);
+    let lifecycle_store = LifecycleStore::from_db(&fixture.db);
     let session_id = fixed_session_id(20);
     let intent = PendingSpawnIntent::new(
         fixed_intent_id(21),

@@ -4,12 +4,12 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::Principal;
-use lilo_im_store::SqliteAuditSink;
+use lilo_im_store::AuditStore;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_session_driver::InProcessRuntime;
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 
 use crate::handler::{DaemonState, HandlerResult};
 use crate::identity_client::{IdentityClient, RequestContext};
@@ -69,13 +69,14 @@ impl SessionService {
     pub fn build(ctx: SessionServiceContext) -> Result<Self> {
         let (paths, daemon_version, db, runtime) = ctx.into_parts();
         fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
         let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
         let identity = IdentityClient::new(
-            SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            AuditStore::with_pool(db.identity_pool().clone()),
             lilo_sys::creds::current_uid(),
         );
         let state = Arc::new(DaemonState::new(
+            &db,
             store,
             daemon_version,
             Arc::new(runtime_port),
@@ -144,7 +145,7 @@ mod tests {
     use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
     use lilo_runtime_store::LifecycleStore;
     use lilo_session_core::{Namespace, RuntimeKind, Session, SessionState};
-    use lilo_session_store::{PendingSpawnIntent, SessionDraft, SqliteStore};
+    use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionStore};
     use std::sync::Arc;
 
     #[tokio::test]
@@ -185,8 +186,8 @@ mod tests {
             .await
             .expect("runtime service"),
         );
-        let session_store = SqliteStore::open(&db);
-        let lifecycle_store = LifecycleStore::open(&db);
+        let session_store = SessionStore::from_db(&db);
+        let lifecycle_store = LifecycleStore::from_db(&db);
         let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
         let draft = SessionDraft::new(&draft_session(session_id));
         session_store

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use lilo_common::id::SessionId;
-use lilo_db::LiloDb;
+use lilo_db::{ImmediateTx, LiloDb};
 use lilo_im_core::{Action, AuditRow, Principal, ResourceSpec};
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
@@ -18,9 +18,8 @@ use lilo_session_daemon::identity_client::{
     IdentityClient, IdentityPort, IdentityPortFuture, RequestContext,
 };
 use lilo_session_driver::{InProcessRuntime, LaunchEnv, RtmdDriver, RuntimePort};
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use lilo_wire::LilodRpc;
-use sqlx::SqliteConnection;
 use std::collections::VecDeque;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -38,6 +37,7 @@ pub const TEST_DAEMON_VERSION: &str = "test-daemon";
 
 pub struct TestDaemon {
     pub state: DaemonState,
+    pub db: LiloDb,
     pub audit_path: PathBuf,
     pub dir: tempfile::TempDir,
     pub runtime: Arc<RuntimeService>,
@@ -56,10 +56,10 @@ impl TestDaemon {
         let db = LiloDb::open(&paths).await.or_panic("store db opens");
         let audit_path = paths.db_path();
         let identity = IdentityClient::new(
-            lilo_im_store::SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            lilo_im_store::AuditStore::with_pool(db.identity_pool().clone()),
             local_uid,
         );
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
         let mut runtime_config =
             DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves");
         runtime_config.shim_path = assert_cmd::cargo::cargo_bin("lilo");
@@ -76,6 +76,7 @@ impl TestDaemon {
         let runtime_port = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
         let state = DaemonState::new(
+            &db,
             store,
             TEST_DAEMON_VERSION,
             runtime_port,
@@ -84,6 +85,7 @@ impl TestDaemon {
         );
         Self {
             state,
+            db,
             audit_path,
             dir,
             runtime,
@@ -97,11 +99,12 @@ impl TestDaemon {
             .await
             .or_panic("store db reopens");
         let identity = IdentityClient::new(
-            lilo_im_store::SqliteAuditSink::with_pool(db.identity_pool().clone()),
+            lilo_im_store::AuditStore::with_pool(db.identity_pool().clone()),
             self.local_uid,
         );
         DaemonState::new(
-            SqliteStore::open(&db),
+            &db,
+            SessionStore::from_db(&db),
             TEST_DAEMON_VERSION,
             runtime_port,
             Arc::new(identity),
@@ -111,6 +114,7 @@ impl TestDaemon {
 
     pub fn state_with_identity_port(&self, identity: Arc<dyn IdentityPort>) -> DaemonState {
         DaemonState::new(
+            &self.db,
             self.state.store.clone(),
             TEST_DAEMON_VERSION,
             Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))),
@@ -128,7 +132,8 @@ impl TestDaemon {
         let db = lilo_db::LiloDb::open_path(&self.audit_path)
             .await
             .or_panic("audit db opens");
-        lilo_im_store::query_audit(db.identity_pool(), lilo_im_store::AuditFilters::default())
+        lilo_im_store::AuditStore::with_pool(db.identity_pool().clone())
+            .query_audit(lilo_im_store::AuditFilters::default())
             .await
             .or_panic("audit query succeeds")
     }
@@ -396,7 +401,7 @@ impl IdentityPort for RecordingIdentityPort {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        _conn: &'a mut SqliteConnection,
+        _tx: &'a mut ImmediateTx,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,

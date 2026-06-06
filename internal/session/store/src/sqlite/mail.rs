@@ -9,7 +9,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 use thiserror::Error;
 
-use super::SqliteStore;
+use super::SessionStore;
 use super::time::{parse_optional_timestamp, parse_timestamp};
 
 #[derive(Debug, Error)]
@@ -30,7 +30,7 @@ pub enum MailRowError {
     IdempotencyConflict { key: String },
 }
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn insert_mail(&self, mail: &Mail) -> Result<Mail, MailRowError> {
         let mut inserted = self
             .insert_mail_for_recipients(mail, &[mail.recipient_id])

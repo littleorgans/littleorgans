@@ -47,11 +47,11 @@ pub struct AuditTableColumn {
 }
 
 #[derive(Debug, Clone)]
-pub struct SqliteAuditSink {
+pub struct AuditStore {
     pool: SqlitePool,
 }
 
-impl SqliteAuditSink {
+impl AuditStore {
     #[must_use]
     pub fn with_pool(pool: SqlitePool) -> Self {
         Self { pool }
@@ -81,7 +81,7 @@ impl SqliteAuditSink {
     }
 }
 
-impl AuditSink for SqliteAuditSink {
+impl AuditSink for AuditStore {
     async fn record(&self, row: AuditRow) -> Result<(), AuditError> {
         self.insert_audit_row(row)
             .await

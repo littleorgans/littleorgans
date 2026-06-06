@@ -2,7 +2,7 @@
 
 AuthZ is NOT enforced in identity-matters v1. This crate owns identity-matters audit storage, including the reserved audit schema fields `policy_id`, `evaluation_trace`, and `denial_reason` that v2+ policy evaluation can populate without a migration.
 
-`lilo-im-store` keeps IAM audit data inside identity-matters. Consumers query it through `SqliteAuditSink` and `query_audit` rather than hosting identity data in their own stores.
+`lilo-im-store` keeps IAM audit data inside identity-matters. Consumers query it through `AuditStore` and `query_audit` rather than hosting identity data in their own stores.
 
 Reserved fields:
 

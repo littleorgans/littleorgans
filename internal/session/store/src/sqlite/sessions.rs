@@ -3,15 +3,16 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use lilo_common::id::SessionId;
+use lilo_db::ImmediateTx;
 use lilo_session_core::{
     LabelOp, LostEvidence, MIN_SELECTOR_PREFIX_LEN, Namespace, RuntimeKind, Selector, Session,
     SessionState,
 };
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Row, Sqlite, SqliteConnection};
+use sqlx::{Row, Sqlite};
 use thiserror::Error;
 
-use super::SqliteStore;
+use super::SessionStore;
 use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
 use super::time::{parse_optional_timestamp, parse_timestamp};
 
@@ -40,7 +41,7 @@ pub enum SessionRowError {
     },
 }
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn insert_session(&self, session: &Session) -> Result<(), SessionRowError> {
         insert_session_row(&self.pool, session).await?;
         self.insert_session_labels(&session.id, &session.labels)
@@ -50,11 +51,11 @@ impl SqliteStore {
 
     pub async fn insert_session_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         session: &Session,
     ) -> Result<(), SessionRowError> {
-        insert_session_row(&mut *conn, session).await?;
-        self.insert_session_labels_in(conn, &session.id, &session.labels)
+        insert_session_row(&mut **tx, session).await?;
+        self.insert_session_labels_in(tx, &session.id, &session.labels)
             .await?;
         Ok(())
     }

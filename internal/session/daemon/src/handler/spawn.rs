@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_common::id::{IntentId, SessionId};
-use lilo_db::{begin_immediate_tx, finish_immediate_tx};
+use lilo_db::{ImmediateTx, finish_immediate_pool_tx};
 use lilo_im_core::Action;
 use lilo_rm_core::{
     LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, ShellResume, StatusFilter,
@@ -13,7 +13,6 @@ use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
 use lilo_session_driver::{RuntimeError, RuntimeFault, SpawnLaunch, runtime_spawn_request};
 use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionSpawnIntent};
-use sqlx::{Sqlite, pool::PoolConnection};
 
 use crate::agent_config::{ResolvedAgentConfig, resolve_agent_config};
 use crate::identity_client::{RequestContext, spawn_resource};
@@ -101,41 +100,39 @@ impl DaemonState {
         intent: &PendingSpawnIntent,
     ) -> Result<()> {
         let lifecycle_store = self.lifecycle_store();
-        let mut conn = self
-            .begin_spawn_tx(
-                "session spawn Tx A",
-                "failed to acquire session spawn Tx A connection",
-            )
+        let mut tx = self
+            .begin_spawn_tx("failed to acquire session spawn Tx A connection")
             .await?;
         if let Err(error) = self
             .identity
             .authorize_in_tx(
-                &mut conn,
+                &mut tx,
                 &context.principal,
                 Action::Spawn,
                 &spawn_resource(request, intent.session_id),
             )
             .await
         {
-            finish_immediate_tx(&mut conn, Ok(()), "session spawn Tx A").await?;
+            // Commit the audit row authorize_in_tx wrote, then surface the error.
+            finish_immediate_pool_tx(tx, Ok::<(), anyhow::Error>(())).await?;
             return Err(error);
         }
         let result = async {
             self.store
-                .insert_pending_spawn_intent_in(&mut conn, intent)
+                .insert_pending_spawn_intent_in(&mut tx, intent)
                 .await
                 .context("failed to insert pending spawn intent")?;
             let mut lifecycle =
                 Lifecycle::forking(intent.session_id, intent.spawn_request.runtime.clone());
             lifecycle.isolation = intent.spawn_request.isolation.clone();
             lifecycle_store
-                .insert_forking_in(&mut conn, &lifecycle)
+                .insert_forking_in(&mut tx, &lifecycle)
                 .await
                 .context("failed to insert Forking lifecycle")?;
             Ok(())
         }
         .await;
-        finish_immediate_tx(&mut conn, result, "session spawn Tx A").await
+        finish_immediate_pool_tx(tx, result).await
     }
 
     async fn complete_spawn_intent(
@@ -166,29 +163,26 @@ impl DaemonState {
         }
 
         let lifecycle_store = self.lifecycle_store();
-        let mut conn = self
-            .begin_spawn_tx(
-                "session spawn Tx B",
-                "failed to acquire session spawn Tx B connection",
-            )
+        let mut tx = self
+            .begin_spawn_tx("failed to acquire session spawn Tx B connection")
             .await?;
         let result = async {
             self.store
-                .insert_session_in(&mut conn, &session)
+                .insert_session_in(&mut tx, &session)
                 .await
                 .context("failed to persist session")?;
             lifecycle_store
-                .update_lifecycle_in(&mut conn, &lifecycle)
+                .update_lifecycle_in(&mut tx, &lifecycle)
                 .await
                 .context("failed to persist Running lifecycle")?;
             self.store
-                .resolve_spawn_intent_in(&mut conn, intent.session_id)
+                .resolve_spawn_intent_in(&mut tx, intent.session_id)
                 .await
                 .context("failed to resolve spawn intent")?;
             Ok(())
         }
         .await;
-        if let Err(error) = finish_immediate_tx(&mut conn, result, "session spawn Tx B").await {
+        if let Err(error) = finish_immediate_pool_tx(tx, result).await {
             match on_commit_failure {
                 OnCommitFailure::AbortRunning => {
                     let abort_reason = format!("session commit failed: {error}");
@@ -242,25 +236,22 @@ impl DaemonState {
 
     async fn abort_spawn_intent(&self, session_id: SessionId, reason: &str) -> Result<()> {
         let lifecycle_store = self.lifecycle_store();
-        let mut conn = self
-            .begin_spawn_tx(
-                "session spawn abort tx",
-                "failed to acquire session spawn abort tx connection",
-            )
+        let mut tx = self
+            .begin_spawn_tx("failed to acquire session spawn abort tx connection")
             .await?;
         let result = async {
             self.store
-                .abort_spawn_intent_in(&mut conn, session_id, reason)
+                .abort_spawn_intent_in(&mut tx, session_id, reason)
                 .await
                 .context("failed to abort spawn intent")?;
             lifecycle_store
-                .delete_in(&mut conn, session_id)
+                .delete_in(&mut tx, session_id)
                 .await
                 .context("failed to delete aborted lifecycle")?;
             Ok(())
         }
         .await;
-        finish_immediate_tx(&mut conn, result, "session spawn abort tx").await
+        finish_immediate_pool_tx(tx, result).await
     }
 
     pub(crate) async fn reconcile_pending_spawn_intents(&self) -> Result<()> {
@@ -333,17 +324,19 @@ impl DaemonState {
     }
 
     fn lifecycle_store(&self) -> LifecycleStore {
-        LifecycleStore::from_pool(self.store.pool().clone())
+        self.lifecycle_store.clone()
     }
 
-    async fn begin_spawn_tx(
-        &self,
-        label: &'static str,
-        acquire_context: &'static str,
-    ) -> Result<PoolConnection<Sqlite>> {
-        let mut conn = self.store.pool().acquire().await.context(acquire_context)?;
-        begin_immediate_tx(&mut conn, label).await?;
-        Ok(conn)
+    /// Begin the shared spawn transaction as a single pool-scoped
+    /// [`ImmediateTx`]. The caller threads `&mut tx` to store methods and to
+    /// `authorize_in_tx`, then commits with `finish_immediate_pool_tx`. One
+    /// begin, one finish, both pool-scoped: never also call the
+    /// connection-scoped `begin_immediate_tx`/`finish_immediate_tx` here.
+    async fn begin_spawn_tx(&self, acquire_context: &'static str) -> Result<ImmediateTx> {
+        self.store
+            .begin_immediate_tx()
+            .await
+            .context(acquire_context)
     }
 }
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "sqlite")]
+
 use std::collections::HashMap;
 
 use chrono::{Duration, Utc};
@@ -7,14 +9,25 @@ use lilo_im_core::{
     RuntimeKind,
 };
 use lilo_im_store::schema::{AUDIT_TABLE, RESERVED_AUDIT_COLUMNS};
-use lilo_im_store::{AuditFilters, AuditTableColumn, SqliteAuditSink, query_audit};
+use lilo_im_store::{AuditFilters, AuditStore, AuditTableColumn, StoreError};
 use lilo_im_stub::StubAuthorizer;
 use sqlx::SqlitePool;
+
+/// Test convenience: the published `query_audit` free fn was removed in Phase
+/// 1.b (model X); the query is now a method on the `sqlite`-gated `AuditStore`.
+async fn query_audit(
+    pool: &SqlitePool,
+    filters: AuditFilters,
+) -> Result<Vec<AuditRow>, StoreError> {
+    AuditStore::with_pool(pool.clone())
+        .query_audit(filters)
+        .await
+}
 
 #[tokio::test]
 async fn sqlite_sink_persists_authorizer_audit_rows() {
     let (_temp_dir, pool) = audit_pool().await;
-    let sink = SqliteAuditSink::with_pool(pool.clone());
+    let sink = AuditStore::with_pool(pool.clone());
 
     let columns = sink
         .audit_table_columns()
@@ -88,7 +101,7 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
 #[tokio::test]
 async fn query_audit_filters_rows_without_redeclaring_audit_types() {
     let (_temp_dir, pool) = audit_pool().await;
-    let sink = SqliteAuditSink::with_pool(pool.clone());
+    let sink = AuditStore::with_pool(pool.clone());
 
     let local_uid = nix::unistd::getuid().as_raw();
     let other_uid = different_uid(local_uid);

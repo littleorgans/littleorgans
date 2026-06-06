@@ -74,7 +74,7 @@ fn persisted_states(db_path: &Path) -> HashMap<String, String> {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
         let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
-        let store = LifecycleStore::open(&db);
+        let store = LifecycleStore::from_db(&db);
         store
             .list(&StatusFilter::empty())
             .await
