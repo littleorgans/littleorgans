@@ -7,10 +7,11 @@
 //! root. No new code may use these symbols, and no replacement `SQLite` aliases
 //! may be added.
 //!
-//! These constructors share the Postgres migration directory (via
-//! [`crate::migrator`]); once that directory holds Postgres SQL they are
-//! compile scaffolding, and store tests exercising them are expected red until
-//! the owning store migration removes the dependency.
+//! These constructors run their OWN quarantined `SQLite` migration directory
+//! ([`internal/db/migrations-sqlite`]) so the live daemon and the not-yet-
+//! migrated stores keep working on `SQLite` while `internal/db/migrations` holds
+//! the Postgres target schema. The two dirs run green in parallel; the `SQLite`
+//! one is deleted in Phase 2 when the last caller leaves the transition surface.
 
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
@@ -18,15 +19,23 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use lilo_paths::LiloPaths;
+use sqlx::migrate::Migrator;
 use sqlx::pool::PoolConnection;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{Database, Sqlite, SqliteConnection, SqlitePool, TransactionManager};
 
-use crate::{Backing, LiloDb, migrator};
+use crate::{Backing, LiloDb};
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: u32 = 5;
 const WAL_AUTOCHECKPOINT_PAGES: &str = "1000";
+
+/// The quarantined `SQLite` migration set for the transition backing. Separate
+/// from [`crate::migrator`] (the Postgres target) so each backend runs its own
+/// dialect against its own pool.
+fn sqlite_migrator() -> Migrator {
+    sqlx::migrate!("./migrations-sqlite")
+}
 
 /// Transition `SQLite` constructors and pool accessors.
 impl LiloDb {
@@ -57,7 +66,7 @@ impl LiloDb {
             .await
             .with_context(|| format!("failed to open sqlite db {}", path.display()))?;
 
-        migrator()
+        sqlite_migrator()
             .run(&pool)
             .await
             .with_context(|| format!("failed to migrate sqlite db {}", path.display()))?;

@@ -130,9 +130,8 @@ impl LiloDb {
     }
 }
 
-/// The Postgres migration set. Single source for the migrations directory; the
-/// transition `SQLite` constructors share it (compile scaffolding once the
-/// directory holds Postgres SQL).
+/// The Postgres target migration set (`internal/db/migrations`). The `SQLite`
+/// transition backing runs its own quarantined dir; see [`transition`].
 pub(crate) fn migrator() -> Migrator {
     sqlx::migrate!("./migrations")
 }
