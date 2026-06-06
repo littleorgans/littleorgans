@@ -17,8 +17,6 @@ pub const LILO_DOCKER_IMAGE: &str = "LILO_DOCKER_IMAGE";
 pub const LILO_DOCKER_ALLOW_ROOT_IMAGE_USER: &str = "LILO_DOCKER_ALLOW_ROOT_IMAGE_USER";
 /// Operator escape hatch for Docker arm64 manifest checks.
 pub const LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE: &str = "LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE";
-/// Operator Compose host port for the local Postgres service (Compose-only).
-pub const LILO_DOCKER_PG_PORT: &str = "LILO_DOCKER_PG_PORT";
 /// Operator liveness probe sweep override in milliseconds.
 pub const LILO_PROBE_SWEEP_INTERVAL_MS: &str = "LILO_PROBE_SWEEP_INTERVAL_MS";
 /// Operator resume poll interval override in milliseconds.
@@ -29,6 +27,8 @@ pub const LILO_RESUME_GAP_THRESHOLD_MS: &str = "LILO_RESUME_GAP_THRESHOLD_MS";
 pub const LILO_TMUX_SERVER_LABEL: &str = "LILO_TMUX_SERVER_LABEL";
 /// Operator Postgres database connection string.
 pub const LILO_DATABASE_URL: &str = "LILO_DATABASE_URL";
+/// Operator Compose host port for the local Postgres service (Compose-only).
+pub const LILO_DATABASE_DOCKER_PORT: &str = "LILO_DATABASE_DOCKER_PORT";
 /// Agent identity namespace prefix.
 pub const LILO_AGENT_PREFIX: &str = "LILO_AGENT_";
 /// Agent session id injected into child processes.

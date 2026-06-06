@@ -51,7 +51,7 @@ clear operator error when neither is set.
 | `LILO_DOCKER_IMAGE` | image ref | unset | `docker_preflight.rs` | Default container image for `--isolation docker`. | live |
 | `LILO_DOCKER_ALLOW_ROOT_IMAGE_USER` | `1`/`true`/`yes` | off | `docker_preflight.rs` | Permit a root-user image. | live |
 | `LILO_DOCKER_ALLOW_ARM64_MANIFEST_ESCAPE` | `1`/`true`/`yes` | off | `docker_preflight.rs` | Permit the arm64 manifest workaround. | live |
-| `LILO_DOCKER_PG_PORT` | u16 port | `55432` | `compose.yaml` (Compose host port only; not read by `lilo`) | Host port the local Postgres service binds: `127.0.0.1:$port:5432`. | live |
+| `LILO_DATABASE_DOCKER_PORT` | u16 port | `55432` | `compose.yaml` (Compose host port only; not read by `lilo`) | Host port the local Postgres service binds: `127.0.0.1:$port:5432`. | live |
 | `LILO_PROBE_SWEEP_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Liveness probe sweep interval. | live |
 | `LILO_RESUME_POLL_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Resume poll interval. | live |
 | `LILO_RESUME_GAP_THRESHOLD_MS` | u64 ms | code default | `reconcile.rs` | Resume gap threshold. | live |

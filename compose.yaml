@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: lilo
       POSTGRES_DB: lilo
     ports:
-       - "127.0.0.1:${LILO_DOCKER_PG_PORT:-55432}:5432"
+       - "127.0.0.1:${LILO_DATABASE_DOCKER_PORT:-55432}:5432"
     volumes:
       - lilo_pgdata:/var/lib/postgresql/data
     healthcheck:
