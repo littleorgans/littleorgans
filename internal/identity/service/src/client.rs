@@ -4,7 +4,7 @@ use lilo_im_core::{
     Action, AuditDecision, AuditRow, Authorizer, AuthzError, Principal, ResourceSpec,
 };
 use lilo_im_store::AuditStore;
-use lilo_im_store::sqlite::record_audit_in_tx;
+use lilo_im_store::postgres::record_audit_in_tx;
 use lilo_im_stub::StubAuthorizer;
 
 #[derive(Debug, Clone)]
