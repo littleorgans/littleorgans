@@ -1,6 +1,6 @@
 [package]
 name = "lilo-im-store"
-description = "Identity Matters audit storage: backend-neutral AuditSink contract with a feature-gated SQLite audit store and filtered query API"
+description = "Identity Matters audit storage: backend-neutral AuditSink contract with a feature-gated Postgres audit store and filtered query API"
 readme = "README.md"
 version.workspace = true
 edition.workspace = true
@@ -30,9 +30,8 @@ uuid.workspace = true
 [features]
 # Default features are empty: the published default surface is the sqlx-free
 # audit contract re-exported from lilo-im-core (AuditSink/AuditRow/AuditError).
-# The `sqlite` transition backend compiles the concrete `AuditStore` and pulls
-# in sqlx. Phase 2 adds a `postgres` feature when its audit SQL body lands.
-sqlite = ["dep:sqlx"]
+# The `postgres` backend compiles the concrete `AuditStore` and pulls in sqlx.
+postgres = ["dep:sqlx"]
 
 [dev-dependencies]
 lilo-im-stub.workspace = true

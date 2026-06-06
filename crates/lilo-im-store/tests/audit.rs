@@ -1,6 +1,7 @@
-#![cfg(feature = "sqlite")]
+#![cfg(feature = "postgres")]
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use chrono::{Duration, Utc};
 use lilo_common::id::{AuditId, SessionId};
@@ -11,22 +12,21 @@ use lilo_im_core::{
 use lilo_im_store::schema::{AUDIT_TABLE, RESERVED_AUDIT_COLUMNS};
 use lilo_im_store::{AuditFilters, AuditStore, AuditTableColumn, StoreError};
 use lilo_im_stub::StubAuthorizer;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 
 /// Test convenience: the published `query_audit` free fn was removed in Phase
-/// 1.b (model X); the query is now a method on the `sqlite`-gated `AuditStore`.
-async fn query_audit(
-    pool: &SqlitePool,
-    filters: AuditFilters,
-) -> Result<Vec<AuditRow>, StoreError> {
+/// 1.b (model X); the query is now a method on the `postgres`-gated `AuditStore`.
+async fn query_audit(pool: &PgPool, filters: AuditFilters) -> Result<Vec<AuditRow>, StoreError> {
     AuditStore::with_pool(pool.clone())
         .query_audit(filters)
         .await
 }
 
 #[tokio::test]
-async fn sqlite_sink_persists_authorizer_audit_rows() {
-    let (_temp_dir, pool) = audit_pool().await;
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn postgres_sink_persists_authorizer_audit_rows() {
+    let (schema, pool) = audit_pool().await;
     let sink = AuditStore::with_pool(pool.clone());
 
     let columns = sink
@@ -96,11 +96,14 @@ async fn sqlite_sink_persists_authorizer_audit_rows() {
     );
     assert_eq!(denied.denial_reason.as_deref(), Some("non-local uid"));
     assert_uuid_v4(denied.id);
+
+    drop_schema(&pool, &schema).await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn query_audit_filters_rows_without_redeclaring_audit_types() {
-    let (_temp_dir, pool) = audit_pool().await;
+    let (schema, pool) = audit_pool().await;
     let sink = AuditStore::with_pool(pool.clone());
 
     let local_uid = nix::unistd::getuid().as_raw();
@@ -173,19 +176,41 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
     .expect("read filtered audit rows");
 
     assert_eq!(filtered, vec![recent_spawn]);
+
+    drop_schema(&pool, &schema).await;
 }
 
-async fn audit_pool() -> (tempfile::TempDir, SqlitePool) {
-    let temp_dir = tempfile::tempdir().expect("create audit sqlite temp dir");
-    let db_path = temp_dir.path().join("audit.sqlite");
-    let pool = SqlitePool::connect(&format!("sqlite://{}?mode=rwc", db_path.display()))
+/// Provision an isolated Postgres schema (no CREATE DATABASE privilege needed;
+/// `lilo-im-store` is publishable and cannot depend on `lilo-db`'s `TestDb`).
+/// The `identity_audit` DDL mirrors `internal/db/migrations/0001_unified_schema`.
+async fn audit_pool() -> (String, PgPool) {
+    let url = std::env::var("LILO_TEST_DATABASE_URL")
+        .expect("LILO_TEST_DATABASE_URL must be set; run with --run-ignored");
+    let schema = unique_schema();
+
+    let setup = PgPool::connect(&url).await.expect("connect postgres");
+    sqlx::query(&format!("CREATE SCHEMA \"{schema}\""))
+        .execute(&setup)
         .await
-        .expect("connect audit sqlite pool");
+        .expect("create test schema");
+    setup.close().await;
+
+    let options = PgConnectOptions::from_str(&url)
+        .expect("parse postgres url")
+        .options([("search_path", schema.as_str())]);
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect_with(options)
+        .await
+        .expect("connect schema-scoped pool");
+
     sqlx::query(&format!(
         "\
 CREATE TABLE {AUDIT_TABLE} (
     id TEXT NOT NULL PRIMARY KEY,
-    timestamp TEXT NOT NULL,
+    seq BIGINT GENERATED ALWAYS AS IDENTITY,
+    owner TEXT NOT NULL DEFAULT 'local',
+    timestamp TIMESTAMPTZ NOT NULL,
     principal TEXT NOT NULL,
     action TEXT NOT NULL,
     resource TEXT NOT NULL,
@@ -200,7 +225,26 @@ CREATE TABLE {AUDIT_TABLE} (
     .execute(&pool)
     .await
     .expect("create audit table");
-    (temp_dir, pool)
+    (schema, pool)
+}
+
+async fn drop_schema(pool: &PgPool, schema: &str) {
+    sqlx::query(&format!("DROP SCHEMA IF EXISTS \"{schema}\" CASCADE"))
+        .execute(pool)
+        .await
+        .ok();
+}
+
+fn unique_schema() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    format!("im_audit_test_{}_{nanos}_{n}", std::process::id())
 }
 
 fn resource() -> ResourceSpec {
@@ -261,7 +305,7 @@ fn audit_columns_snapshot(columns: &[AuditTableColumn]) -> String {
 fn assert_primary_key_is_uuid_column(columns: &[AuditTableColumn]) {
     let id = audit_column(columns, "id");
     assert!(id.primary_key);
-    assert_eq!(id.data_type, "TEXT");
+    assert_eq!(id.data_type, "text");
 }
 
 fn audit_column<'a>(columns: &'a [AuditTableColumn], name: &str) -> &'a AuditTableColumn {

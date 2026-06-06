@@ -5,8 +5,8 @@ use lilo_im_core::{
     Action, AuditDecision, AuditError, AuditRow, AuditSink, Principal, ResourceSpec,
 };
 use serde::Serialize;
-use sqlx::sqlite::SqliteRow;
-use sqlx::{Executor, QueryBuilder, Row, Sqlite, SqliteConnection, SqlitePool};
+use sqlx::postgres::PgRow;
+use sqlx::{Executor, PgConnection, PgPool, Postgres, QueryBuilder, Row};
 use thiserror::Error;
 
 use crate::schema::AUDIT_TABLE;
@@ -14,16 +14,14 @@ use crate::schema::AUDIT_TABLE;
 const AUDIT_ROW_COLUMNS: &str = "\
 id, timestamp, principal, action, resource, decision, session_ref, notes, policy_id, \
 evaluation_trace, denial_reason";
-const AUDIT_ROW_PLACEHOLDERS: &str = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+const AUDIT_ROW_PLACEHOLDERS: &str = "$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11";
 
 #[derive(Debug, Error)]
 pub enum StoreError {
-    #[error("sqlite error: {0}")]
-    Sqlite(#[from] sqlx::Error),
+    #[error("database error: {0}")]
+    Database(#[from] sqlx::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("timestamp parse error: {0}")]
-    Timestamp(#[from] chrono::ParseError),
     #[error("uuid parse error: {0}")]
     Uuid(#[from] uuid::Error),
     #[error("audit query limit too large: {0}")]
@@ -48,12 +46,12 @@ pub struct AuditTableColumn {
 
 #[derive(Debug, Clone)]
 pub struct AuditStore {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl AuditStore {
     #[must_use]
-    pub fn with_pool(pool: SqlitePool) -> Self {
+    pub fn with_pool(pool: PgPool) -> Self {
         Self { pool }
     }
 
@@ -62,15 +60,38 @@ impl AuditStore {
     }
 
     pub async fn audit_table_columns(&self) -> Result<Vec<AuditTableColumn>, StoreError> {
-        let sql = format!("PRAGMA table_info({AUDIT_TABLE})");
-        let rows = sqlx::query(&sql).fetch_all(&self.pool).await?;
+        let rows = sqlx::query(
+            r"
+            SELECT c.column_name AS name,
+                   c.data_type AS data_type,
+                   (c.is_nullable = 'NO') AS not_null,
+                   COALESCE(pk.is_pk, false) AS primary_key
+            FROM information_schema.columns c
+            LEFT JOIN (
+                SELECT kcu.column_name, true AS is_pk
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON kcu.constraint_name = tc.constraint_name
+                 AND kcu.table_schema = tc.table_schema
+                WHERE tc.table_name = $1
+                  AND tc.table_schema = current_schema()
+                  AND tc.constraint_type = 'PRIMARY KEY'
+            ) pk ON pk.column_name = c.column_name
+            WHERE c.table_name = $1
+              AND c.table_schema = current_schema()
+            ORDER BY c.ordinal_position
+            ",
+        )
+        .bind(AUDIT_TABLE)
+        .fetch_all(&self.pool)
+        .await?;
         rows.into_iter()
             .map(|row| {
                 Ok(AuditTableColumn {
                     name: row.try_get("name")?,
-                    data_type: row.try_get("type")?,
-                    not_null: row.try_get::<i64, _>("notnull")? != 0,
-                    primary_key: row.try_get::<i64, _>("pk")? != 0,
+                    data_type: row.try_get("data_type")?,
+                    not_null: row.try_get("not_null")?,
+                    primary_key: row.try_get("primary_key")?,
                 })
             })
             .collect()
@@ -89,17 +110,14 @@ impl AuditSink for AuditStore {
     }
 }
 
-pub async fn record_audit_in_tx(
-    conn: &mut SqliteConnection,
-    row: &AuditRow,
-) -> Result<(), StoreError> {
+pub async fn record_audit_in_tx(conn: &mut PgConnection, row: &AuditRow) -> Result<(), StoreError> {
     insert_audit_row_with(conn, row).await
 }
 
 #[derive(Debug)]
 struct EncodedAuditRow {
     id: String,
-    timestamp: String,
+    timestamp: DateTime<Utc>,
     principal: String,
     action: String,
     resource: String,
@@ -115,7 +133,7 @@ impl EncodedAuditRow {
     fn from_audit_row(row: &AuditRow) -> Result<Self, StoreError> {
         Ok(Self {
             id: row.id.to_string(),
-            timestamp: row.timestamp.to_rfc3339(),
+            timestamp: row.timestamp,
             principal: serialize_json(&row.principal)?,
             action: serialize_json(&row.action)?,
             resource: serialize_json(&row.resource)?,
@@ -131,7 +149,7 @@ impl EncodedAuditRow {
         })
     }
 
-    fn from_row(row: &SqliteRow) -> Result<Self, StoreError> {
+    fn from_row(row: &PgRow) -> Result<Self, StoreError> {
         Ok(Self {
             id: row.try_get("id")?,
             timestamp: row.try_get("timestamp")?,
@@ -150,7 +168,7 @@ impl EncodedAuditRow {
     fn try_into_audit_row(self) -> Result<AuditRow, StoreError> {
         Ok(AuditRow {
             id: self.id.parse()?,
-            timestamp: DateTime::parse_from_rfc3339(&self.timestamp)?.with_timezone(&Utc),
+            timestamp: self.timestamp,
             principal: serde_json::from_str::<Principal>(&self.principal)?,
             action: serde_json::from_str::<Action>(&self.action)?,
             resource: serde_json::from_str::<ResourceSpec>(&self.resource)?,
@@ -173,10 +191,10 @@ fn parse_optional_session_id(value: Option<String>) -> Result<Option<SessionId>,
 }
 
 async fn query_audit_rows(
-    pool: &SqlitePool,
+    pool: &PgPool,
     filters: AuditFilters,
 ) -> Result<Vec<AuditRow>, StoreError> {
-    let mut query = QueryBuilder::<Sqlite>::new(format!(
+    let mut query = QueryBuilder::<Postgres>::new(format!(
         "\
 SELECT {AUDIT_ROW_COLUMNS}
 FROM {AUDIT_TABLE}",
@@ -194,9 +212,11 @@ FROM {AUDIT_TABLE}",
     }
     if let Some(since) = filters.since {
         query.push(where_clause.predicate_prefix());
-        query.push("timestamp >= ").push_bind(since.to_rfc3339());
+        query.push("timestamp >= ").push_bind(since);
     }
-    query.push(" ORDER BY rowid ASC");
+    // `seq` is a monotonic identity column: insertion order, stable even when
+    // two rows share a `timestamp` (Postgres has no SQLite rowid).
+    query.push(" ORDER BY seq ASC");
     if let Some(limit) = filters.limit {
         let limit = i64::try_from(limit).map_err(|_| StoreError::LimitTooLarge(limit))?;
         query.push(" LIMIT ").push_bind(limit);
@@ -209,13 +229,13 @@ FROM {AUDIT_TABLE}",
         .collect()
 }
 
-async fn insert_audit_row(pool: &SqlitePool, row: &AuditRow) -> Result<(), StoreError> {
+async fn insert_audit_row(pool: &PgPool, row: &AuditRow) -> Result<(), StoreError> {
     insert_audit_row_with(pool, row).await
 }
 
 async fn insert_audit_row_with<'e, E>(executor: E, row: &AuditRow) -> Result<(), StoreError>
 where
-    E: Executor<'e, Database = Sqlite>,
+    E: Executor<'e, Database = Postgres>,
 {
     let encoded = EncodedAuditRow::from_audit_row(row)?;
     let sql = format!(
