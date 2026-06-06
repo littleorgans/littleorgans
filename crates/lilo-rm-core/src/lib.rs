@@ -64,8 +64,8 @@ pub use proto::{
     EventsPayload, EventsRequest, KillByPidPayload, KilledPayload, McpBridgePayload, NudgePayload,
     RuntimeResponse, RuntimeRpc, ShimLaunchPayload, SpawnConflictKind, SpawnConflictPayload,
     SpawnedPayload, StatusPayload, StatusRequest, ValidateTargetPayload, VersionPayload,
-    WatchersPayload, clamped_event_wait_ms, read_json_line, read_json_line_blocking,
-    read_optional_json_line, write_json_line, write_json_line_blocking,
+    WaitWatchersRequest, WatchersPayload, clamped_event_wait_ms, read_json_line,
+    read_json_line_blocking, read_optional_json_line, write_json_line, write_json_line_blocking,
 };
 pub use spawn_context::{
     CALLER_ENV_DENYLIST, CALLER_ENV_DENYLIST_PREFIXES, capture_caller_cwd, capture_caller_env,

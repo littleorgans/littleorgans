@@ -1,6 +1,5 @@
 ---
 source: crates/lilo-rm-core/tests/serde_snapshots.rs
-assertion_line: 109
 expression: rpcs
 ---
 [
@@ -91,6 +90,15 @@ expression: rpcs
   },
   {
     "type": "watchers"
+  },
+  {
+    "type": "wait_watchers",
+    "payload": {
+      "request": {
+        "min_event_waiters": 1,
+        "timeout_ms": 5000
+      }
+    }
   },
   {
     "type": "doctor"

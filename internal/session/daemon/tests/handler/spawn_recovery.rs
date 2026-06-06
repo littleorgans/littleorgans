@@ -31,8 +31,7 @@ pub(crate) async fn tx_b_failure_aborts_started_runtime_and_spawn_intent() {
         daemon.testdb.db().clone(),
         SpawnFault::FailTxBResolve,
     ));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
 
     let result = state
         .handle(
@@ -75,8 +74,7 @@ pub(crate) async fn abort_spawn_intent_clears_forking_and_marks_intent_aborted()
         daemon.testdb.db().clone(),
         SpawnFault::FailRuntimeSpawn,
     ));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
 
     let result = state
         .handle(

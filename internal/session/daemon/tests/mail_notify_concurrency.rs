@@ -29,8 +29,7 @@ async fn notify_wait_fanout_runs_concurrently_and_preserves_result_order() {
     let second = spawn_test_session(&daemon, &context, "engineer").await;
     let third = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(ConcurrentNudgeRuntimePort::new(3));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Role {
             name: "engineer".to_string(),

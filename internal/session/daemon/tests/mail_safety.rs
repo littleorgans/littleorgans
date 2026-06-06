@@ -249,8 +249,7 @@ async fn notify_runtime_failure_is_warning_not_mail_failure() {
     let sender = spawn_test_session(&daemon, &context, "pm").await;
     let recipient = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(RecordingRuntimePort::failing_nudge("runtime offline"));
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Id { id: recipient.id },
         "wake and review",
@@ -291,8 +290,7 @@ async fn notify_wait_timeout_is_forwarded_to_runtime_port() {
     let sender = spawn_test_session(&daemon, &context, "pm").await;
     let recipient = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(RecordingRuntimePort::new());
-    let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
+    let state = daemon.state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Id { id: recipient.id },
         "wake and review",

@@ -254,9 +254,18 @@ fn long_poll_wakes_when_event_is_appended() {
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn timed_out_long_poll_releases_waiter() {
     let harness = RtmHarness::start();
+    // The composed daemon's session->runtime event mirror registers a persistent
+    // long-poll waiter shortly after startup (it parks for EVENT_WAIT_MS = 30s,
+    // far longer than this test). Await it before sampling `baseline` so the
+    // baseline is captured deterministically instead of racing the mirror's
+    // first registration; it then stays stable for the rest of the test.
+    wait_for_event_waiters_at_least(&harness, 1);
     let baseline = runtime_watcher_counts(&harness).event_waiters;
     let socket_path = harness.socket_path().to_path_buf();
-    let waiter = thread::spawn(move || runtime_events_rpc_path(socket_path, Some(0), Some(100)));
+    // Keep the waiter parked long enough for the WaitWatchers RPC below to reach
+    // the daemon and observe it; the assertion is that the long-poll times out
+    // (empty) and releases its waiter, not that the timeout is short.
+    let waiter = thread::spawn(move || runtime_events_rpc_path(socket_path, Some(0), Some(2000)));
     wait_for_event_waiters_at_least(&harness, baseline + 1);
 
     let response = waiter.join().expect("waiter");

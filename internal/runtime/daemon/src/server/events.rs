@@ -28,4 +28,12 @@ impl EventAppender {
     pub(super) fn event_waiter_count(&self) -> usize {
         self.event_log.waiter_count()
     }
+
+    pub(super) async fn wait_for_min_event_waiters(
+        &self,
+        min: usize,
+        timeout: std::time::Duration,
+    ) -> usize {
+        self.event_log.wait_for_min_waiters(min, timeout).await
+    }
 }

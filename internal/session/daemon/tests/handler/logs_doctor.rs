@@ -183,8 +183,7 @@ pub(crate) async fn doctor_reports_runtime_matters_unavailable() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let socket_path = daemon.dir.path().join("missing-rtmd.sock");
-    let state = daemon
-        .state_with_runtime_port(Arc::new(RtmdDriver::new(socket_path)));
+    let state = daemon.state_with_runtime_port(Arc::new(RtmdDriver::new(socket_path)));
 
     let doctor = state
         .handle(

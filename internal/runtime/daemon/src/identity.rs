@@ -83,9 +83,10 @@ fn runtime_authorization(rpc: &RuntimeRpc) -> (Action, ResourceSpec) {
             (Action::Logs, ResourceSpec::session(request.session_id))
         }
         RuntimeRpc::Status { request } => (Action::List, status_resource(request)),
-        RuntimeRpc::Version | RuntimeRpc::Watchers | RuntimeRpc::Events { .. } => {
-            (Action::Read, ResourceSpec::default())
-        }
+        RuntimeRpc::Version
+        | RuntimeRpc::Watchers
+        | RuntimeRpc::WaitWatchers { .. }
+        | RuntimeRpc::Events { .. } => (Action::Read, ResourceSpec::default()),
         RuntimeRpc::Doctor => (Action::Doctor, ResourceSpec::default()),
         RuntimeRpc::Stop | RuntimeRpc::McpBridge { .. } => {
             (Action::Daemon, ResourceSpec::default())

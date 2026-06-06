@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use lilo_rm_core::{EventsRequest, RuntimeResponse, RuntimeRpc, WatcherCounts};
+use lilo_rm_core::{
+    EventsRequest, RuntimeResponse, RuntimeRpc, WaitWatchersRequest, WatcherCounts,
+};
 
 use super::RtmHarness;
 use super::harness::FAKE_RUNTIME_READY;
@@ -156,10 +158,30 @@ pub fn runtime_watcher_counts(harness: &RtmHarness) -> WatcherCounts {
 }
 
 pub fn wait_for_event_waiters_at_least(harness: &RtmHarness, expected: usize) {
-    wait_until(Duration::from_secs(5), || {
-        (runtime_watcher_counts(harness).event_waiters >= expected).then_some(())
-    })
-    .unwrap_or_else(|| panic!("event_waiters never reached at least {expected}"));
+    // Await the daemon's Notify-backed signal instead of polling the count: the
+    // WaitWatchers RPC blocks until the daemon registers >= `expected` event
+    // waiters (or its timeout), so we never race the transient via repeated
+    // count sampling (which also avoided a per-poll runtime-build storm).
+    let response = tokio::runtime::Runtime::new()
+        .expect("runtime")
+        .block_on(lilo_runtime_app::shared::request(
+            harness.socket_path(),
+            RuntimeRpc::WaitWatchers {
+                request: WaitWatchersRequest {
+                    min_event_waiters: expected,
+                    timeout_ms: 5_000,
+                },
+            },
+        ))
+        .expect("wait watchers rpc");
+    let RuntimeResponse::Watchers(payload) = response else {
+        panic!("expected watchers response");
+    };
+    assert!(
+        payload.watchers.event_waiters >= expected,
+        "event_waiters never reached at least {expected} (got {})",
+        payload.watchers.event_waiters
+    );
 }
 
 pub fn wait_for_event_waiters_at_most(harness: &RtmHarness, expected: usize) {

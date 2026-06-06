@@ -260,6 +260,18 @@ impl ServerState {
         }
     }
 
+    /// Await at least `min` event long-poll waiters (bounded by `timeout`), then
+    /// snapshot the watcher counts. Backs the `WaitWatchers` RPC so callers
+    /// observe waiter registration deterministically instead of polling.
+    pub(crate) async fn wait_for_event_waiters(
+        &self,
+        min: usize,
+        timeout: std::time::Duration,
+    ) -> WatcherCounts {
+        self.events.wait_for_min_event_waiters(min, timeout).await;
+        self.watcher_counts().await
+    }
+
     pub(crate) async fn start_exit_watcher(
         self: &Arc<Self>,
         session_id: SessionId,
