@@ -1072,6 +1072,7 @@ name = "lilo-db"
 version = "0.8.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "lilo-paths",
  "sqlx",
  "tempfile",

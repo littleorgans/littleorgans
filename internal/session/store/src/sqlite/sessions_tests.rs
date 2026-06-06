@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use lilo_common::id::SessionId;
-use lilo_db::test_support::TestDb;
+use lilo_db::test_support::{TestDb, now_micros};
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
@@ -14,7 +14,7 @@ use super::*;
 async fn inserts_and_lists_sessions() {
     let testdb = TestDb::create().await.or_panic("test db creates");
     let store = SessionStore::from_db(testdb.db());
-    let now = Utc::now();
+    let now = now_micros();
     let session = Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,
@@ -59,7 +59,7 @@ async fn marks_session_terminated() {
         .await
         .or_panic("session inserts");
 
-    let terminated_at = Utc::now();
+    let terminated_at = now_micros();
     let terminated = store
         .mark_session_terminated(&session.id, Some(137), terminated_at)
         .await
@@ -84,7 +84,7 @@ async fn records_transcript_path_without_runtime_session() {
         .or_panic("session inserts");
     let transcript = std::path::Path::new("/tmp/rtmd-stdout.log");
 
-    let recorded_at = Utc::now();
+    let recorded_at = now_micros();
     let updated = store
         .record_transcript_path(&session.id, transcript, recorded_at)
         .await
@@ -367,7 +367,7 @@ async fn persists_sessions_across_store_handles() {
 }
 
 fn test_session(role: &str, workspace: &str, labels: Vec<Label>) -> Session {
-    let now = Utc::now();
+    let now = now_micros();
     Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
         runtime: RuntimeKind::Claude,

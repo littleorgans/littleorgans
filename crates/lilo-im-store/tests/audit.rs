@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use chrono::{Duration, Utc};
+use chrono::{Duration, DurationRound, Utc};
 use lilo_common::id::{AuditId, SessionId};
 use lilo_im_core::{
     Action, AuditDecision, AuditRow, AuditSink, Authorizer, AuthzError, Principal, ResourceSpec,
@@ -109,8 +109,16 @@ async fn query_audit_filters_rows_without_redeclaring_audit_types() {
     let local_uid = nix::unistd::getuid().as_raw();
     let other_uid = different_uid(local_uid);
     let session = SessionId::from_uuid(uuid::Uuid::now_v7());
-    let old_timestamp = Utc::now() - Duration::minutes(10);
-    let recent_timestamp = Utc::now();
+    // Postgres `timestamptz` persists at microsecond resolution. Truncate the
+    // fixtures to that resolution so read-back full-row equality is
+    // platform-independent: Linux `Utc::now()` carries sub-microsecond
+    // nanoseconds (truncated on write) that macOS does not, which made this
+    // assertion pass locally but fail in CI.
+    let now = Utc::now()
+        .duration_trunc(Duration::microseconds(1))
+        .expect("truncate now to microseconds");
+    let old_timestamp = now - Duration::minutes(10);
+    let recent_timestamp = now;
 
     let old_spawn = audit_row(
         Principal::Local(local_uid),

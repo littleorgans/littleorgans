@@ -1,6 +1,6 @@
 use chrono::{DateTime, TimeZone, Utc};
 use lilo_common::id::SessionId;
-use lilo_db::test_support::TestDb;
+use lilo_db::test_support::{TestDb, now_micros};
 use lilo_db::{DbConfig, LiloDb};
 use lilo_rm_core::{
     IsolationPolicy, IsolationProfile, Lifecycle, LifecycleState, LostEvidence, RuntimeKind,
@@ -115,7 +115,7 @@ async fn reports_counts_migrations_probe_sweep_and_recent_lost() {
     lifecycle.mark_lost(LostEvidence::PidNotAlive);
     store.update_lifecycle(&lifecycle).await.expect("lost");
 
-    let swept_at = Utc::now();
+    let swept_at = now_micros();
     store
         .record_probe_sweep(swept_at)
         .await

@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use lilo_common::id::{MessageId, SessionId};
-use lilo_db::test_support::TestDb;
+use lilo_db::test_support::{TestDb, now_micros};
 use lilo_session_core::{LostEvidence, Mail, MailIntent, MailStatus, SenderRef};
 
 use super::{MailRowError, SessionStore};
@@ -492,7 +492,7 @@ fn test_mail(
         sender,
         recipient_id,
         content: content.to_string(),
-        sent_at: Utc::now(),
+        sent_at: now_micros(),
         read_at: None,
         status: MailStatus::Unread,
         context_id: context_id.to_string(),
