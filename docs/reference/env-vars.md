@@ -37,7 +37,9 @@ Status legend: **live** = implemented today.
 
 ## Operator variables: bare `LILO_*`
 
-Set by the human operating `lilo`. All resolve to a sensible default when unset.
+Set by the human operating `lilo`. All resolve to a sensible default when unset,
+except `LILO_DATABASE_URL`, which is required: `DbConfig::from_env` fails with a
+clear operator error when it is unset or empty.
 
 | Variable | Values | Default | Read by | Purpose | Status |
 |---|---|---|---|---|---|
@@ -52,7 +54,7 @@ Set by the human operating `lilo`. All resolve to a sensible default when unset.
 | `LILO_RESUME_POLL_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Resume poll interval. | live |
 | `LILO_RESUME_GAP_THRESHOLD_MS` | u64 ms | code default | `reconcile.rs` | Resume gap threshold. | live |
 | `LILO_TMUX_SERVER_LABEL` | string | unset | `server/config.rs:92` | Optional tmux server label. | live |
-| `LILO_DATABASE_URL` | postgres URL | unset | `lilo-paths` `database_url()` → `lilo-db` `DbConfig::from_env` | Operator Postgres connection string. `LILO_HOME` no longer implies a database path. | live |
+| `LILO_DATABASE_URL` | postgres URL | required (errors if absent) | `lilo-paths` `database_url()` → `lilo-db` `DbConfig::from_env` | Operator Postgres connection string. `LILO_HOME` no longer implies a database path. | live |
 
 ### `LILO_LOG_FORMAT`
 
