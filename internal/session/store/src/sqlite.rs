@@ -10,7 +10,7 @@ mod spawn_intents;
 mod test_support;
 mod time;
 
-use lilo_db::LiloDb;
+use lilo_db::{ImmediateTx, LiloDb, begin_immediate_pool_tx};
 use sqlx::SqlitePool;
 
 pub use mail::{MailRowError, MailWriteOutcome};
@@ -21,21 +21,33 @@ pub use spawn_intents::{
 };
 
 #[derive(Clone)]
-pub struct SqliteStore {
+pub struct SessionStore {
     pool: SqlitePool,
 }
 
-impl SqliteStore {
+impl SessionStore {
     #[must_use]
-    pub fn open(db: &LiloDb) -> Self {
+    pub fn from_db(db: &LiloDb) -> Self {
         Self {
             pool: db.session_pool().clone(),
         }
     }
 
+    /// Transition: crate-private `SQLite` pool accessor (Phase 2 removes `SQLite`).
     #[must_use]
-    pub fn pool(&self) -> &SqlitePool {
+    pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// Begin a pool-scoped immediate transaction for the shared spawn path.
+    ///
+    /// Returns the backend-neutral [`ImmediateTx`] handle threaded across
+    /// crates; the caller commits it with `finish_immediate_pool_tx`. This is
+    /// the single transaction mechanism for the spawn path: do not also call
+    /// the connection-scoped `begin_immediate_tx`/`finish_immediate_tx` on this
+    /// handle.
+    pub async fn begin_immediate_tx(&self) -> sqlx::Result<ImmediateTx> {
+        begin_immediate_pool_tx(&self.pool).await
     }
 
     #[cfg(test)]
@@ -44,6 +56,6 @@ impl SqliteStore {
         let db = LiloDb::open_path(dir.path().join("lilo.db"))
             .await
             .expect("open lilo db");
-        (dir, Self::open(&db))
+        (dir, Self::from_db(&db))
     }
 }

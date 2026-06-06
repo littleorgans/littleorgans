@@ -11,7 +11,7 @@ use lilo_session_driver::{
     CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimeFault,
     RuntimePort, SpawnedProcess,
 };
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -37,7 +37,8 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
     );
     let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
     let state = DaemonState::new(
-        SqliteStore::open(&db),
+        &db,
+        SessionStore::from_db(&db),
         "test-daemon",
         runtime_port,
         Arc::new(IdentityClient::from_db(&db, lilo_sys::creds::current_uid())),
@@ -53,7 +54,7 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
         .insert_pending_spawn_intent(&intent)
         .await
         .expect("pending intent inserts");
-    let lifecycle_store = LifecycleStore::open(&db);
+    let lifecycle_store = LifecycleStore::from_db(&db);
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
     lifecycle_store
         .insert_forking(&lifecycle)
@@ -107,8 +108,8 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         .await
         .expect("runtime service builds"),
     );
-    let store = SqliteStore::open(&db);
-    let lifecycle_store = LifecycleStore::open(&db);
+    let store = SessionStore::from_db(&db);
+    let lifecycle_store = LifecycleStore::from_db(&db);
     let bad_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let good_session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let bad_request = spawn_request(
@@ -136,6 +137,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         good_lifecycle,
     ]));
     let state = DaemonState::new(
+        &db,
         store.clone(),
         "test-daemon",
         runtime_port.clone(),

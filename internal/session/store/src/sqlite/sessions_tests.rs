@@ -10,7 +10,7 @@ use super::*;
 
 #[tokio::test]
 async fn inserts_and_lists_sessions() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let now = Utc::now();
     let session = Session {
         id: SessionId::from_uuid(uuid::Uuid::now_v7()),
@@ -46,7 +46,7 @@ async fn inserts_and_lists_sessions() {
 
 #[tokio::test]
 async fn marks_session_terminated() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let session = test_session("general", "test", Vec::new());
     store
         .insert_session(&session)
@@ -67,7 +67,7 @@ async fn marks_session_terminated() {
 
 #[tokio::test]
 async fn records_transcript_path_without_runtime_session() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let session = test_session("engineer", "test", Vec::new());
     store
         .insert_session(&session)
@@ -98,7 +98,7 @@ async fn records_transcript_path_without_runtime_session() {
 
 #[tokio::test]
 async fn selector_queries_return_sessions_with_labels() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let auth_pm = test_session(
         "pm",
         "test",
@@ -188,7 +188,7 @@ async fn selector_queries_return_sessions_with_labels() {
 
 #[tokio::test]
 async fn selector_queries_filter_by_namespace_dir_and_scope() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let alpha = Namespace::new("alpha").or_panic("namespace");
     let beta = Namespace::new("beta").or_panic("namespace");
     let mut alpha_engineer = test_session("engineer", "/tmp/alpha", Vec::new());
@@ -243,7 +243,7 @@ async fn selector_queries_filter_by_namespace_dir_and_scope() {
 
 #[tokio::test]
 async fn selector_prefix_resolves_unique_and_none() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let first = test_session_with_id(
         "12345678-1234-4234-9234-123456789abc",
         "engineer",
@@ -276,7 +276,7 @@ async fn selector_prefix_resolves_unique_and_none() {
 
 #[tokio::test]
 async fn selector_prefix_rejects_ambiguous_and_invalid_prefixes() {
-    let (_dir, store) = SqliteStore::open_temp().await;
+    let (_dir, store) = SessionStore::open_temp().await;
     let first = test_session_with_id(
         "12345678-1234-4234-9234-123456789abc",
         "engineer",
@@ -331,7 +331,7 @@ async fn persists_sessions_across_reopen() {
     let session = test_session("general", "test", Vec::new());
     {
         let db = lilo_db::LiloDb::open_path(&path).await.or_panic("db opens");
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
         store
             .insert_session(&session)
             .await
@@ -341,7 +341,7 @@ async fn persists_sessions_across_reopen() {
     let db = lilo_db::LiloDb::open_path(&path)
         .await
         .or_panic("db reopens");
-    let store = SqliteStore::open(&db);
+    let store = SessionStore::from_db(&db);
     let sessions = store.list_sessions(None).await.or_panic("sessions list");
 
     assert_eq!(sessions, vec![session]);

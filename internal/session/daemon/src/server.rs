@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use lilo_db::LiloDb;
-use lilo_im_store::SqliteAuditSink;
+use lilo_im_store::AuditStore;
 use lilo_paths::{DaemonEndpoint, LiloPaths};
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_session_driver::InProcessRuntime;
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 use tokio::task::{JoinError, JoinSet};
@@ -37,7 +37,7 @@ pub async fn run_daemon_with_db(
     fs::write(paths.pid_path(), std::process::id().to_string())
         .context("failed to write pidfile")?;
 
-    let store = SqliteStore::open(&db);
+    let store = SessionStore::from_db(&db);
     let runtime = Arc::new(
         RuntimeService::build(RuntimeServiceContext::new(
             DaemonConfig::from_lilo_paths(&paths)?,
@@ -48,10 +48,11 @@ pub async fn run_daemon_with_db(
     );
     let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
     let identity = IdentityClient::new(
-        SqliteAuditSink::with_pool(db.identity_pool().clone()),
+        AuditStore::with_pool(db.identity_pool().clone()),
         lilo_sys::creds::current_uid(),
     );
     let state = Arc::new(DaemonState::new(
+        &db,
         store,
         daemon_version,
         Arc::new(runtime_port),

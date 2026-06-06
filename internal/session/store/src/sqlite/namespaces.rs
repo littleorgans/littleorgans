@@ -6,7 +6,7 @@ use lilo_session_core::{Namespace, Selector, SenderRef};
 use sqlx::Row;
 use thiserror::Error;
 
-use super::SqliteStore;
+use super::SessionStore;
 use super::time::parse_timestamp;
 
 pub use lilo_session_core::NamespaceRecord;
@@ -33,7 +33,7 @@ pub enum NamespaceRowError {
     SerdeJson(#[from] serde_json::Error),
 }
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn namespace_exists(&self, namespace: &Namespace) -> Result<bool, NamespaceRowError> {
         let exists = sqlx::query_scalar::<_, i64>(
             "SELECT EXISTS(SELECT 1 FROM session_namespaces WHERE slug = ?)",
@@ -194,7 +194,7 @@ mod tests {
 
     #[tokio::test]
     async fn seeds_default_namespace_and_session_location() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let default_namespace = Namespace::default();
         let session = running_session("engineer", "/tmp/project");
 
@@ -233,7 +233,7 @@ mod tests {
 
     #[tokio::test]
     async fn creates_and_lists_namespaces() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let namespace = Namespace::for_create("alpha").or_panic("namespace validates");
         let created_at = Utc::now();
 
@@ -266,7 +266,7 @@ mod tests {
 
     #[tokio::test]
     async fn namespace_delete_splits_delivery_cleanup_from_message_log_gc() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let namespace = Namespace::for_create("alpha").or_panic("namespace validates");
         store
             .create_namespace(&namespace, Utc::now())
@@ -340,7 +340,7 @@ mod tests {
         }
     }
 
-    async fn delivery_count_for(store: &SqliteStore, recipient_id: SessionId) -> i64 {
+    async fn delivery_count_for(store: &SessionStore, recipient_id: SessionId) -> i64 {
         sqlx::query_scalar(
             "SELECT COUNT(*)
              FROM message_deliveries
@@ -352,7 +352,7 @@ mod tests {
         .or_panic("delivery count")
     }
 
-    async fn message_exists(store: &SqliteStore, message_id: MessageId) -> bool {
+    async fn message_exists(store: &SessionStore, message_id: MessageId) -> bool {
         sqlx::query_scalar::<_, i64>(
             "SELECT EXISTS(
                 SELECT 1

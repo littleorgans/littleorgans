@@ -2,9 +2,9 @@ use chrono::Utc;
 use lilo_rm_core::{EventCursor, LostEvidence, RuntimeEvent, TerminationEvidence};
 use sqlx::{Row, Sqlite, Transaction};
 
-use super::SqliteStore;
+use super::SessionStore;
 
-impl SqliteStore {
+impl SessionStore {
     pub async fn event_cursor(&self) -> sqlx::Result<Option<EventCursor>> {
         let value = sqlx::query("SELECT cursor FROM session_event_cursor WHERE id = 1")
             .fetch_optional(&self.pool)
@@ -177,7 +177,7 @@ mod tests {
 
     #[tokio::test]
     async fn applies_runtime_events_and_cursor_atomically() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let session = running_session("general", "test");
         store
             .insert_session(&session)
@@ -220,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn duplicate_running_event_keeps_existing_running_session_timestamps() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let session = running_session("general", "test");
         let original_started_at = session.started_at;
         let original_updated_at = session.updated_at;
@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn persists_lost_evidence_from_runtime_events() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let session = running_session("general", "test");
         store
             .insert_session(&session)
@@ -291,7 +291,7 @@ mod tests {
 
     #[tokio::test]
     async fn rolls_back_events_when_cursor_write_fails() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
         let session = running_session("general", "test");
         store
             .insert_session(&session)
@@ -334,7 +334,7 @@ mod tests {
 
     #[tokio::test]
     async fn applies_cursor_without_events() {
-        let (_dir, store) = SqliteStore::open_temp().await;
+        let (_dir, store) = SessionStore::open_temp().await;
 
         store.apply_cursor(77).await.or_panic("cursor applies");
 
@@ -352,14 +352,14 @@ mod tests {
             let db = lilo_db::LiloDb::open_path(&db_path)
                 .await
                 .or_panic("db opens");
-            let store = SqliteStore::open(&db);
+            let store = SessionStore::from_db(&db);
             store.apply_cursor(42).await.or_panic("cursor applies");
         }
 
         let db = lilo_db::LiloDb::open_path(&db_path)
             .await
             .or_panic("db reopens");
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
 
         assert_eq!(
             store.event_cursor().await.or_panic("cursor loads"),

@@ -134,7 +134,7 @@ mod tests {
         CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimePort,
         SpawnLaunch, SpawnedProcess,
     };
-    use lilo_session_store::SqliteStore;
+    use lilo_session_store::SessionStore;
 
     use crate::identity_client::IdentityClient;
 
@@ -348,7 +348,7 @@ mod tests {
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
         let db = LiloDb::open(&paths).await.or_panic("store db opens");
-        let store = SqliteStore::open(&db);
+        let store = SessionStore::from_db(&db);
         let runtime = Arc::new(
             RuntimeService::build(RuntimeServiceContext::new(
                 DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves"),
@@ -357,11 +357,12 @@ mod tests {
             .await
             .or_panic("runtime service builds"),
         );
-        let runtime_lifecycles = LifecycleStore::open(&db);
+        let runtime_lifecycles = LifecycleStore::from_db(&db);
         let runtime_port = Arc::new(InProcessRuntime::new(Arc::clone(&runtime)));
         std::mem::forget(dir);
         TestState {
             daemon: DaemonState::new(
+                &db,
                 store,
                 "test-daemon",
                 runtime_port,
@@ -412,7 +413,7 @@ mod tests {
         state.store.event_cursor().await.or_panic("cursor loads")
     }
 
-    async fn wait_for_stored_cursor(store: &SqliteStore, expected: EventCursor) {
+    async fn wait_for_stored_cursor(store: &SessionStore, expected: EventCursor) {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
         loop {
             if store.event_cursor().await.or_panic("cursor loads") == Some(expected) {

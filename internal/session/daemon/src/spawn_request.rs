@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use lilo_session_core::{Namespace, SpawnRequest};
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SpawnLocation {
@@ -12,7 +12,7 @@ pub(crate) struct SpawnLocation {
 
 pub(crate) async fn normalize_spawn_request(
     request: &mut SpawnRequest,
-    store: &SqliteStore,
+    store: &SessionStore,
 ) -> Result<SpawnLocation> {
     let dir = request
         .dir

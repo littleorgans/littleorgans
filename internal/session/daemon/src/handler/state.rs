@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use lilo_common::id::MessageId;
+use lilo_db::LiloDb;
 use lilo_runtime_daemon::RuntimeService;
+use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::RpcResponse;
 use lilo_session_driver::RuntimePort;
-use lilo_session_store::SqliteStore;
+use lilo_session_store::SessionStore;
 use tokio::sync::broadcast;
 
 use crate::identity_client::IdentityPort;
@@ -13,7 +15,11 @@ use crate::mail_safety::MailSafetyConfig;
 const MAIL_APPEND_EVENT_BUFFER: usize = 128;
 
 pub struct DaemonState {
-    pub store: SqliteStore,
+    pub store: SessionStore,
+    // Runtime lifecycle store sharing the unified database. Built from the same
+    // `LiloDb` as `store`; the spawn path runs its lifecycle writes inside the
+    // shared `ImmediateTx`, so this instance's pool is only a handle.
+    pub(crate) lifecycle_store: LifecycleStore,
     pub(crate) daemon_version: String,
     pub(crate) runtime: Arc<dyn RuntimePort>,
     pub(crate) runtime_service: Arc<RuntimeService>,
@@ -34,7 +40,8 @@ pub struct MailAppendEvent {
 
 impl DaemonState {
     pub fn new(
-        store: SqliteStore,
+        db: &LiloDb,
+        store: SessionStore,
         daemon_version: impl Into<String>,
         runtime: Arc<dyn RuntimePort>,
         identity: Arc<dyn IdentityPort>,
@@ -42,6 +49,7 @@ impl DaemonState {
     ) -> Self {
         Self {
             store,
+            lifecycle_store: LifecycleStore::from_db(db),
             daemon_version: daemon_version.into(),
             runtime,
             runtime_service,
