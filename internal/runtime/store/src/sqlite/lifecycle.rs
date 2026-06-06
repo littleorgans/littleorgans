@@ -1,14 +1,11 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use lilo_common::{id::SessionId, sql::WhereClause};
-use lilo_db::LiloDb;
+use lilo_db::{ImmediateTx, LiloDb, begin_immediate_pool_tx};
 use lilo_rm_core::{
     Lifecycle, LifecycleCounts, LifecycleState, MigrationState, RecentLostEvent, StatusFilter,
 };
-use sqlx::{
-    Executor, QueryBuilder, Sqlite, SqliteConnection, SqlitePool, query::Query,
-    sqlite::SqliteArguments,
-};
+use sqlx::{Executor, QueryBuilder, Sqlite, SqlitePool, query::Query, sqlite::SqliteArguments};
 
 use crate::schema;
 
@@ -54,13 +51,26 @@ pub struct LifecycleStore {
 }
 
 impl LifecycleStore {
-    pub fn open(db: &LiloDb) -> Self {
+    pub fn from_db(db: &LiloDb) -> Self {
         let pool = db.runtime_pool().clone();
         Self { pool }
     }
 
-    pub fn pool(&self) -> &SqlitePool {
+    /// Transition: crate-private `SQLite` pool accessor for in-crate tests only
+    /// (Phase 2 removes `SQLite`). Not part of the cross-component surface.
+    #[cfg(test)]
+    pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// Begin a pool-scoped immediate transaction for the shared spawn path.
+    ///
+    /// Returns the backend-neutral [`ImmediateTx`] handle threaded across
+    /// crates; the caller commits it with `finish_immediate_pool_tx`. Single
+    /// transaction mechanism for the spawn path: do not also call the
+    /// connection-scoped `begin_immediate_tx`/`finish_immediate_tx` on it.
+    pub async fn begin_immediate_tx(&self) -> sqlx::Result<ImmediateTx> {
+        begin_immediate_pool_tx(&self.pool).await
     }
 
     pub async fn insert_forking(&self, lifecycle: &Lifecycle) -> Result<()> {
@@ -72,13 +82,13 @@ impl LifecycleStore {
 
     pub async fn insert_forking_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         lifecycle: &Lifecycle,
     ) -> Result<()> {
         if lifecycle.state != LifecycleState::Forking {
             bail!("insert_forking requires Forking lifecycle state");
         }
-        insert_forking_with(conn, lifecycle).await
+        insert_forking_with(&mut **tx, lifecycle).await
     }
 
     pub async fn update_lifecycle(&self, lifecycle: &Lifecycle) -> Result<()> {
@@ -87,10 +97,10 @@ impl LifecycleStore {
 
     pub async fn update_lifecycle_in(
         &self,
-        conn: &mut SqliteConnection,
+        tx: &mut ImmediateTx,
         lifecycle: &Lifecycle,
     ) -> Result<()> {
-        update_lifecycle_with(conn, lifecycle).await
+        update_lifecycle_with(&mut **tx, lifecycle).await
     }
 
     pub async fn delete(&self, session_id: SessionId) -> Result<()> {
@@ -102,14 +112,10 @@ impl LifecycleStore {
         Ok(())
     }
 
-    pub async fn delete_in(
-        &self,
-        conn: &mut SqliteConnection,
-        session_id: SessionId,
-    ) -> Result<()> {
+    pub async fn delete_in(&self, tx: &mut ImmediateTx, session_id: SessionId) -> Result<()> {
         sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
             .bind(session_id.to_string())
-            .execute(conn)
+            .execute(&mut **tx)
             .await
             .with_context(|| format!("failed to delete lifecycle {session_id}"))?;
         Ok(())
@@ -310,15 +316,10 @@ impl LifecycleStore {
         Ok(())
     }
 
-    #[must_use]
-    pub fn from_pool(pool: SqlitePool) -> Self {
-        Self { pool }
-    }
-
     #[cfg(test)]
     pub async fn path_open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let db = LiloDb::open_path(path).await?;
-        Ok(Self::open(&db))
+        Ok(Self::from_db(&db))
     }
 }
 

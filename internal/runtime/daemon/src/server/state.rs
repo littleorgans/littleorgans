@@ -5,8 +5,6 @@ use std::time::Instant;
 use anyhow::Result;
 use lilo_common::id::SessionId;
 use lilo_identity_service::IdentityClient;
-#[cfg(test)]
-use lilo_im_store::SqliteAuditSink;
 use lilo_rm_core::{
     CaptureError, CaptureRequest, CaptureResponse, EventsRequest, KillByPidRequest,
     KillByPidResponse, KillOutcome, KillRequest, LaunchSpec, Lifecycle, LifecycleLogAvailability,
@@ -50,11 +48,12 @@ pub(crate) struct ServerState {
 
 impl ServerState {
     #[cfg(test)]
-    pub(crate) fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
-        let identity = IdentityClient::new(
-            SqliteAuditSink::with_pool(store.pool().clone()),
-            lilo_sys::creds::current_uid(),
-        );
+    pub(crate) async fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
+        // Build the test identity from the same database the store opened so
+        // audit writes land in the unified DB, without reaching the store's
+        // now crate-private SQLite pool across the crate boundary.
+        let db = lilo_db::LiloDb::open_path(&config.store.db_path).await?;
+        let identity = IdentityClient::from_db(&db, lilo_sys::creds::current_uid());
         Self::new_with_identity(config, store, identity)
     }
 

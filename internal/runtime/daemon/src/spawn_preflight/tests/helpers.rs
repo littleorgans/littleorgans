@@ -69,7 +69,7 @@ async fn test_state_with_docker_config(
     let db = lilo_db::LiloDb::open_path(temp.join("rtm.sqlite"))
         .await
         .expect("store db");
-    let store = LifecycleStore::open(&db);
+    let store = LifecycleStore::from_db(&db);
     Arc::new(
         ServerState::new(
             DaemonConfig {
@@ -85,7 +85,7 @@ async fn test_state_with_docker_config(
             },
             store,
         )
-        .expect("state"),
+        .await.expect("state"),
     )
 }
 

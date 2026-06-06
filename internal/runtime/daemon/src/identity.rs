@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use lilo_common::id::SessionId;
-use lilo_db::{begin_immediate_tx, finish_immediate_tx};
+use lilo_db::finish_immediate_pool_tx;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_rm_core::{RuntimeKind, RuntimeRpc, SpawnRequest, StatusRequest};
@@ -38,27 +38,25 @@ async fn authorize_runtime_spawn(
     principal: &Principal,
     request: &SpawnRequest,
 ) -> Result<()> {
-    let mut conn = state
+    let mut tx = state
         .store()
-        .pool()
-        .acquire()
+        .begin_immediate_tx()
         .await
         .context("failed to acquire runtime spawn authorization connection")?;
-    begin_immediate_tx(&mut conn, "runtime spawn authorization").await?;
     let result = state
         .identity()
         .authorize_in_tx(
-            &mut conn,
+            &mut tx,
             principal,
             Action::Spawn,
             &runtime_spawn_resource(request),
         )
         .await;
-    if let Err(error) = result {
-        finish_immediate_tx(&mut conn, Ok(()), "runtime spawn authorization").await?;
-        return Err(error);
-    }
-    finish_immediate_tx(&mut conn, Ok(()), "runtime spawn authorization").await
+    // Commit the audit row that authorize_in_tx wrote, regardless of the
+    // decision, then surface the decision. One begin, one finish, both
+    // pool-scoped: never mix in the connection-scoped helpers on this handle.
+    finish_immediate_pool_tx(tx, Ok::<(), anyhow::Error>(())).await?;
+    result
 }
 
 async fn authorize_shim_callback(

@@ -165,7 +165,7 @@ impl TestState {
         let db = lilo_db::LiloDb::open_path(&store_config.db_path)
             .await
             .expect("store db");
-        let store = LifecycleStore::open(&db);
+        let store = LifecycleStore::from_db(&db);
         let server = ServerState::new(
             DaemonConfig {
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm-test.sock"),
@@ -178,6 +178,7 @@ impl TestState {
             },
             store,
         )
+        .await
         .expect("state");
         Self {
             server,

@@ -41,7 +41,7 @@ pub(crate) fn prepare_runtime_bootstrap(
     lilo_runtime_launchers::warm_registry().context("failed to initialize launcher registry")?;
     Ok(RuntimeBootstrap {
         socket_path: config.socket_path()?.to_path_buf(),
-        store: LifecycleStore::open(db),
+        store: LifecycleStore::from_db(db),
         identity: IdentityClient::from_db(db, local_uid),
     })
 }
