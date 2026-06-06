@@ -100,10 +100,6 @@ impl LiloPaths {
         self.run_root().join("lilod.pid")
     }
 
-    pub fn db_path(&self) -> PathBuf {
-        self.data_root().join("lilo.db")
-    }
-
     pub fn settings_path(&self) -> PathBuf {
         self.home.join("settings.toml")
     }
@@ -213,10 +209,6 @@ mod tests {
             paths.pid_path(),
             PathBuf::from(DEFAULT_HOME).join("run/lilod.pid")
         );
-        assert_eq!(
-            paths.db_path(),
-            PathBuf::from(DEFAULT_HOME).join("data/lilo.db")
-        );
     }
 
     #[test]
@@ -311,7 +303,6 @@ mod tests {
         assert_eq!(paths.tmp_root(), root.join("tmp"));
         assert_eq!(paths.socket_path(), root.join("run/lilod.sock"));
         assert_eq!(paths.pid_path(), root.join("run/lilod.pid"));
-        assert_eq!(paths.db_path(), root.join("data/lilo.db"));
         assert_eq!(
             paths.events_log_path(),
             root.join("data/events/runtime.jsonl")

@@ -6,7 +6,6 @@ use lilo_rm_core::{RuntimeResponse, RuntimeRpc};
 use lilo_runtime_daemon::{
     DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig, run_daemon,
 };
-use lilo_runtime_store::StoreConfig;
 use tokio::net::UnixStream;
 use tokio::task::JoinHandle;
 
@@ -41,9 +40,7 @@ impl TestDaemon {
             endpoint: lilo_paths::RuntimeEndpoint::unix_socket(socket_path.clone()),
             shim_path: std::env::current_exe().expect("current test executable"),
             log_root: tempdir.path().join("logs"),
-            store: StoreConfig {
-                db_path: tempdir.path().join("rtm.sqlite"),
-            },
+            data_root: tempdir.path().to_path_buf(),
             reconcile: ReconcileConfig::default(),
             docker_preflight: DockerPreflightConfig::default(),
             tmux_server_label: None,

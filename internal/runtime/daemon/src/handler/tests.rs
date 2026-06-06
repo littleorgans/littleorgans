@@ -13,7 +13,7 @@ use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, KillRequest, RuntimeExit, RuntimeKind, RuntimeResponse,
     RuntimeRpc, RuntimeSignal, ShimExit, ShimLaunchRequest, ShimReady, SpawnRequest, SpawnTarget,
 };
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 
 use crate::server::ServerState;
 use crate::{DaemonConfig, ReconcileConfig, docker_preflight::DockerPreflightConfig};
@@ -172,9 +172,7 @@ fn config(paths: &LiloPaths, temp: &Path) -> DaemonConfig {
         endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
         shim_path: temp.join("missing-shim"),
         log_root: paths.logs_root(),
-        store: StoreConfig {
-            db_path: paths.db_path(),
-        },
+        data_root: paths.data_root(),
         reconcile: ReconcileConfig::default(),
         docker_preflight: DockerPreflightConfig::default(),
         tmux_server_label: None,

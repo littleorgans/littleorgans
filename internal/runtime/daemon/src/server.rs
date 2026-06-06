@@ -22,7 +22,7 @@ use {
         LogsUnavailableReason, LostEvidence, NudgeFailureReason, NudgeOutcome, NudgeRequest,
         NudgeResponse, RuntimeExit, RuntimeSignal, ShimReady, StatusFilter,
     },
-    lilo_runtime_store::{LifecycleStore, StoreConfig},
+    lilo_runtime_store::LifecycleStore,
     std::path::PathBuf,
 };
 

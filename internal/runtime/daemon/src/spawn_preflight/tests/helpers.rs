@@ -77,9 +77,7 @@ async fn test_state_with_docker_config(
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket(temp.join("rtm.sock")),
                 shim_path: temp.join("rtm"),
                 log_root: temp.join("logs"),
-                store: StoreConfig {
-                    db_path: temp.join("rtm.sqlite"),
-                },
+                data_root: temp.clone(),
                 reconcile: ReconcileConfig::default(),
                 docker_preflight,
                 tmux_server_label: None,

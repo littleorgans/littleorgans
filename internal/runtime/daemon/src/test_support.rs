@@ -4,7 +4,6 @@ use std::path::Path;
 use crate::{DaemonConfig, ReconcileConfig, RuntimeServiceContext};
 use lilo_db::test_support::TestDb;
 use lilo_paths::{LiloHome, LiloPaths};
-use lilo_runtime_store::StoreConfig;
 
 pub(crate) struct RuntimeServiceFixture {
     pub(crate) dir: tempfile::TempDir,
@@ -20,9 +19,7 @@ impl RuntimeServiceFixture {
             endpoint: lilo_paths::RuntimeEndpoint::unix_socket(paths.socket_path()),
             shim_path: dir.path().join("shim"),
             log_root: paths.logs_root(),
-            store: StoreConfig {
-                db_path: paths.db_path(),
-            },
+            data_root: paths.data_root(),
             reconcile,
             docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
             tmux_server_label: None,
