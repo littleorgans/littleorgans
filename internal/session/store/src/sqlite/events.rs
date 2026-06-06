@@ -1,6 +1,6 @@
 use chrono::Utc;
 use lilo_rm_core::{EventCursor, LostEvidence, RuntimeEvent, TerminationEvidence};
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{Postgres, Row, Transaction};
 
 use super::SessionStore;
 
@@ -35,7 +35,7 @@ impl SessionStore {
 }
 
 async fn apply_runtime_event(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut Transaction<'_, Postgres>,
     event: &RuntimeEvent,
 ) -> sqlx::Result<()> {
     match event {
@@ -46,18 +46,18 @@ async fn apply_runtime_event(
         } => sqlx::query(
             "UPDATE session_sessions
              SET state = 'RUNNING',
-                 runtime_pid = ?,
-                 started_at = ?,
-                 updated_at = ?
-             WHERE id = ?
+                 runtime_pid = $1,
+                 started_at = $2,
+                 updated_at = $3
+             WHERE id = $4
                AND state IN ('SPAWNING', 'RUNNING')
-               AND (state = 'SPAWNING' OR runtime_pid != ?)",
+               AND (state = 'SPAWNING' OR runtime_pid != $5)",
         )
-        .bind(runtime_pid)
-        .bind(start_time.to_rfc3339())
-        .bind(Utc::now().to_rfc3339())
+        .bind(i64::from(*runtime_pid))
+        .bind(start_time)
+        .bind(Utc::now())
         .bind(session_id.to_string())
-        .bind(runtime_pid)
+        .bind(i64::from(*runtime_pid))
         .execute(&mut **transaction)
         .await?
         .rows_affected(),
@@ -70,20 +70,20 @@ async fn apply_runtime_event(
             if let TerminationEvidence::Lost(lost_evidence) = evidence {
                 mark_lost(transaction, &session_id.to_string(), *lost_evidence).await?
             } else {
-                let now = Utc::now().to_rfc3339();
+                let now = Utc::now();
                 sqlx::query(
                     "UPDATE session_sessions
              SET state = 'TERMINATED',
                  lost_evidence = NULL,
-                 exit_code = ?,
-                 terminated_at = ?,
-                 updated_at = ?
-             WHERE id = ?
+                 exit_code = $1,
+                 terminated_at = $2,
+                 updated_at = $3
+             WHERE id = $4
                AND state IN ('SPAWNING', 'RUNNING')",
                 )
-                .bind(exit_code)
-                .bind(&now)
-                .bind(&now)
+                .bind(exit_code.map(i64::from))
+                .bind(now)
+                .bind(now)
                 .bind(session_id.to_string())
                 .execute(&mut **transaction)
                 .await?
@@ -99,20 +99,20 @@ async fn apply_runtime_event(
 }
 
 async fn mark_lost(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut Transaction<'_, Postgres>,
     session_id: &str,
     evidence: LostEvidence,
 ) -> sqlx::Result<u64> {
     let result = sqlx::query(
         "UPDATE session_sessions
          SET state = 'LOST',
-             lost_evidence = ?,
-             updated_at = ?
-         WHERE id = ?
+             lost_evidence = $1,
+             updated_at = $2
+         WHERE id = $3
            AND state IN ('SPAWNING', 'RUNNING')",
     )
     .bind(lost_evidence_to_sql(evidence))
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now())
     .bind(session_id)
     .execute(&mut **transaction)
     .await?;
@@ -120,18 +120,18 @@ async fn mark_lost(
 }
 
 async fn write_cursor(
-    transaction: &mut Transaction<'_, Sqlite>,
+    transaction: &mut Transaction<'_, Postgres>,
     cursor: EventCursor,
 ) -> sqlx::Result<()> {
     sqlx::query(
         "INSERT INTO session_event_cursor (id, cursor, updated_at)
-         VALUES (1, ?, ?)
+         VALUES (1, $1, $2)
          ON CONFLICT(id) DO UPDATE
          SET cursor = excluded.cursor,
              updated_at = excluded.updated_at",
     )
     .bind(cursor.to_be_bytes().to_vec())
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now())
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -169,6 +169,7 @@ fn decode_cursor(value: &[u8]) -> sqlx::Result<EventCursor> {
 mod tests {
     use crate::test_support::{ErrOrPanic as _, OrPanic as _};
     use chrono::Utc;
+    use lilo_db::test_support::TestDb;
     use lilo_rm_core::{RuntimeEvent, TerminationEvidence};
     use lilo_session_core::SessionState;
 
@@ -176,8 +177,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn applies_runtime_events_and_cursor_atomically() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let session = running_session("general", "test");
         store
             .insert_session(&session)
@@ -216,11 +219,14 @@ mod tests {
             store.event_cursor().await.or_panic("cursor loads"),
             Some(42)
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn duplicate_running_event_keeps_existing_running_session_timestamps() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let session = running_session("general", "test");
         let original_started_at = session.started_at;
         let original_updated_at = session.updated_at;
@@ -253,11 +259,14 @@ mod tests {
             store.event_cursor().await.or_panic("cursor loads"),
             Some(43)
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn persists_lost_evidence_from_runtime_events() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let session = running_session("general", "test");
         store
             .insert_session(&session)
@@ -287,22 +296,33 @@ mod tests {
             }
         );
         assert_eq!(store.event_cursor().await.or_panic("cursor loads"), Some(9));
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn rolls_back_events_when_cursor_write_fails() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let session = running_session("general", "test");
         store
             .insert_session(&session)
             .await
             .or_panic("session inserts");
         sqlx::query(
+            "CREATE FUNCTION fail_event_cursor_insert() RETURNS trigger AS $$
+                 BEGIN
+                     RAISE EXCEPTION 'cursor write failed';
+                 END;
+             $$ LANGUAGE plpgsql",
+        )
+        .execute(store.pool())
+        .await
+        .or_panic("trigger function creates");
+        sqlx::query(
             "CREATE TRIGGER fail_event_cursor_insert
                  BEFORE INSERT ON session_event_cursor
-                 BEGIN
-                     SELECT RAISE(ABORT, 'cursor write failed');
-                 END",
+                 FOR EACH ROW EXECUTE FUNCTION fail_event_cursor_insert()",
         )
         .execute(store.pool())
         .await
@@ -330,11 +350,14 @@ mod tests {
         assert_eq!(unchanged.state, SessionState::Running);
         assert_eq!(unchanged.exit_code, None);
         assert_eq!(store.event_cursor().await.or_panic("cursor loads"), None);
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn applies_cursor_without_events() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
 
         store.apply_cursor(77).await.or_panic("cursor applies");
 
@@ -342,28 +365,24 @@ mod tests {
             store.event_cursor().await.or_panic("cursor loads"),
             Some(77)
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
-    async fn persists_cursor_across_reopen() {
-        let dir = tempfile::tempdir().or_panic("tempdir creates");
-        let db_path = dir.path().join("store.sqlite");
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+    async fn persists_cursor_across_store_handles() {
+        let testdb = TestDb::create().await.or_panic("test db creates");
         {
-            let db = lilo_db::LiloDb::open_path(&db_path)
-                .await
-                .or_panic("db opens");
-            let store = SessionStore::from_db(&db);
+            let store = SessionStore::from_db(testdb.db());
             store.apply_cursor(42).await.or_panic("cursor applies");
         }
 
-        let db = lilo_db::LiloDb::open_path(&db_path)
-            .await
-            .or_panic("db reopens");
-        let store = SessionStore::from_db(&db);
+        let store = SessionStore::from_db(testdb.db());
 
         assert_eq!(
             store.event_cursor().await.or_panic("cursor loads"),
             Some(42)
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 }

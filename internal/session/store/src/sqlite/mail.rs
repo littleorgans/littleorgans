@@ -3,14 +3,12 @@ use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
 use lilo_common::id::{MessageId, SessionId};
-use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
 use lilo_session_core::{Mail, MailIntent, MailStatus, SenderRef, SmError};
-use sqlx::sqlite::SqliteRow;
-use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
+use sqlx::postgres::PgRow;
+use sqlx::{PgConnection, Postgres, QueryBuilder, Row};
 use thiserror::Error;
 
 use super::SessionStore;
-use super::time::{parse_optional_timestamp, parse_timestamp};
 
 #[derive(Debug, Error)]
 pub enum MailRowError {
@@ -61,17 +59,40 @@ impl SessionStore {
             });
         }
         let sender_ref = serde_json::to_string(&mail.sender)?;
-        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        // SELECT-then-INSERT idempotency relies on the partial unique index.
+        // Under READ COMMITTED two concurrent senders can both pass the SELECT
+        // and race to INSERT; the loser trips the unique constraint. Treat that
+        // as the concurrent-duplicate case and retry once, where the SELECT now
+        // observes the committed row and collapses to a replay.
+        match self
+            .try_insert_mail_for_recipients(mail, &sender_ref, recipient_ids)
+            .await
+        {
+            Err(MailRowError::Sqlite(error)) if is_idempotency_conflict(&error) => {
+                self.try_insert_mail_for_recipients(mail, &sender_ref, recipient_ids)
+                    .await
+            }
+            other => other,
+        }
+    }
+
+    async fn try_insert_mail_for_recipients(
+        &self,
+        mail: &Mail,
+        sender_ref: &str,
+        recipient_ids: &[SessionId],
+    ) -> Result<MailWriteOutcome, MailRowError> {
+        let mut transaction = self.pool.begin().await?;
         let result: Result<MailWriteOutcome, MailRowError> = async {
             if let Some(replay) =
-                load_idempotent_replay(&mut transaction, &sender_ref, mail, recipient_ids).await?
+                load_idempotent_replay(&mut transaction, sender_ref, mail, recipient_ids).await?
             {
                 return Ok(MailWriteOutcome {
                     mail: replay,
                     inserted: false,
                 });
             }
-            insert_message(&mut transaction, mail, &sender_ref).await?;
+            insert_message(&mut transaction, mail, sender_ref).await?;
             insert_deliveries(&mut transaction, mail, recipient_ids).await?;
             Ok(MailWriteOutcome {
                 mail: mail_for_recipients(mail, recipient_ids),
@@ -79,7 +100,7 @@ impl SessionStore {
             })
         }
         .await;
-        finish_immediate_pool_tx(transaction, result).await
+        lilo_db::commit_or_rollback(transaction, result).await
     }
 
     pub async fn idempotent_mail_for_recipients(
@@ -99,7 +120,7 @@ impl SessionStore {
         let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*)
              FROM message_deliveries
-             WHERE recipient_session_id = ?
+             WHERE recipient_session_id = $1
                AND status = 'unread'",
         )
         .bind(recipient_id.to_string())
@@ -118,18 +139,18 @@ impl SessionStore {
             return fetch_unread(&self.pool, recipient_id).await;
         }
 
-        let mut transaction = begin_immediate_pool_tx(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
         let result: Result<Vec<Mail>, MailRowError> = async {
             let mail = fetch_unread(&mut *transaction, recipient_id).await?;
             for item in &mail {
                 sqlx::query(
                     "UPDATE message_deliveries
-                     SET status = 'read', read_at = ?
-                     WHERE message_id = ?
-                       AND recipient_session_id = ?
+                     SET status = 'read', read_at = $1
+                     WHERE message_id = $2
+                       AND recipient_session_id = $3
                        AND status = 'unread'",
                 )
-                .bind(read_at.to_rfc3339())
+                .bind(read_at)
                 .bind(item.id.to_string())
                 .bind(recipient_id.to_string())
                 .execute(&mut *transaction)
@@ -138,7 +159,7 @@ impl SessionStore {
             Ok(mail)
         }
         .await;
-        let mut mail = finish_immediate_pool_tx(transaction, result).await?;
+        let mut mail = lilo_db::commit_or_rollback(transaction, result).await?;
         for item in &mut mail {
             item.read_at = Some(read_at);
         }
@@ -146,16 +167,16 @@ impl SessionStore {
     }
 
     pub async fn count_conversation_depth(&self, context_id: &str) -> Result<usize, MailRowError> {
-        count_query(
-            self.pool(),
+        let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*)
              FROM messages
-             WHERE context_id = ?
+             WHERE context_id = $1
                AND intent != 'receipt'",
-            [context_id.to_string()],
-            "conversation_depth",
         )
-        .await
+        .bind(context_id)
+        .fetch_one(&self.pool)
+        .await?;
+        usize::try_from(count).map_err(|_| integer_out_of_range("conversation_depth", count))
     }
 
     pub async fn count_sender_rate_since(
@@ -163,17 +184,18 @@ impl SessionStore {
         sender: &SenderRef,
         since: DateTime<Utc>,
     ) -> Result<usize, MailRowError> {
-        count_query(
-            self.pool(),
+        let count = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*)
              FROM messages
-             WHERE sender_ref = ?
+             WHERE sender_ref = $1
                AND intent != 'receipt'
-               AND sent_at >= ?",
-            [serde_json::to_string(sender)?, since.to_rfc3339()],
-            "sender_rate",
+               AND sent_at >= $2",
         )
-        .await
+        .bind(serde_json::to_string(sender)?)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await?;
+        usize::try_from(count).map_err(|_| integer_out_of_range("sender_rate", count))
     }
 
     pub async fn list_message_log(
@@ -191,7 +213,7 @@ impl SessionStore {
         }
 
         let sender_refs = participant_sender_refs(participant_ids)?;
-        let mut query = QueryBuilder::<Sqlite>::new(MESSAGE_LOG_SELECT_SQL);
+        let mut query = QueryBuilder::<Postgres>::new(MESSAGE_LOG_SELECT_SQL);
         if let Some(context_id) = context_id {
             query.push(" AND m.context_id = ");
             query.push_bind(context_id);
@@ -212,9 +234,9 @@ impl SessionStore {
             query.push(")");
         }
         if let Some((sent_at, message_id)) = after {
-            let sent_at = sent_at.to_rfc3339();
+            let sent_at = *sent_at;
             query.push(" AND (m.sent_at > ");
-            query.push_bind(sent_at.clone());
+            query.push_bind(sent_at);
             query.push(" OR (m.sent_at = ");
             query.push_bind(sent_at);
             query.push(" AND m.message_id > ");
@@ -234,14 +256,14 @@ pub struct MailWriteOutcome {
 }
 
 async fn insert_message(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     mail: &Mail,
     sender_ref: &str,
 ) -> Result<(), MailRowError> {
     sqlx::query(
         "INSERT INTO messages
          (message_id, sender_ref, context_id, intent, idempotency_key, content, sent_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(mail.id.to_string())
     .bind(sender_ref)
@@ -249,14 +271,14 @@ async fn insert_message(
     .bind(mail.intent.to_string())
     .bind(&mail.idempotency_key)
     .bind(&mail.content)
-    .bind(mail.sent_at.to_rfc3339())
+    .bind(mail.sent_at)
     .execute(&mut *transaction)
     .await?;
     Ok(())
 }
 
 async fn insert_deliveries(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     mail: &Mail,
     recipient_ids: &[SessionId],
 ) -> Result<(), MailRowError> {
@@ -264,26 +286,26 @@ async fn insert_deliveries(
         sqlx::query(
             "INSERT INTO message_deliveries
              (message_id, recipient_session_id, status, read_at)
-             VALUES (?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4)",
         )
         .bind(mail.id.to_string())
         .bind(recipient_id.to_string())
         .bind(mail.status.to_string())
-        .bind(mail.read_at.map(|timestamp| timestamp.to_rfc3339()))
+        .bind(mail.read_at)
         .execute(&mut *transaction)
         .await?;
     }
     Ok(())
 }
 
-fn mail_from_row(row: &SqliteRow) -> Result<Mail, MailRowError> {
+fn mail_from_row(row: &PgRow) -> Result<Mail, MailRowError> {
     Ok(Mail {
         id: row.try_get::<String, _>("id")?.parse()?,
         sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
         recipient_id: row.try_get::<String, _>("recipient_id")?.parse()?,
         content: row.try_get("content")?,
-        sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
-        read_at: parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?,
+        sent_at: row.try_get::<DateTime<Utc>, _>("sent_at")?,
+        read_at: row.try_get::<Option<DateTime<Utc>>, _>("read_at")?,
         status: MailStatus::from_str(&row.try_get::<String, _>("status")?)?,
         context_id: row.try_get("context_id")?,
         intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
@@ -325,7 +347,7 @@ impl StoredMessage {
 }
 
 async fn load_idempotent_replay(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     sender_ref: &str,
     mail: &Mail,
     recipient_ids: &[SessionId],
@@ -343,15 +365,15 @@ async fn load_idempotent_replay(
 }
 
 async fn message_by_idempotency(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     sender_ref: &str,
     key: &str,
 ) -> Result<Option<StoredMessage>, MailRowError> {
     sqlx::query(
         "SELECT message_id AS id, sender_ref, content, sent_at, context_id, intent, idempotency_key
          FROM messages
-         WHERE sender_ref = ?
-           AND idempotency_key = ?",
+         WHERE sender_ref = $1
+           AND idempotency_key = $2",
     )
     .bind(sender_ref)
     .bind(key)
@@ -362,7 +384,7 @@ async fn message_by_idempotency(
 }
 
 async fn validate_idempotent_replay(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     existing: &StoredMessage,
     mail: &Mail,
     recipient_ids: &[SessionId],
@@ -384,13 +406,13 @@ async fn validate_idempotent_replay(
 }
 
 async fn recipient_set_for_message(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     message_id: &MessageId,
 ) -> Result<BTreeSet<String>, MailRowError> {
     let rows = sqlx::query_scalar::<_, String>(
         "SELECT recipient_session_id
          FROM message_deliveries
-         WHERE message_id = ?",
+         WHERE message_id = $1",
     )
     .bind(message_id.to_string())
     .fetch_all(&mut *transaction)
@@ -403,7 +425,7 @@ fn recipient_set(recipient_ids: &[SessionId]) -> BTreeSet<String> {
 }
 
 async fn load_message_deliveries(
-    transaction: &mut SqliteConnection,
+    transaction: &mut PgConnection,
     message: &StoredMessage,
     recipient_ids: &[SessionId],
 ) -> Result<Vec<Mail>, MailRowError> {
@@ -412,14 +434,14 @@ async fn load_message_deliveries(
         let row = sqlx::query(
             "SELECT read_at, status
              FROM message_deliveries
-             WHERE message_id = ?
-               AND recipient_session_id = ?",
+             WHERE message_id = $1
+               AND recipient_session_id = $2",
         )
         .bind(message.id.to_string())
         .bind(recipient_id.to_string())
         .fetch_one(&mut *transaction)
         .await?;
-        let read_at = parse_optional_timestamp(row.try_get::<Option<String>, _>("read_at")?)?;
+        let read_at = row.try_get::<Option<DateTime<Utc>>, _>("read_at")?;
         let status = MailStatus::from_str(&row.try_get::<String, _>("status")?)?;
         mail.push(message.to_mail(*recipient_id, read_at, status));
     }
@@ -446,12 +468,12 @@ pub(super) async fn mark_unread_undeliverable<'e, E>(
     recipient_id: &SessionId,
 ) -> Result<(), sqlx::Error>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     sqlx::query(
         "UPDATE message_deliveries
          SET status = 'undeliverable'
-         WHERE recipient_session_id = ?
+         WHERE recipient_session_id = $1
            AND status = 'unread'",
     )
     .bind(recipient_id.to_string())
@@ -465,7 +487,7 @@ async fn fetch_unread<'e, E>(
     recipient_id: &SessionId,
 ) -> Result<Vec<Mail>, MailRowError>
 where
-    E: sqlx::Executor<'e, Database = Sqlite>,
+    E: sqlx::Executor<'e, Database = Postgres>,
 {
     let rows = sqlx::query(UNREAD_MAIL_SQL)
         .bind(recipient_id.to_string())
@@ -487,7 +509,7 @@ const UNREAD_MAIL_SQL: &str = "
            m.idempotency_key
     FROM message_deliveries d
     JOIN messages m ON m.message_id = d.message_id
-    WHERE d.recipient_session_id = ?
+    WHERE d.recipient_session_id = $1
       AND d.status = 'unread'
     ORDER BY m.sent_at, m.message_id
 ";
@@ -508,31 +530,28 @@ const MESSAGE_LOG_SELECT_SQL: &str = "
     WHERE 1 = 1
 ";
 
-fn stored_message_from_row(row: &SqliteRow) -> Result<StoredMessage, MailRowError> {
+fn stored_message_from_row(row: &PgRow) -> Result<StoredMessage, MailRowError> {
     Ok(StoredMessage {
         id: row.try_get::<String, _>("id")?.parse()?,
         sender: serde_json::from_str::<SenderRef>(&row.try_get::<String, _>("sender_ref")?)?,
         content: row.try_get("content")?,
-        sent_at: parse_timestamp(&row.try_get::<String, _>("sent_at")?)?,
+        sent_at: row.try_get::<DateTime<Utc>, _>("sent_at")?,
         context_id: row.try_get("context_id")?,
         intent: MailIntent::from_str(&row.try_get::<String, _>("intent")?)?,
         idempotency_key: row.try_get("idempotency_key")?,
     })
 }
 
-async fn count_query<const N: usize>(
-    pool: &sqlx::SqlitePool,
-    sql: &str,
-    params: [String; N],
-    field: &'static str,
-) -> Result<usize, MailRowError> {
-    let mut query = sqlx::query_scalar::<_, i64>(sql);
-    for param in params {
-        query = query.bind(param);
-    }
-    let count = query.fetch_one(pool).await?;
-    usize::try_from(count).map_err(|_| integer_out_of_range(field, count))
+/// True when `error` is a unique-constraint violation on the message
+/// idempotency index, i.e. a concurrent sender won the INSERT race. Scoped to
+/// that constraint so other unique violations still surface as hard errors.
+fn is_idempotency_conflict(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .is_some_and(|db| db.is_unique_violation() && db.constraint() == Some(IDEMPOTENCY_INDEX))
 }
+
+const IDEMPOTENCY_INDEX: &str = "idx_messages_sender_idempotency";
 
 fn integer_out_of_range(field: &'static str, value: i64) -> MailRowError {
     MailRowError::IntegerOutOfRange { field, value }
@@ -548,14 +567,14 @@ fn participant_sender_refs(
         .collect()
 }
 
-fn push_session_id_binds(query: &mut QueryBuilder<'_, Sqlite>, ids: &[SessionId]) {
+fn push_session_id_binds(query: &mut QueryBuilder<'_, Postgres>, ids: &[SessionId]) {
     let mut separated = query.separated(", ");
     for id in ids {
         separated.push_bind(id.to_string());
     }
 }
 
-fn push_string_binds<'q>(query: &mut QueryBuilder<'q, Sqlite>, values: &'q [String]) {
+fn push_string_binds<'q>(query: &mut QueryBuilder<'q, Postgres>, values: &'q [String]) {
     let mut separated = query.separated(", ");
     for value in values {
         separated.push_bind(value);

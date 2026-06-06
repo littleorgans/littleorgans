@@ -1,13 +1,16 @@
 use chrono::{Duration, Utc};
 use lilo_common::id::{MessageId, SessionId};
+use lilo_db::test_support::TestDb;
 use lilo_session_core::{LostEvidence, Mail, MailIntent, MailStatus, SenderRef};
 
 use super::{MailRowError, SessionStore};
 use crate::test_support::OrPanic as _;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_round_trip_marks_read() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let mail = test_mail(
         SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         SessionId::from_uuid(uuid::Uuid::now_v7()),
@@ -39,11 +42,14 @@ async fn mail_round_trip_marks_read() {
             .or_panic("unread count"),
         0
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn peek_keeps_mail_unread() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let mail = test_mail(
         SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
         SessionId::from_uuid(uuid::Uuid::now_v7()),
@@ -66,11 +72,14 @@ async fn peek_keeps_mail_unread() {
             .or_panic("unread count"),
         1
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn idempotent_retry_collapses_to_existing_message() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let recipient_ids = [
         SessionId::from_uuid(uuid::Uuid::now_v7()),
@@ -106,11 +115,14 @@ async fn idempotent_retry_collapses_to_existing_message() {
     );
     assert_eq!(message_count(&store).await, 1);
     assert_eq!(delivery_count(&store).await, 2);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn concurrent_idempotent_sends_collapse_to_one_message() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let recipient_ids = [
         SessionId::from_uuid(uuid::Uuid::now_v7()),
@@ -164,11 +176,14 @@ async fn concurrent_idempotent_sends_collapse_to_one_message() {
     );
     assert_eq!(message_count(&store).await, 1);
     assert_eq!(delivery_count(&store).await, 2);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn idempotent_retry_with_different_recipients_conflicts() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let first_recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let second_recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -197,11 +212,14 @@ async fn idempotent_retry_with_different_recipients_conflicts() {
         .expect_err("recipient change conflicts");
     assert!(matches!(error, MailRowError::IdempotencyConflict { .. }));
     assert_eq!(message_count(&store).await, 1);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn unread_reads_order_by_sent_at_then_message_id() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let sent_at = Utc::now();
@@ -229,17 +247,20 @@ async fn unread_reads_order_by_sent_at_then_message_id() {
             .collect::<Vec<_>>(),
         vec!["first", "second"]
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn read_side_decode_error_does_not_mark_read() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let message_id = MessageId::from_uuid(uuid::Uuid::now_v7());
     let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     sqlx::query(
         "INSERT INTO messages
          (message_id, sender_ref, context_id, intent, idempotency_key, content, sent_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(message_id.to_string())
     .bind("not-json")
@@ -247,14 +268,14 @@ async fn read_side_decode_error_does_not_mark_read() {
     .bind("request")
     .bind(Option::<String>::None)
     .bind("broken")
-    .bind(Utc::now().to_rfc3339())
+    .bind(Utc::now())
     .execute(store.pool())
     .await
     .or_panic("message inserts");
     sqlx::query(
         "INSERT INTO message_deliveries
          (message_id, recipient_session_id, status, read_at)
-         VALUES (?, ?, 'unread', NULL)",
+         VALUES ($1, $2, 'unread', NULL)",
     )
     .bind(message_id.to_string())
     .bind(recipient_id.to_string())
@@ -274,11 +295,14 @@ async fn read_side_decode_error_does_not_mark_read() {
             .or_panic("unread count"),
         1
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn breaker_counts_exclude_receipts() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let sender = SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7()));
     let recipient_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let since = Utc::now() - Duration::seconds(1);
@@ -324,11 +348,14 @@ async fn breaker_counts_exclude_receipts() {
             .or_panic("rate counts"),
         1
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn terminating_recipient_marks_unread_mail_undeliverable() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let other = SessionId::from_uuid(uuid::Uuid::now_v7());
 
@@ -381,11 +408,14 @@ async fn terminating_recipient_marks_unread_mail_undeliverable() {
             .or_panic("other unread count"),
         1
     );
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn terminating_recipient_leaves_read_mail_read() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mail = test_mail(
         SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
@@ -411,11 +441,14 @@ async fn terminating_recipient_leaves_read_mail_read() {
         .or_panic("message log");
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].status, MailStatus::Read);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn losing_recipient_marks_unread_mail_undeliverable() {
-    let (_dir, store) = SessionStore::open_temp().await;
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
     let recipient = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mail = test_mail(
         SenderRef::session(SessionId::from_uuid(uuid::Uuid::now_v7())),
@@ -444,6 +477,7 @@ async fn losing_recipient_marks_unread_mail_undeliverable() {
         .or_panic("message log");
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].status, MailStatus::Undeliverable);
+    testdb.cleanup().await.or_panic("test db cleans up");
 }
 
 fn test_mail(

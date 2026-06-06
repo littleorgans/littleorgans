@@ -7,7 +7,6 @@ use sqlx::Row;
 use thiserror::Error;
 
 use super::SessionStore;
-use super::time::parse_timestamp;
 
 pub use lilo_session_core::NamespaceRecord;
 
@@ -35,13 +34,13 @@ pub enum NamespaceRowError {
 
 impl SessionStore {
     pub async fn namespace_exists(&self, namespace: &Namespace) -> Result<bool, NamespaceRowError> {
-        let exists = sqlx::query_scalar::<_, i64>(
-            "SELECT EXISTS(SELECT 1 FROM session_namespaces WHERE slug = ?)",
+        let exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM session_namespaces WHERE slug = $1)",
         )
         .bind(namespace.as_str())
         .fetch_one(&self.pool)
         .await?;
-        Ok(exists != 0)
+        Ok(exists)
     }
 
     pub async fn create_namespace(
@@ -51,17 +50,17 @@ impl SessionStore {
     ) -> Result<(), NamespaceRowError> {
         sqlx::query(
             "INSERT INTO session_namespaces (slug, created_at)
-             VALUES (?, ?)",
+             VALUES ($1, $2)",
         )
         .bind(namespace.as_str())
-        .bind(created_at.to_rfc3339())
+        .bind(created_at)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
     pub async fn delete_namespace(&self, namespace: &Namespace) -> Result<bool, NamespaceRowError> {
-        let changed = sqlx::query("DELETE FROM session_namespaces WHERE slug = ?")
+        let changed = sqlx::query("DELETE FROM session_namespaces WHERE slug = $1")
             .bind(namespace.as_str())
             .execute(&self.pool)
             .await?;
@@ -82,7 +81,7 @@ impl SessionStore {
             .collect::<Vec<_>>();
         let mut transaction = self.pool.begin().await?;
         for id in &session_ids {
-            sqlx::query("DELETE FROM session_labels WHERE session_id = ?")
+            sqlx::query("DELETE FROM session_labels WHERE session_id = $1")
                 .bind(id.to_string())
                 .execute(&mut *transaction)
                 .await?;
@@ -91,7 +90,7 @@ impl SessionStore {
         for id in &session_ids {
             gc_session_sender_messages(&mut transaction, id).await?;
         }
-        sqlx::query("DELETE FROM session_sessions WHERE namespace = ?")
+        sqlx::query("DELETE FROM session_sessions WHERE namespace = $1")
             .bind(namespace.as_str())
             .execute(&mut *transaction)
             .await?;
@@ -121,7 +120,7 @@ impl SessionStore {
             .map(|row| {
                 Ok(NamespaceRecord {
                     namespace: Namespace::new(row.try_get::<String, _>("slug")?)?,
-                    created_at: parse_timestamp(&row.try_get::<String, _>("created_at")?)?,
+                    created_at: row.try_get::<DateTime<Utc>, _>("created_at")?,
                 })
             })
             .collect()
@@ -131,7 +130,7 @@ impl SessionStore {
         &self,
         id: &SessionId,
     ) -> Result<Option<SessionNamespace>, NamespaceRowError> {
-        let raw = sqlx::query("SELECT namespace, dir FROM session_sessions WHERE id = ?")
+        let raw = sqlx::query("SELECT namespace, dir FROM session_sessions WHERE id = $1")
             .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await?
@@ -153,10 +152,10 @@ impl SessionStore {
 }
 
 async fn delete_recipient_deliveries(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: &SessionId,
 ) -> Result<(), NamespaceRowError> {
-    sqlx::query("DELETE FROM message_deliveries WHERE recipient_session_id = ?")
+    sqlx::query("DELETE FROM message_deliveries WHERE recipient_session_id = $1")
         .bind(session_id.to_string())
         .execute(&mut **transaction)
         .await?;
@@ -164,13 +163,13 @@ async fn delete_recipient_deliveries(
 }
 
 async fn gc_session_sender_messages(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     session_id: &SessionId,
 ) -> Result<(), NamespaceRowError> {
     let sender_ref = serde_json::to_string(&SenderRef::session(*session_id))?;
     sqlx::query(
         "DELETE FROM messages
-         WHERE sender_ref = ?
+         WHERE sender_ref = $1
            AND NOT EXISTS (
                SELECT 1
                FROM message_deliveries d
@@ -189,12 +188,15 @@ mod tests {
     use super::*;
     use crate::test_support::OrPanic as _;
     use lilo_common::id::MessageId;
+    use lilo_db::test_support::TestDb;
     use lilo_session_core::{DEFAULT_NAMESPACE, Mail, MailIntent, MailStatus};
     use serde_json::json;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn seeds_default_namespace_and_session_location() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let default_namespace = Namespace::default();
         let session = running_session("engineer", "/tmp/project");
 
@@ -229,11 +231,14 @@ mod tests {
                 dir: PathBuf::from("/tmp/project"),
             })
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn creates_and_lists_namespaces() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let namespace = Namespace::for_create("alpha").or_panic("namespace validates");
         let created_at = Utc::now();
 
@@ -262,11 +267,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["alpha", DEFAULT_NAMESPACE]
         );
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn namespace_delete_splits_delivery_cleanup_from_message_log_gc() {
-        let (_dir, store) = SessionStore::open_temp().await;
+        let testdb = TestDb::create().await.or_panic("test db creates");
+        let store = SessionStore::from_db(testdb.db());
         let namespace = Namespace::for_create("alpha").or_panic("namespace validates");
         store
             .create_namespace(&namespace, Utc::now())
@@ -323,6 +331,7 @@ mod tests {
         assert!(message_exists(&store, surviving.id).await);
         assert!(!message_exists(&store, gc_candidate.id).await);
         assert!(message_exists(&store, operator.id).await);
+        testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     fn mail_from(sender: SenderRef, recipient_id: SessionId, content: &str) -> Mail {
@@ -344,7 +353,7 @@ mod tests {
         sqlx::query_scalar(
             "SELECT COUNT(*)
              FROM message_deliveries
-             WHERE recipient_session_id = ?",
+             WHERE recipient_session_id = $1",
         )
         .bind(recipient_id.to_string())
         .fetch_one(store.pool())
@@ -353,17 +362,16 @@ mod tests {
     }
 
     async fn message_exists(store: &SessionStore, message_id: MessageId) -> bool {
-        sqlx::query_scalar::<_, i64>(
+        sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(
                 SELECT 1
                 FROM messages
-                WHERE message_id = ?
+                WHERE message_id = $1
              )",
         )
         .bind(message_id.to_string())
         .fetch_one(store.pool())
         .await
         .or_panic("message exists")
-            != 0
     }
 }

@@ -1,11 +1,11 @@
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use lilo_common::{id::SessionId, sql::WhereClause};
-use lilo_db::{ImmediateTx, LiloDb, begin_immediate_pool_tx};
+use lilo_db::{LiloDb, LiloTransaction};
 use lilo_rm_core::{
     Lifecycle, LifecycleCounts, LifecycleState, MigrationState, RecentLostEvent, StatusFilter,
 };
-use sqlx::{Executor, QueryBuilder, Sqlite, SqlitePool, query::Query, sqlite::SqliteArguments};
+use sqlx::{Executor, PgPool, Postgres, QueryBuilder, postgres::PgArguments, query::Query};
 
 use crate::schema;
 
@@ -13,7 +13,7 @@ mod codec;
 
 use codec::{
     EncodedLifecycle, LifecycleRow, RecentLostRow, STATE_LOST, STATE_RUNNING, StateCountRow,
-    count_lifecycle_state, encode_tmux_pane, parse_time,
+    count_lifecycle_state, encode_tmux_pane,
 };
 
 macro_rules! lifecycle_row_columns {
@@ -27,50 +27,48 @@ const LIFECYCLE_ROW_COLUMNS: &str = lifecycle_row_columns!();
 const INSERT_FORKING_SQL: &str = concat!(
     "INSERT INTO runtime_lifecycle (",
     lifecycle_row_columns!(),
-    ", spawned_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ", spawned_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)"
 );
 const UPDATE_LIFECYCLE_SQL: &str = "\
 UPDATE runtime_lifecycle
-SET runtime = ?,
-    isolation = ?,
-    state = ?,
-    shim_pid = ?,
-    runtime_pid = ?,
-    start_time = ?,
-    tmux_pane = ?,
-    exit_code = ?,
-    exit_signal = ?,
-    lost_evidence = ?,
-    updated_at = ?
-WHERE session_id = ?";
+SET runtime = $1,
+    isolation = $2,
+    state = $3,
+    shim_pid = $4,
+    runtime_pid = $5,
+    start_time = $6,
+    tmux_pane = $7,
+    exit_code = $8,
+    exit_signal = $9,
+    lost_evidence = $10,
+    updated_at = $11
+WHERE session_id = $12";
 const LAST_PROBE_SWEEP_KEY: &str = "last_probe_sweep_at";
 
 #[derive(Clone)]
 pub struct LifecycleStore {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl LifecycleStore {
     pub fn from_db(db: &LiloDb) -> Self {
-        let pool = db.runtime_pool().clone();
+        let pool = db.pool().clone();
         Self { pool }
     }
 
-    /// Transition: crate-private `SQLite` pool accessor for in-crate tests only
-    /// (Phase 2 removes `SQLite`). Not part of the cross-component surface.
+    /// Crate-private Postgres pool accessor for in-crate tests only. Not part of
+    /// the cross-component surface.
     #[cfg(test)]
-    pub(crate) fn pool(&self) -> &SqlitePool {
+    pub(crate) fn pool(&self) -> &PgPool {
         &self.pool
     }
 
-    /// Begin a pool-scoped immediate transaction for the shared spawn path.
+    /// Begin a pool-scoped transaction for the shared spawn path.
     ///
-    /// Returns the backend-neutral [`ImmediateTx`] handle threaded across
-    /// crates; the caller commits it with `finish_immediate_pool_tx`. Single
-    /// transaction mechanism for the spawn path: do not also call the
-    /// connection-scoped `begin_immediate_tx`/`finish_immediate_tx` on it.
-    pub async fn begin_immediate_tx(&self) -> sqlx::Result<ImmediateTx> {
-        begin_immediate_pool_tx(&self.pool).await
+    /// Returns the backend-neutral [`LiloTransaction`] handle threaded across
+    /// crates; the caller commits it with [`lilo_db::commit_or_rollback`].
+    pub async fn begin_tx(&self) -> sqlx::Result<LiloTransaction<'_>> {
+        self.pool.begin().await
     }
 
     pub async fn insert_forking(&self, lifecycle: &Lifecycle) -> Result<()> {
@@ -82,7 +80,7 @@ impl LifecycleStore {
 
     pub async fn insert_forking_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut LiloTransaction<'_>,
         lifecycle: &Lifecycle,
     ) -> Result<()> {
         if lifecycle.state != LifecycleState::Forking {
@@ -97,14 +95,14 @@ impl LifecycleStore {
 
     pub async fn update_lifecycle_in(
         &self,
-        tx: &mut ImmediateTx,
+        tx: &mut LiloTransaction<'_>,
         lifecycle: &Lifecycle,
     ) -> Result<()> {
         update_lifecycle_with(&mut **tx, lifecycle).await
     }
 
     pub async fn delete(&self, session_id: SessionId) -> Result<()> {
-        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
+        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = $1")
             .bind(session_id.to_string())
             .execute(&self.pool)
             .await
@@ -112,8 +110,12 @@ impl LifecycleStore {
         Ok(())
     }
 
-    pub async fn delete_in(&self, tx: &mut ImmediateTx, session_id: SessionId) -> Result<()> {
-        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = ?")
+    pub async fn delete_in(
+        &self,
+        tx: &mut LiloTransaction<'_>,
+        session_id: SessionId,
+    ) -> Result<()> {
+        sqlx::query("DELETE FROM runtime_lifecycle WHERE session_id = $1")
             .bind(session_id.to_string())
             .execute(&mut **tx)
             .await
@@ -163,7 +165,7 @@ impl LifecycleStore {
         if let Some(updated_since) = &filter.updated_since {
             query.push(where_clause.predicate_prefix());
             query.push("updated_at >= ");
-            query.push_bind(updated_since.to_rfc3339());
+            query.push_bind(*updated_since);
         }
         query.push(" ORDER BY spawned_at, session_id");
 
@@ -226,13 +228,11 @@ impl LifecycleStore {
     }
 
     pub async fn recent_lost_since(&self, since: DateTime<Utc>) -> Result<Vec<RecentLostEvent>> {
-        let mut query = QueryBuilder::<Sqlite>::new(
+        let mut query = QueryBuilder::<Postgres>::new(
             "SELECT session_id, lost_evidence, updated_at FROM runtime_lifecycle WHERE state = ",
         );
         query.push_bind(STATE_LOST);
-        query
-            .push(" AND updated_at >= ")
-            .push_bind(since.to_rfc3339());
+        query.push(" AND updated_at >= ").push_bind(since);
         query.push(" ORDER BY updated_at DESC, session_id");
         let rows = query
             .build_query_as::<RecentLostRow>()
@@ -243,19 +243,18 @@ impl LifecycleStore {
     }
 
     pub async fn record_probe_sweep(&self, swept_at: DateTime<Utc>) -> Result<()> {
-        let value = swept_at.to_rfc3339();
         sqlx::query(
             r"
             INSERT INTO runtime_metadata (key, value, updated_at)
-            VALUES (?, ?, ?)
+            VALUES ($1, $2, $3)
             ON CONFLICT(key) DO UPDATE SET
                 value = excluded.value,
                 updated_at = excluded.updated_at
             ",
         )
         .bind(LAST_PROBE_SWEEP_KEY)
-        .bind(value.clone())
-        .bind(value)
+        .bind(swept_at.to_rfc3339())
+        .bind(swept_at)
         .execute(&self.pool)
         .await
         .context("failed to record last probe sweep")?;
@@ -263,18 +262,18 @@ impl LifecycleStore {
     }
 
     pub async fn last_probe_sweep(&self) -> Result<Option<DateTime<Utc>>> {
-        let value = sqlx::query_scalar::<_, String>(
+        let swept_at = sqlx::query_scalar::<_, DateTime<Utc>>(
             r"
-            SELECT value
+            SELECT updated_at
             FROM runtime_metadata
-            WHERE key = ?
+            WHERE key = $1
             ",
         )
         .bind(LAST_PROBE_SWEEP_KEY)
         .fetch_optional(&self.pool)
         .await
         .context("failed to read last probe sweep")?;
-        value.map(|time| parse_time(&time)).transpose()
+        Ok(swept_at)
     }
 
     pub async fn migration_state(&self) -> Result<MigrationState> {
@@ -283,7 +282,7 @@ impl LifecycleStore {
             r"
             SELECT version
             FROM _sqlx_migrations
-            WHERE success = 1
+            WHERE success
             ORDER BY version
             ",
         )
@@ -315,16 +314,10 @@ impl LifecycleStore {
             .context("failed to reset lifecycle table")?;
         Ok(())
     }
-
-    #[cfg(test)]
-    pub async fn path_open(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        let db = LiloDb::open_path(path).await?;
-        Ok(Self::from_db(&db))
-    }
 }
 
-fn lifecycle_rows_query<'q>() -> QueryBuilder<'q, Sqlite> {
-    let mut query = QueryBuilder::<Sqlite>::new("SELECT ");
+fn lifecycle_rows_query<'q>() -> QueryBuilder<'q, Postgres> {
+    let mut query = QueryBuilder::<Postgres>::new("SELECT ");
     query.push(LIFECYCLE_ROW_COLUMNS);
     query.push(" FROM runtime_lifecycle");
     query
@@ -332,14 +325,14 @@ fn lifecycle_rows_query<'q>() -> QueryBuilder<'q, Sqlite> {
 
 async fn insert_forking_with<'e, E>(executor: E, lifecycle: &Lifecycle) -> Result<()>
 where
-    E: Executor<'e, Database = Sqlite>,
+    E: Executor<'e, Database = Postgres>,
 {
     let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
     bind_lifecycle_snapshot(
         sqlx::query(INSERT_FORKING_SQL).bind(encoded.session_id.clone()),
         &encoded,
     )
-    .bind(encoded.now.clone())
+    .bind(encoded.now)
     .bind(encoded.now)
     .execute(executor)
     .await
@@ -349,7 +342,7 @@ where
 
 async fn update_lifecycle_with<'e, E>(executor: E, lifecycle: &Lifecycle) -> Result<()>
 where
-    E: Executor<'e, Database = Sqlite>,
+    E: Executor<'e, Database = Postgres>,
 {
     let encoded = EncodedLifecycle::from_lifecycle(lifecycle)?;
     let result = bind_lifecycle_snapshot(sqlx::query(UPDATE_LIFECYCLE_SQL), &encoded)
@@ -365,16 +358,16 @@ where
 }
 
 fn bind_lifecycle_snapshot<'q>(
-    query: Query<'q, Sqlite, SqliteArguments<'q>>,
+    query: Query<'q, Postgres, PgArguments>,
     encoded: &EncodedLifecycle,
-) -> Query<'q, Sqlite, SqliteArguments<'q>> {
+) -> Query<'q, Postgres, PgArguments> {
     query
         .bind(encoded.runtime.clone())
         .bind(encoded.isolation.clone())
         .bind(encoded.state)
         .bind(encoded.shim_pid)
         .bind(encoded.runtime_pid)
-        .bind(encoded.start_time.clone())
+        .bind(encoded.start_time)
         .bind(encoded.tmux_pane.clone())
         .bind(encoded.exit_code)
         .bind(encoded.exit_signal)
