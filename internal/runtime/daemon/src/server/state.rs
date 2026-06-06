@@ -260,16 +260,25 @@ impl ServerState {
         }
     }
 
-    /// Await at least `min` event long-poll waiters (bounded by `timeout`), then
-    /// snapshot the watcher counts. Backs the `WaitWatchers` RPC so callers
-    /// observe waiter registration deterministically instead of polling.
+    /// Await at least `min` event long-poll waiters (bounded by `timeout`) and
+    /// report the counts. Backs the `WaitWatchers` RPC so callers observe waiter
+    /// registration deterministically instead of polling.
+    ///
+    /// Returns the `event_waiters` value OBSERVED when the wait resolved, not a
+    /// fresh re-read: a short-lived waiter can drop between satisfying the
+    /// threshold and a second snapshot, which would make the response race the
+    /// very transient the caller is trying to observe.
     pub(crate) async fn wait_for_event_waiters(
         &self,
         min: usize,
         timeout: std::time::Duration,
     ) -> WatcherCounts {
-        self.events.wait_for_min_event_waiters(min, timeout).await;
-        self.watcher_counts().await
+        let event_waiters = self.events.wait_for_min_event_waiters(min, timeout).await;
+        WatcherCounts {
+            process_exit_watchers: self.watchers.process_exit_watcher_count().await,
+            shim_sockets: self.spawn.pending_shim_socket_count().await,
+            event_waiters,
+        }
     }
 
     pub(crate) async fn start_exit_watcher(
