@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 #[test]
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
-fn pass4_restart_reconciles_sqlite_lifecycles() {
+fn pass4_restart_reconciles_lifecycles() {
     let mut harness = RtmHarness::start();
     let sid1 = Uuid::now_v7().to_string();
     let sid2 = Uuid::now_v7().to_string();

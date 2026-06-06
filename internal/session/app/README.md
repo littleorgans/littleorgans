@@ -21,7 +21,7 @@ lilo doctor
 lilo daemon stop
 ```
 
-The daemon uses `~/.lilo/run/lilod.pid`, `~/.lilo/run/lilod.sock`, and `~/.lilo/data/lilo.db` by default.
+The daemon uses `~/.lilo/run/lilod.pid` and `~/.lilo/run/lilod.sock` by default.
 Set `LILO_HOME` to use an alternate runtime directory.
 `lilod` composes session and runtime handling behind one local socket.
 

@@ -10,7 +10,7 @@ fn authz_error_display_is_stable() {
         },
         AuthzError::UnknownPrincipal,
         AuthzError::Audit {
-            message: "sqlite unavailable".to_owned(),
+            message: "database unavailable".to_owned(),
         },
         AuthzError::Internal {
             message: "peer credentials unavailable".to_owned(),
