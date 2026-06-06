@@ -1,6 +1,5 @@
 ---
 source: internal/runtime/app/tests/surface_snapshots.rs
-assertion_line: 67
 expression: snapshot
 ---
 {
@@ -58,9 +57,7 @@ expression: snapshot
         "session_id": "[uuid]"
       }
     ],
-    "recent_lost": [],
-    "socket_path": "[socket]",
-    "sqlite": {
+    "migrations": {
       "applied": 1,
       "applied_descriptions": [
         "unified schema"
@@ -68,6 +65,8 @@ expression: snapshot
       "pending_descriptions": [],
       "total": 1
     },
+    "recent_lost": [],
+    "socket_path": "[socket]",
     "tmux": {
       "available": "[tmux]",
       "error": "[launcher_error]",
@@ -91,7 +90,7 @@ expression: snapshot
         "nudge_wait_timeout"
       ],
       "git_sha": "[git_sha]",
-      "protocol_version": "0.7",
+      "protocol_version": "0.8",
       "version": "[version]"
     },
     "watchers": {
@@ -201,7 +200,7 @@ expression: snapshot
       "nudge_wait_timeout"
     ],
     "git_sha": "[git_sha]",
-    "protocol_version": "0.7",
+    "protocol_version": "0.8",
     "version": "[version]"
   }
 }

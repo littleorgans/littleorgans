@@ -118,7 +118,7 @@ pub(crate) fn assert_wait_and_doctor(mcp: &mut common::McpFixture, id: &str) {
     assert!(doctor["error"].is_null());
     assert_eq!(
         doctor["result"]["structuredContent"]["runtime"],
-        "rtmd (lilo-rm-client 0.7.x, protocol 0.7)"
+        "rtmd (lilo-rm-client 0.7.x, protocol 0.8)"
     );
     assert_eq!(
         doctor["result"]["structuredContent"]["runtime_matters"]["status"],

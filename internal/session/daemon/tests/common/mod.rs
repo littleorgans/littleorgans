@@ -444,7 +444,7 @@ pub fn runtime_doctor_response() -> lilo_rm_core::DoctorResponse {
         version: version_info(),
         socket_path: "/tmp/rtmd.sock".to_string(),
         uptime_secs: 7,
-        sqlite: MigrationState {
+        migrations: MigrationState {
             applied: 1,
             total: 1,
             applied_descriptions: vec!["init".to_string()],

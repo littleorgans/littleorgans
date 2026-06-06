@@ -50,7 +50,7 @@ pub fn doctor_response() -> DoctorResponse {
         version: test_version_info(),
         socket_path: "/tmp/rtmd.sock".to_owned(),
         uptime_secs: 12,
-        sqlite: MigrationState {
+        migrations: MigrationState {
             applied: 3,
             total: 3,
             applied_descriptions: vec![

@@ -262,7 +262,7 @@ fn doctor_payload() -> DoctorPayload {
             version: version_payload().version,
             socket_path: "/tmp/rtmd.sock".to_owned(),
             uptime_secs: 0,
-            sqlite: MigrationState {
+            migrations: MigrationState {
                 applied: 0,
                 total: 0,
                 applied_descriptions: Vec::new(),

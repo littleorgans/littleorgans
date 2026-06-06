@@ -204,7 +204,7 @@ fn runtime_pid(lifecycle: &Lifecycle) -> Result<u32, RuntimeError> {
 
 fn runtime_doctor_status(doctor: &RuntimeDoctorResponse) -> String {
     if doctor.version.protocol_version != RUNTIME_PROTOCOL_VERSION
-        || !doctor.sqlite.pending_descriptions.is_empty()
+        || !doctor.migrations.pending_descriptions.is_empty()
     {
         "degraded".to_string()
     } else {
@@ -360,7 +360,7 @@ mod tests {
             version: version_info(),
             socket_path: "sock".to_string(),
             uptime_secs: 0,
-            sqlite: MigrationState {
+            migrations: MigrationState {
                 applied: 1,
                 total: 1 + pending_descriptions.len(),
                 applied_descriptions: vec!["init".to_string()],

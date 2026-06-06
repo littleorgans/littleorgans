@@ -36,7 +36,7 @@ fn pass7_periodic_reconciliation_marks_lost_and_doctor_reports_it() {
     assert!(doctor.status.success(), "doctor failed: {doctor:?}");
     let doctor = output_stdout(doctor);
     assert!(doctor.contains("rtmd"), "{doctor}");
-    assert!(doctor.contains("sqlite"), "{doctor}");
+    assert!(doctor.contains("migrations"), "{doctor}");
     assert!(
         doctor.contains("applied migrations  1 of 1 (unified schema)"),
         "{doctor}"

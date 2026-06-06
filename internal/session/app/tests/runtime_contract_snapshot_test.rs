@@ -114,7 +114,7 @@ fn doctor_payload(session_id: SessionId) -> lilo_rm_core::DoctorResponse {
         version: VersionInfo::new("0.6.0", "0123456"),
         socket_path: "/tmp/rtm/sock".to_string(),
         uptime_secs: 12,
-        sqlite: MigrationState {
+        migrations: MigrationState {
             applied: 2,
             total: 2,
             applied_descriptions: vec!["lifecycle".to_string(), "events".to_string()],

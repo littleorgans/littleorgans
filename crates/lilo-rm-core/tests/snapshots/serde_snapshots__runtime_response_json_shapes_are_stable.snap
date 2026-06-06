@@ -1,6 +1,5 @@
 ---
 source: crates/lilo-rm-core/tests/serde_snapshots.rs
-assertion_line: 146
 expression: responses
 ---
 [
@@ -217,7 +216,7 @@ expression: responses
       "version": {
         "version": "0.1.6",
         "git_sha": "0123456",
-        "protocol_version": "0.7",
+        "protocol_version": "0.8",
         "capabilities": [
           "structured_protocol_errors",
           "headless_stdio_log_paths",
@@ -243,7 +242,7 @@ expression: responses
         "version": {
           "version": "0.1.6",
           "git_sha": "0123456",
-          "protocol_version": "0.7",
+          "protocol_version": "0.8",
           "capabilities": [
             "structured_protocol_errors",
             "headless_stdio_log_paths",
@@ -262,7 +261,7 @@ expression: responses
         },
         "socket_path": "/tmp/rtmd.sock",
         "uptime_secs": 12,
-        "sqlite": {
+        "migrations": {
           "applied": 3,
           "total": 3,
           "applied_descriptions": [

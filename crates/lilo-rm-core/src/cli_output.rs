@@ -55,19 +55,19 @@ impl CliOutput for DoctorResponse {
             "  uptime              {}",
             format_duration(self.uptime_secs)
         )?;
-        writeln!(f, "sqlite")?;
+        writeln!(f, "migrations")?;
         writeln!(
             f,
             "  applied migrations  {} of {} ({})",
-            self.sqlite.applied,
-            self.sqlite.total,
-            format_migrations(&self.sqlite.applied_descriptions)
+            self.migrations.applied,
+            self.migrations.total,
+            format_migrations(&self.migrations.applied_descriptions)
         )?;
-        if !self.sqlite.pending_descriptions.is_empty() {
+        if !self.migrations.pending_descriptions.is_empty() {
             writeln!(
                 f,
                 "  pending migrations  {}",
-                format_migrations(&self.sqlite.pending_descriptions)
+                format_migrations(&self.migrations.pending_descriptions)
             )?;
         }
         print_lifecycle_counts(f, &self.lifecycles)?;

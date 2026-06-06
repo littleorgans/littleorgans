@@ -1,15 +1,14 @@
 ---
 source: internal/runtime/app/tests/surface_snapshots.rs
-assertion_line: 76
 expression: normalize_doctor(&output_stdout(output))
 ---
 rtmd
   version             [version]
-  protocol            0.7
+  protocol            0.8
   capabilities        structured_protocol_errors, headless_stdio_log_paths, status_session_set_filter, status_updated_since_filter, typed_nudge_outcomes, validate_target_preflight, events_cursor, events_long_poll, tmux_pane_snapshot, kill_outcomes, spawn_conflicts, spawn_request_mounts, nudge_wait_timeout
   socket              [socket]
   uptime              [uptime]
-sqlite
+migrations
   applied migrations  1 of 1 (unified schema)
 lifecycles
   forking             0
