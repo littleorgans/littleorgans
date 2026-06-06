@@ -17,7 +17,7 @@ use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
 #[derive(Debug, Error)]
 pub enum SessionRowError {
     #[error(transparent)]
-    Sqlite(#[from] sqlx::Error),
+    Database(#[from] sqlx::Error),
     #[error(transparent)]
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]

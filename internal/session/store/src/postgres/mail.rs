@@ -13,7 +13,7 @@ use super::SessionStore;
 #[derive(Debug, Error)]
 pub enum MailRowError {
     #[error(transparent)]
-    Sqlite(#[from] sqlx::Error),
+    Database(#[from] sqlx::Error),
     #[error(transparent)]
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
@@ -68,7 +68,7 @@ impl SessionStore {
             .try_insert_mail_for_recipients(mail, &sender_ref, recipient_ids)
             .await
         {
-            Err(MailRowError::Sqlite(error)) if is_idempotency_conflict(&error) => {
+            Err(MailRowError::Database(error)) if is_idempotency_conflict(&error) => {
                 self.try_insert_mail_for_recipients(mail, &sender_ref, recipient_ids)
                     .await
             }

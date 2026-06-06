@@ -19,7 +19,7 @@ pub struct SessionNamespace {
 #[derive(Debug, Error)]
 pub enum NamespaceRowError {
     #[error(transparent)]
-    Sqlite(#[from] sqlx::Error),
+    Database(#[from] sqlx::Error),
     #[error(transparent)]
     Chrono(#[from] chrono::ParseError),
     #[error(transparent)]
