@@ -56,15 +56,22 @@ context. It owns the wire between an agent and its model provider, together
 with the harness transcript. It proxies agent traffic, captures turns, and
 surfaces the fidelity diff between what the harness believed it sent and what
 actually reached the provider. Two consumers drive it: agents inspecting and
-sharing captured sessions, and the littleorgans human UI. It stays an
-independent axis, observing the wire regardless of which path spawned the
-process, so it provides observability and sits outside the identity, session,
-and runtime control flow. The user verb `lilo capture` already anchors its
-surface. Its crate names, daemon composition, state path, and migration phase
-are not yet fixed, so do not invent them ahead of its migration phase. Captured
-sessions must correlate to the control-plane `SessionId`, a UUIDv4 platform
-join key, so agents and the UI can share a session by that id rather than by a
-provider-minted conversation id.
+sharing captured sessions, and the littleorgans human UI (a separate TS/Electron
+train; only transport's Python API migrates, not its `www/` or `desktop/`). The
+CLI binary is `tm` and the crate/package is `transport`. The launch chain
+inverts: `lilo run claude` execs `tm claude`, which brings up the proxy and
+spawns the agent, so capture is a side effect of every run, and
+`schedule-matters` will reuse the same `tm` wrapper when it lands. Transport is
+now interposed in the launch path but still does not authorize, decide what to
+spawn, or reconcile, so it stays outside the control plane in the load-bearing
+sense. Its user surface is the operator namespace `lilo transport ...`;
+`lilo capture` is runtime's tmux pane-capture verb, not transport. Captured
+sessions correlate to the control-plane `SessionId`, a UUIDv4 platform join key
+(`tm` reads `LILO_AGENT_SESSION_ID`), so agents and the UI share a session by
+that id rather than by a provider-minted conversation id. The `tm` packaging
+split, read surface, reliability semantics, and migration phase are being
+finalized in `NOTES/transport-integration.md`; do not lock them ahead of that
+note.
 
 ## K8s mental model post-monorepo
 
@@ -72,11 +79,13 @@ provider-minted conversation id.
 server boundary. `internal/runtime` is the kubelet-shaped host executor.
 Identity is the local equivalent of ServiceAccount, RBAC, and audit.
 
-`transport-matters` is the wire-observation axis migrating into the monorepo.
-It provides observability and sits outside the local control plane: it watches
-the wire and does not authorize, spawn, or reconcile. After Phase 7, `lilod` is
-the composed daemon process behind the local socket, with composition rooted in
-the session app layer and runtime remaining a substrate behind that boundary.
+`transport` (CLI `tm`) is the wire-observation axis migrating into the monorepo.
+It is now the default launch wrapper (`lilo run` execs `tm`), yet still provides
+observability only: it watches the wire and does not authorize, decide what to
+spawn, or reconcile, so it sits outside the local control plane. After Phase 7,
+`lilod` is the composed daemon process behind the local socket, with composition
+rooted in the session app layer and runtime remaining a substrate behind that
+boundary.
 
 This vocabulary is a design contract, not a topology claim. v1 is local-first;
 v2 mapping is linked from the strategy note and stays out of v0.8.0 scope.
@@ -102,8 +111,12 @@ for later migration work.
 User verbs are kubectl-shaped: `lilo run`, `lilo create session`,
 `lilo get session`, `lilo delete session`, `lilo label`, `lilo mail`,
 `lilo nudge`, `lilo capture`, `lilo logs`, `lilo wait`, and `lilo mcp`.
-Operator namespaces are explicit substrate access: `lilo runtime ...` and
-`lilo session ...`. Identity has no command namespace until it owns real verbs
+Operator namespaces are explicit substrate access: `lilo runtime ...`,
+`lilo session ...`, and `lilo transport ...`. Transport's launchers collapse
+into the runtime-invoked `tm` wrapper, so its namespace holds inspection and ops
+verbs (`list`, `paths`, `show <session>`), not a spawn path; see
+`NOTES/transport-integration.md`. Identity has no command namespace until it owns
+real verbs
 (`whoami` / `can-i` / audit); its authorization runs at the library layer
 inside session and runtime, not as a CLI command.
 
