@@ -100,9 +100,10 @@ Run `just check && just build && just test` before every commit.
 ## Configuration
 
 All local state lives under `~/.lilo/` (override the root with `LILO_HOME`):
-config, run files, a single SQLite database at `data/lilo.db`, event JSONL,
-logs, cache, and tmp. `lilo` owns exactly one environment prefix, `LILO_`,
-sub-namespaced by audience. The full contract is
+config, run files, event JSONL, logs, cache, and tmp. The database is Postgres,
+configured by `LILO_DATABASE_URL` (`LILO_HOME` no longer implies a database
+path). `lilo` owns exactly one environment prefix, `LILO_`, sub-namespaced by
+audience. The full contract is
 [`docs/reference/env-vars.md`](docs/reference/env-vars.md).
 
 ## License

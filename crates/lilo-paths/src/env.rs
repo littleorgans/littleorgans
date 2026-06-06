@@ -23,6 +23,8 @@ pub const LILO_RESUME_POLL_INTERVAL_MS: &str = "LILO_RESUME_POLL_INTERVAL_MS";
 pub const LILO_RESUME_GAP_THRESHOLD_MS: &str = "LILO_RESUME_GAP_THRESHOLD_MS";
 /// Operator tmux server label override.
 pub const LILO_TMUX_SERVER_LABEL: &str = "LILO_TMUX_SERVER_LABEL";
+/// Operator Postgres database connection string.
+pub const LILO_DATABASE_URL: &str = "LILO_DATABASE_URL";
 /// Agent identity namespace prefix.
 pub const LILO_AGENT_PREFIX: &str = "LILO_AGENT_";
 /// Agent session id injected into child processes.
@@ -53,6 +55,8 @@ pub const LILO_TEST_BENCH_BIN: &str = "LILO_TEST_BENCH_BIN";
 pub const LILO_TEST_BENCH_SAMPLES: &str = "LILO_TEST_BENCH_SAMPLES";
 /// Test binary override.
 pub const LILO_TEST_BIN: &str = "LILO_TEST_BIN";
+/// Test admin/maintenance Postgres URL for test database provisioning.
+pub const LILO_TEST_DATABASE_URL: &str = "LILO_TEST_DATABASE_URL";
 /// Test Docker end-to-end toggle.
 pub const LILO_TEST_E2E_DOCKER: &str = "LILO_TEST_E2E_DOCKER";
 /// Test env passthrough sentinel.
@@ -78,6 +82,21 @@ pub(crate) fn env_path(name: &str) -> Option<PathBuf> {
     non_empty_env(name).map(PathBuf::from)
 }
 
+/// Operator Postgres connection string (`LILO_DATABASE_URL`). Empty is unset.
+pub fn database_url() -> Option<String> {
+    non_empty_string(LILO_DATABASE_URL)
+}
+
+/// Admin/maintenance Postgres URL used to provision test databases
+/// (`LILO_TEST_DATABASE_URL`). Empty is unset.
+pub fn test_database_url() -> Option<String> {
+    non_empty_string(LILO_TEST_DATABASE_URL)
+}
+
 fn non_empty_env(name: &str) -> Option<OsString> {
     std::env::var_os(name).filter(|value| !value.is_empty())
+}
+
+fn non_empty_string(name: &str) -> Option<String> {
+    non_empty_env(name).map(|value| value.to_string_lossy().into_owned())
 }

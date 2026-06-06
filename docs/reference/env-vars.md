@@ -52,6 +52,7 @@ Set by the human operating `lilo`. All resolve to a sensible default when unset.
 | `LILO_RESUME_POLL_INTERVAL_MS` | u64 ms | code default | `reconcile.rs` | Resume poll interval. | live |
 | `LILO_RESUME_GAP_THRESHOLD_MS` | u64 ms | code default | `reconcile.rs` | Resume gap threshold. | live |
 | `LILO_TMUX_SERVER_LABEL` | string | unset | `server/config.rs:92` | Optional tmux server label. | live |
+| `LILO_DATABASE_URL` | postgres URL | unset | `lilo-paths` `database_url()` → `lilo-db` `DbConfig::from_env` | Operator Postgres connection string. `LILO_HOME` no longer implies a database path. | live |
 
 ### `LILO_LOG_FORMAT`
 
@@ -114,6 +115,7 @@ Read only by the test harness or local dev recipes. No stability promise, but st
 | `LILO_TEST_BENCH_BIN` | `tests/common/mod.rs:183` | Bench binary override. | live |
 | `LILO_TEST_BENCH_SAMPLES` | `tests/common/mod.rs:49` | Bench sample count. | live |
 | `LILO_TEST_BIN` | `tests/common/mod.rs:295` | Test binary override. | live |
+| `LILO_TEST_DATABASE_URL` | `lilo-db` `test_support::admin_url()` | Admin Postgres URL for test database provisioning (falls back to `LILO_DATABASE_URL`, then the local default). | live |
 | `LILO_TEST_FAULT_NAMESPACE_BINDING_CLEAR` | `cli/delete.rs:108` | Fault injection. | live |
 | `LILO_TEST_PRINT_ENV` | `spawn_target.rs:170,286` → `harness.rs:352` | Fake-runtime print env. | live |
 
