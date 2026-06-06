@@ -5,9 +5,9 @@ use std::pin::Pin;
 
 use anyhow::Result;
 use lilo_common::id::SessionId;
+use lilo_db::ImmediateTx;
 use lilo_im_core::{Action, Principal, ResourceSpec, RuntimeKind as IdentityRuntimeKind};
 use lilo_session_core::{RuntimeKind, SpawnRequest};
-use sqlx::SqliteConnection;
 
 pub type IdentityPortFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
@@ -21,7 +21,7 @@ pub trait IdentityPort: Send + Sync {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        conn: &'a mut SqliteConnection,
+        tx: &'a mut ImmediateTx,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,
@@ -52,13 +52,13 @@ impl IdentityPort for IdentityClient {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        conn: &'a mut SqliteConnection,
+        tx: &'a mut ImmediateTx,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,
     ) -> IdentityPortFuture<'a, ()> {
         Box::pin(IdentityClient::authorize_in_tx(
-            self, conn, principal, action, resource,
+            self, tx, principal, action, resource,
         ))
     }
 }
