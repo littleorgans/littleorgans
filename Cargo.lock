@@ -1075,6 +1075,7 @@ dependencies = [
  "anyhow",
  "lilo-paths",
  "sqlx",
+ "tempfile",
  "tokio",
 ]
 

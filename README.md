@@ -95,7 +95,10 @@ just regression       # unconditional full-workspace gate
 Moon orchestrates the workspace for CI; Cargo remains the Rust source of truth,
 so `cargo build --workspace` and `cargo test --workspace` work directly.
 
-Run `just check && just build && just test` before every commit.
+Run `just check && just build && just test` before every commit. The
+Postgres-backed `lilo-db` tests are `#[ignore]`d (the default suite skips
+them); run them with `just test-db` after setting `LILO_TEST_DATABASE_URL`
+or copying `settings.example.toml`. CI runs them automatically.
 
 ## Configuration
 

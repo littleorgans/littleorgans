@@ -175,3 +175,69 @@ fn swap_database(url: &str, name: &str) -> Result<String> {
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{TEST_DB_PREFIX, database_name_of, swap_database, unique_db_name};
+
+    #[test]
+    fn swap_database_replaces_segment_and_preserves_query() {
+        assert_eq!(
+            swap_database(
+                "postgres://lilo:lilo@localhost:55432/lilo?sslmode=disable",
+                "lilo_test_42",
+            )
+            .expect("swaps"),
+            "postgres://lilo:lilo@localhost:55432/lilo_test_42?sslmode=disable"
+        );
+    }
+
+    #[test]
+    fn swap_database_replaces_segment_without_query() {
+        assert_eq!(
+            swap_database("postgres://host:5432/old", "new").expect("swaps"),
+            "postgres://host:5432/new"
+        );
+    }
+
+    #[test]
+    fn swap_database_errors_when_no_database_segment() {
+        // The only `/` lives inside the `://` scheme boundary.
+        assert!(swap_database("postgres://host:5432", "new").is_err());
+    }
+
+    #[test]
+    fn swap_database_errors_without_scheme() {
+        assert!(swap_database("host:5432/old", "new").is_err());
+    }
+
+    #[test]
+    fn database_name_of_extracts_last_segment() {
+        assert_eq!(
+            database_name_of("postgres://host:5432/lilo").expect("name"),
+            "lilo"
+        );
+    }
+
+    #[test]
+    fn database_name_of_strips_query() {
+        assert_eq!(
+            database_name_of("postgres://host:5432/lilo?sslmode=require").expect("name"),
+            "lilo"
+        );
+    }
+
+    #[test]
+    fn database_name_of_errors_when_no_database_segment() {
+        assert!(database_name_of("postgres://host:5432").is_err());
+    }
+
+    #[test]
+    fn unique_db_name_is_prefixed_and_distinct() {
+        let first = unique_db_name();
+        let second = unique_db_name();
+        assert!(first.starts_with(TEST_DB_PREFIX), "got {first}");
+        assert!(second.starts_with(TEST_DB_PREFIX), "got {second}");
+        assert_ne!(first, second);
+    }
+}

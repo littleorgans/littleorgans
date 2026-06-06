@@ -185,7 +185,15 @@ mod tests {
         "session_spawn_intents",
     ];
 
+    // The DB-backed tests below are #[ignore]d so the default suite (and
+    // `moon ci`) reports them honestly as skipped when no Postgres is
+    // configured, rather than silently passing. Run them with
+    // `just test-db` (or `cargo nextest run -p lilo-db --run-ignored all`)
+    // after setting LILO_TEST_DATABASE_URL or copying settings.example.toml;
+    // with no database, TestDb::create()'s loud error is the honest failure.
+
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
     async fn open_postgres_runs_migrations_and_creates_unified_schema() -> Result<()> {
         let fixture = TestDb::create().await?;
         let tables: Vec<String> = sqlx::query_scalar(
@@ -206,6 +214,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
     async fn open_postgres_yields_a_live_connection() -> Result<()> {
         let fixture = TestDb::create().await?;
         let value: i32 = sqlx::query_scalar("SELECT 1")
@@ -216,6 +225,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
     async fn cleanup_drops_the_created_database() -> Result<()> {
         let fixture = TestDb::create().await?;
         let name = database_name_of(fixture.database_url())?;
@@ -234,6 +244,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL or copy settings.example.toml; run with --run-ignored all"]
     async fn parallel_fixtures_do_not_collide() -> Result<()> {
         let handles: Vec<_> = (0..4).map(|_| tokio::spawn(TestDb::create())).collect();
         let mut fixtures = Vec::with_capacity(handles.len());

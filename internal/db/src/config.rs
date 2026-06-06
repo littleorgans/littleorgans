@@ -45,3 +45,110 @@ impl DbConfig {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(unsafe_code)]
+mod tests {
+    use std::env;
+    use std::ffi::{OsStr, OsString};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::time::Duration;
+
+    use super::DbConfig;
+
+    #[test]
+    fn from_url_stores_url_and_default_sizing() {
+        let config = DbConfig::from_url("postgres://lilo:lilo@localhost:55432/lilo");
+        assert_eq!(
+            config.database_url,
+            "postgres://lilo:lilo@localhost:55432/lilo"
+        );
+        assert_eq!(config.max_connections, 5);
+        assert_eq!(config.connect_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn resolve_prefers_env_over_settings() {
+        let home = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            home.path().join("settings.toml"),
+            "[database]\nurl = \"postgres://settings/db\"\n",
+        )
+        .expect("write settings");
+        let _guard = EnvGuard::new(&[
+            ("LILO_HOME", Some(home.path().to_str().expect("utf-8 path"))),
+            ("LILO_DATABASE_URL", Some("postgres://env/db")),
+        ]);
+
+        let config = DbConfig::resolve().expect("resolves a url");
+        assert_eq!(config.database_url, "postgres://env/db");
+    }
+
+    #[test]
+    fn resolve_falls_back_to_settings_when_env_unset() {
+        let home = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            home.path().join("settings.toml"),
+            "[database]\nurl = \"postgres://settings/db\"\n",
+        )
+        .expect("write settings");
+        let _guard = EnvGuard::new(&[
+            ("LILO_HOME", Some(home.path().to_str().expect("utf-8 path"))),
+            ("LILO_DATABASE_URL", None),
+        ]);
+
+        let config = DbConfig::resolve().expect("resolves a url");
+        assert_eq!(config.database_url, "postgres://settings/db");
+    }
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    /// Serializes process-environment mutation across the resolution tests and
+    /// restores the prior values on drop. Mirrors the guard in `lilo-paths`.
+    struct EnvGuard {
+        _lock: MutexGuard<'static, ()>,
+        originals: Vec<(String, Option<OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn new(vars: &[(&str, Option<&str>)]) -> Self {
+            let lock = ENV_LOCK
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("env lock");
+            let originals = vars
+                .iter()
+                .map(|(name, _)| ((*name).to_string(), env::var_os(name)))
+                .collect();
+            for (name, value) in vars {
+                set_env(name, value.map(OsStr::new));
+            }
+            Self {
+                _lock: lock,
+                originals,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (name, value) in &self.originals {
+                set_env(name, value.as_deref());
+            }
+        }
+    }
+
+    fn set_env(name: &str, value: Option<&OsStr>) {
+        match value {
+            Some(value) => {
+                // SAFETY: env mutation in these tests is serialized through
+                // ENV_LOCK and no thread reads the environment concurrently.
+                unsafe { env::set_var(name, value) };
+            }
+            None => {
+                // SAFETY: serialized through ENV_LOCK; no concurrent env readers.
+                unsafe { env::remove_var(name) };
+            }
+        }
+    }
+}
