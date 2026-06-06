@@ -38,7 +38,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
-lilo-im-store.workspace = true
+lilo-im-store = { workspace = true, features = ["sqlite"] }
 sqlx.workspace = true
 tempfile.workspace = true
 

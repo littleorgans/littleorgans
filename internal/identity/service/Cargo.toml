@@ -18,7 +18,7 @@ path = "src/lib.rs"
 anyhow.workspace = true
 lilo-db.workspace = true
 lilo-im-core.workspace = true
-lilo-im-store.workspace = true
+lilo-im-store = { workspace = true, features = ["sqlite"] }
 lilo-im-stub.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
