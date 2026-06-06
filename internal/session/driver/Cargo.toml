@@ -26,7 +26,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 chrono.workspace = true
-lilo-db.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 lilo-paths.workspace = true
 lilo-runtime-store.workspace = true
 lilo-wire.workspace = true

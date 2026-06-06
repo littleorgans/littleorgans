@@ -2,11 +2,13 @@ use super::*;
 use lilo_common::id::SessionId;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nudge_terminal_tmux_session_returns_typed_failure() {
     assert_terminal_tmux_nudge_returns_session_ended(TerminalState::Exited).await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nudge_lost_tmux_session_returns_terminal_failure() {
     assert_terminal_tmux_nudge_returns_session_ended(TerminalState::Lost).await;
 }
@@ -29,9 +31,11 @@ async fn assert_terminal_tmux_nudge_returns_session_ended(terminal_state: Termin
             outcome: NudgeOutcome::Failed(NudgeFailureReason::SessionEnded),
         }
     );
+    state.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nudge_headless_terminal_session_remains_headless_unsupported() {
     let state = TestState::new().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -63,9 +67,11 @@ async fn nudge_headless_terminal_session_remains_headless_unsupported() {
             outcome: NudgeOutcome::Unsupported(NudgeFailureReason::HeadlessLifecycle),
         }
     );
+    state.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nudge_running_tmux_session_with_dead_pane_returns_typed_failure() {
     let state = TestState::new().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -84,9 +90,11 @@ async fn nudge_running_tmux_session_with_dead_pane_returns_typed_failure() {
             outcome: NudgeOutcome::Failed(NudgeFailureReason::TmuxPaneDead),
         }
     );
+    state.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn capture_running_tmux_session_with_dead_pane_returns_pane_unavailable() {
     let state = TestState::new().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -105,9 +113,11 @@ async fn capture_running_tmux_session_with_dead_pane_returns_pane_unavailable() 
         response,
         CaptureResponse::Failed(CaptureError::PaneUnavailable)
     );
+    state.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn status_marks_dead_tmux_pane_logs_unavailable() {
     let state = TestState::new().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
@@ -127,9 +137,11 @@ async fn status_marks_dead_tmux_pane_logs_unavailable() {
             reason: LogsUnavailableReason::PaneUnavailable,
         })
     );
+    state.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn kill_unknown_session_returns_not_found() {
     let state = TestState::new().await;
     let request = KillRequest {
@@ -144,6 +156,7 @@ async fn kill_unknown_session_returns_not_found() {
         .await
         .expect_err("not found");
     assert!(error.to_string().contains("not found"), "{error}");
+    state.cleanup().await;
 }
 
 enum TerminalState {
@@ -153,6 +166,7 @@ enum TerminalState {
 
 struct TestState {
     server: ServerState,
+    testdb: lilo_db::test_support::TestDb,
     _temp: tempfile::TempDir,
 }
 
@@ -162,11 +176,12 @@ impl TestState {
         let store_config = StoreConfig {
             db_path: temp.path().join("rtm.sqlite"),
         };
-        let db = lilo_db::LiloDb::open_path(&store_config.db_path)
+        let testdb = lilo_db::test_support::TestDb::create()
             .await
             .expect("store db");
-        let store = LifecycleStore::from_db(&db);
+        let store = LifecycleStore::from_db(testdb.db());
         let server = ServerState::new(
+            testdb.db(),
             DaemonConfig {
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm-test.sock"),
                 shim_path: PathBuf::from("rtm"),
@@ -178,12 +193,16 @@ impl TestState {
             },
             store,
         )
-        .await
         .expect("state");
         Self {
             server,
+            testdb,
             _temp: temp,
         }
+    }
+
+    async fn cleanup(self) {
+        self.testdb.cleanup().await.expect("test db cleans up");
     }
 }
 

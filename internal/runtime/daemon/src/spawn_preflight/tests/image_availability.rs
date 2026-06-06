@@ -1,6 +1,7 @@
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn image_unavailable_fails_before_lifecycle_insert() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
@@ -23,9 +24,11 @@ async fn image_unavailable_fails_before_lifecycle_insert() {
         "docker image is unavailable: pull access denied"
     );
     assert_no_lifecycle_or_waiters(&state, session_id).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn arm64_manifest_absence_fails_before_lifecycle_insert() {
     assert_arm64_manifest_failure(
         Ok(false),
@@ -35,6 +38,7 @@ async fn arm64_manifest_absence_fails_before_lifecycle_insert() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn local_metadata_failure_returns_local_error_without_manifest_fallback() {
     assert_arm64_manifest_failure_with_architecture(
         Ok(true),
@@ -49,11 +53,13 @@ async fn local_metadata_failure_returns_local_error_without_manifest_fallback() 
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn local_only_arm64_image_passes_on_arm64_host() {
     assert_arm64_manifest_success(Ok(false), Ok("arm64")).await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn local_only_non_arm64_image_fails_on_arm64_host() {
     assert_arm64_manifest_failure_with_architecture(
         Ok(true),
@@ -66,6 +72,7 @@ async fn local_only_non_arm64_image_fails_on_arm64_host() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn nonexistent_local_image_reports_image_unavailable_after_registry_failure() {
     assert_arm64_manifest_failure_with_architecture(
         Err("registry authentication required"),
@@ -80,8 +87,9 @@ async fn nonexistent_local_image_reports_image_unavailable_after_registry_failur
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn arm64_manifest_escape_hatch_skips_manifest_inspection() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut request = headless_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     request.isolation = docker_profile(Some("arm64-manifest-escape"));
 
@@ -101,4 +109,5 @@ async fn arm64_manifest_escape_hatch_skips_manifest_inspection() {
     )
     .await
     .expect("preflight");
+    testdb.cleanup().await.expect("test db cleans up");
 }

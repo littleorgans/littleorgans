@@ -207,7 +207,7 @@ impl DatabaseHealth {
     async fn collect(paths: &LiloPaths) -> DatabaseProbe {
         let path = paths.db_path();
         let path_label = path.display().to_string();
-        match LiloDb::open(paths).await {
+        match LiloDb::open_postgres_resolved().await {
             Ok(db) => match DbPragmas::collect(&db).await {
                 Ok(pragmas) => Self::probe(path_label, "ok", pragmas, None, Some(db)),
                 Err(error) => Self::error_probe(path_label, error, Some(db)),
@@ -239,7 +239,7 @@ impl DatabaseHealth {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, Serialize)]
 struct DbPragmas {
     journal_mode: String,
     busy_timeout: i64,
@@ -247,26 +247,17 @@ struct DbPragmas {
 }
 
 impl DbPragmas {
+    // Phase 2: Postgres has no per-connection journal/timeout/synchronous
+    // pragmas, so the probe validates the pool is live and reports the empty
+    // pragma shape. Renaming this struct and the doctor's `pragmas:` line is a
+    // later phase; the cutover only stops the old per-connection pragma queries
+    // from running against Postgres.
     async fn collect(db: &LiloDb) -> Result<Self, String> {
-        let pool = db.session_pool();
-        let journal_mode = sqlx::query_scalar::<_, String>("PRAGMA journal_mode")
-            .fetch_one(pool)
+        sqlx::query_scalar::<_, i32>("SELECT 1")
+            .fetch_one(db.pool())
             .await
             .map_err(|error| error.to_string())?;
-        let busy_timeout = sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
-            .fetch_one(pool)
-            .await
-            .map_err(|error| error.to_string())?;
-        let synchronous = sqlx::query_scalar::<_, i64>("PRAGMA synchronous")
-            .fetch_one(pool)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        Ok(Self {
-            journal_mode,
-            busy_timeout,
-            synchronous,
-        })
+        Ok(Self::default())
     }
 }
 
@@ -281,18 +272,18 @@ impl SubstrateHealth {
     async fn collect(db: &LiloDb) -> Self {
         Self {
             identity: IdentityHealth {
-                audit_rows: count(db.identity_pool(), "SELECT COUNT(*) FROM identity_audit").await,
+                audit_rows: count(db.pool(), "SELECT COUNT(*) FROM identity_audit").await,
             },
             sessions: SessionHealth {
                 active: count(
-                    db.session_pool(),
+                    db.pool(),
                     "SELECT COUNT(*) FROM session_sessions WHERE state IN ('SPAWNING', 'RUNNING')",
                 )
                 .await,
             },
             runtimes: RuntimeHealth {
                 active: count(
-                    db.runtime_pool(),
+                    db.pool(),
                     "SELECT COUNT(*) FROM runtime_lifecycle WHERE state IN ('Forking', 'Running')",
                 )
                 .await,
@@ -316,7 +307,7 @@ struct RuntimeHealth {
     active: i64,
 }
 
-async fn count(pool: &sqlx::SqlitePool, query: &'static str) -> i64 {
+async fn count(pool: &sqlx::PgPool, query: &'static str) -> i64 {
     sqlx::query_scalar::<_, i64>(query)
         .fetch_one(pool)
         .await
@@ -337,11 +328,23 @@ mod tests {
     use tokio::time::Instant;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn collected_status_has_backend_probe_shape() {
         let dir = tempfile::tempdir().expect("tempdir");
         let paths = LiloPaths::new(
             LiloHome::from_path(dir.path().join("lilo")).expect("home path is valid"),
         );
+
+        // DatabaseHealth::collect resolves its pool from LILO_DATABASE_URL.
+        // Point it at a throwaway database for the duration of this test.
+        // SAFETY: nextest runs each test in its own process; no concurrent env
+        // readers in this single-threaded test.
+        let testdb = lilo_db::test_support::TestDb::create()
+            .await
+            .expect("test database");
+        unsafe {
+            std::env::set_var("LILO_DATABASE_URL", testdb.database_url());
+        }
 
         let database = DatabaseHealth::collect(&paths).await;
         let db = database.db.expect("db opens");
@@ -356,13 +359,15 @@ mod tests {
         assert!(!status.daemon.reachable);
         assert_eq!(status.daemon.version, None);
         assert_eq!(status.database.status, "ok");
-        assert_eq!(status.database.pragmas.journal_mode, "wal");
-        assert_eq!(status.database.pragmas.busy_timeout, 5_000);
-        assert_eq!(status.database.pragmas.synchronous, 1);
+        // Postgres has no journal/timeout/synchronous pragmas; the probe reports
+        // the empty pragma shape (renaming is a later phase).
+        assert_eq!(status.database.pragmas, DbPragmas::default());
         assert_eq!(status.substrates.sessions.active, 0);
         assert_eq!(status.substrates.runtimes.active, 0);
         assert_eq!(status.substrates.identity.audit_rows, 0);
         assert!(status.warnings.is_empty());
+
+        testdb.cleanup().await.expect("test db cleans up");
     }
 
     #[tokio::test]

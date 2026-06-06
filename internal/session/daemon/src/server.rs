@@ -19,7 +19,7 @@ use crate::lifecycle::LifecycleTask;
 
 pub async fn run_daemon(paths: LiloPaths, daemon_version: impl Into<String>) -> Result<()> {
     let daemon_version = daemon_version.into();
-    let db = LiloDb::open(&paths).await?;
+    let db = LiloDb::open_postgres_resolved().await?;
     run_daemon_with_db(paths, daemon_version, db).await
 }
 
@@ -48,7 +48,7 @@ pub async fn run_daemon_with_db(
     );
     let runtime_port = InProcessRuntime::new(Arc::clone(&runtime));
     let identity = IdentityClient::new(
-        AuditStore::with_pool(db.identity_pool().clone()),
+        AuditStore::with_pool(db.pool().clone()),
         lilo_sys::creds::current_uid(),
     );
     let state = Arc::new(DaemonState::new(

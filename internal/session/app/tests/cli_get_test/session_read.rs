@@ -25,6 +25,7 @@ pub(crate) fn removed_get_forms_are_rejected_by_clap() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn session_resources_list_and_get_by_id() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -126,6 +127,7 @@ pub(crate) fn session_resources_list_and_get_by_id() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn capture_takes_exact_session_id() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());

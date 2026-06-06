@@ -3,7 +3,6 @@
 mod common;
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::time::Duration;
 
 use common::{
@@ -16,6 +15,7 @@ use lilo_runtime_store::LifecycleStore;
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass4_restart_reconciles_sqlite_lifecycles() {
     let mut harness = RtmHarness::start();
     let sid1 = Uuid::now_v7().to_string();
@@ -52,7 +52,7 @@ fn pass4_restart_reconciles_sqlite_lifecycles() {
     assert!(events.contains(&sid2), "{events}");
     assert!(events.contains("evidence=PidNotAlive"), "{events}");
 
-    let states = persisted_states(harness.db_path());
+    let states = persisted_states(harness.database_url());
     assert_eq!(states.len(), 3, "{states:?}");
     assert_eq!(states.get(&sid1).map(String::as_str), Some("Running"));
     assert_eq!(
@@ -70,10 +70,12 @@ fn spawn(harness: &RtmHarness, session_id: &str, runtime: &str) {
     );
 }
 
-fn persisted_states(db_path: &Path) -> HashMap<String, String> {
+fn persisted_states(database_url: &str) -> HashMap<String, String> {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     runtime.block_on(async {
-        let db = lilo_db::LiloDb::open_path(db_path).await.expect("store db");
+        let db = lilo_db::LiloDb::open_postgres(lilo_db::DbConfig::from_url(database_url))
+            .await
+            .expect("store db");
         let store = LifecycleStore::from_db(&db);
         store
             .list(&StatusFilter::empty())

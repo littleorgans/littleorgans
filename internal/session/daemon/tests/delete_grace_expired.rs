@@ -4,6 +4,7 @@ use common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
 use lilo_session_core::{DeleteRequest, RpcResponse, Selector, SessionRpc, SessionState};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn delete_persists_runtime_termination() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -31,4 +32,5 @@ async fn delete_persists_runtime_termination() {
     assert_eq!(response.sessions[0].id, session.id);
     assert_eq!(response.sessions[0].state, SessionState::Terminated);
     assert!(response.sessions[0].terminated_at.is_some());
+    daemon.cleanup().await;
 }

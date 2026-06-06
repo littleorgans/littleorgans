@@ -1,26 +1,17 @@
-use lilo_db::LiloDb;
+use lilo_db::test_support::TestDb;
 use lilo_identity_service::IdentityClient;
 use lilo_im_core::{Action, AuditDecision, Principal, ResourceSpec};
 use lilo_im_store::AuditFilters;
-use lilo_paths::{LiloHome, LiloPaths};
-
-async fn open_test_db() -> (tempfile::TempDir, LiloDb) {
-    let tempdir = tempfile::tempdir().expect("create tempdir");
-    let home = LiloHome::from_path(tempdir.path().join("lilo")).expect("home path");
-    let db = LiloDb::open(&LiloPaths::new(home))
-        .await
-        .expect("open lilo db");
-    (tempdir, db)
-}
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn client_from_db_authorizes_and_records_an_audit_row() {
-    let (_tempdir, db) = open_test_db().await;
+    let testdb = TestDb::create().await.expect("create test db");
     let local_uid = 501;
     let principal = Principal::local(local_uid);
     let resource = ResourceSpec::default();
 
-    let client = IdentityClient::from_db(&db, local_uid);
+    let client = IdentityClient::from_db(testdb.db(), local_uid);
 
     client
         .authorize(&principal, Action::Spawn, &resource)
@@ -38,6 +29,8 @@ async fn client_from_db_authorizes_and_records_an_audit_row() {
     assert_eq!(rows[0].action, Action::Spawn);
     assert_eq!(rows[0].resource, resource);
     assert_eq!(rows[0].decision, AuditDecision::Allow);
+
+    testdb.cleanup().await.expect("cleanup test db");
 }
 
 /// The stub authorizer path (`IdentityClient::authorize` -> `StubAuthorizer`)
@@ -48,13 +41,14 @@ async fn client_from_db_authorizes_and_records_an_audit_row() {
 /// pins them together: a non-local principal is denied with the identical
 /// decision and reason on both paths, so they cannot silently diverge again.
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn stub_and_in_tx_paths_agree_on_denial_for_non_local_principal() {
-    let (_tempdir, db) = open_test_db().await;
+    let testdb = TestDb::create().await.expect("create test db");
     let local_uid = 501;
     // Same enum variant as the allowed principal, different uid: a non-local principal.
     let principal = Principal::local(local_uid + 1);
     let resource = ResourceSpec::default();
-    let client = IdentityClient::from_db(&db, local_uid);
+    let client = IdentityClient::from_db(testdb.db(), local_uid);
     let expected = AuditDecision::Deny {
         reason: "non-local uid".to_owned(),
     };
@@ -68,13 +62,11 @@ async fn stub_and_in_tx_paths_agree_on_denial_for_non_local_principal() {
 
     // In-transaction path: records a Deny row via the passed connection, then
     // returns an error derived from the same decision.
-    let mut tx = lilo_db::begin_immediate_pool_tx(db.identity_pool())
-        .await
-        .expect("begin identity tx");
+    let mut tx = testdb.db().pool().begin().await.expect("begin identity tx");
     let in_tx_result = client
         .authorize_in_tx(&mut tx, &principal, Action::Spawn, &resource)
         .await;
-    lilo_db::finish_immediate_pool_tx(tx, Ok::<(), sqlx::Error>(()))
+    lilo_db::commit_or_rollback(tx, Ok::<(), sqlx::Error>(()))
         .await
         .expect("commit identity audit tx");
     assert!(
@@ -96,4 +88,6 @@ async fn stub_and_in_tx_paths_agree_on_denial_for_non_local_principal() {
         );
         assert_eq!(row.denial_reason.as_deref(), Some("non-local uid"));
     }
+
+    testdb.cleanup().await.expect("cleanup test db");
 }

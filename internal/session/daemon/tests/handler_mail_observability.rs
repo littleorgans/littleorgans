@@ -8,6 +8,7 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn operator_peek_and_tail_do_not_drain_mail() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -38,9 +39,11 @@ async fn operator_peek_and_tail_do_not_drain_mail() {
         0
     );
     assert_eq!(mail_count(&daemon.state, context, sender.id).await, 1);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn operator_transcript_hides_system_receipts_by_default() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -62,6 +65,7 @@ async fn operator_transcript_hides_system_receipts_by_default() {
             .any(|message| message.sender == SenderView::System)
     );
     assert_eq!(mail_count(&daemon.state, context, sender.id).await, 1);
+    daemon.cleanup().await;
 }
 
 async fn send_mail(daemon: &TestDaemon, sender_id: SessionId, recipient_id: SessionId) {

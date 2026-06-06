@@ -3,6 +3,7 @@ mod common;
 use common::{OrPanic as _, assert_success, run_session, stderr, stdout};
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn direct_mail_cli_uses_session_identity_env() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());

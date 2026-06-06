@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use lilo_common::id::SessionId;
-use lilo_db::{begin_immediate_pool_tx, finish_immediate_pool_tx};
+use lilo_db::commit_or_rollback;
 use lilo_integration_tests::{
     IntegrationFixture, count_rows, draft_session, event_log_line_count, fixed_intent_id,
     fixed_session_id, running_event, running_lifecycle, runtime_config, runtime_request,
@@ -22,6 +22,7 @@ use lilo_session_store::{PendingSpawnIntent, SessionDraft, SessionStore};
 const DAEMON_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let mut daemon = LiloDaemon::start(&fixture)?;
@@ -72,10 +73,11 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
     assert!(!listed_ids.contains(&raw_runtime_id));
 
     daemon.stop();
-    Ok(())
+    fixture.cleanup().await
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let mut daemon = LiloDaemon::start(&fixture)?;
@@ -113,10 +115,11 @@ async fn doctor_reachability_probe_does_not_warn_on_bare_connect() -> Result<()>
         !daemon_stderr.contains("lilod connection failed"),
         "doctor bare-connect probe must not emit connection warning\nstderr:\n{daemon_stderr}"
     );
-    Ok(())
+    fixture.cleanup().await
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let session_store = SessionStore::from_db(&fixture.db);
@@ -129,7 +132,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         SessionDraft::new(&draft_session(session_id)),
     );
 
-    let mut tx_a = begin_immediate_pool_tx(fixture.db.session_pool()).await?;
+    let mut tx_a = fixture.db.pool().begin().await?;
     let tx_a_result = async {
         insert_audit(&mut *tx_a, "audit-session-spawn", session_id).await?;
         observed.push("identity-audit");
@@ -147,7 +150,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         Result::<()>::Ok(())
     }
     .await;
-    finish_immediate_pool_tx(tx_a, tx_a_result).await?;
+    commit_or_rollback(tx_a, tx_a_result).await?;
 
     assert_eq!(pending_count(&fixture, session_id).await?, 1);
     assert_eq!(resolved_count(&fixture, session_id).await?, 0);
@@ -157,7 +160,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
     lifecycle_store.update_lifecycle(&running).await?;
     observed.push("runtime-kqueue-ready");
 
-    let mut tx_b = begin_immediate_pool_tx(fixture.db.session_pool()).await?;
+    let mut tx_b = fixture.db.pool().begin().await?;
     let tx_b_result = async {
         let session = intent
             .session_draft
@@ -171,7 +174,7 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
         Result::<()>::Ok(())
     }
     .await;
-    finish_immediate_pool_tx(tx_b, tx_b_result).await?;
+    commit_or_rollback(tx_b, tx_b_result).await?;
 
     assert_eq!(
         observed,
@@ -187,21 +190,17 @@ async fn session_spawn_persists_fixed_order_across_two_transactions() -> Result<
     assert_eq!(pending_count(&fixture, session_id).await?, 0);
     assert_eq!(resolved_count(&fixture, session_id).await?, 1);
     assert_eq!(session_count(&fixture, session_id).await?, 1);
-    Ok(())
+    fixture.cleanup().await
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn raw_runtime_spawn_keeps_session_tables_empty() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let lifecycle_store = LifecycleStore::from_db(&fixture.db);
     let session_id = fixed_session_id(10);
 
-    insert_audit(
-        fixture.db.identity_pool(),
-        "audit-raw-runtime-spawn",
-        session_id,
-    )
-    .await?;
+    insert_audit(fixture.db.pool(), "audit-raw-runtime-spawn", session_id).await?;
     lifecycle_store
         .insert_forking(&lilo_rm_core::Lifecycle::forking(
             session_id,
@@ -213,10 +212,11 @@ async fn raw_runtime_spawn_keeps_session_tables_empty() -> Result<()> {
     assert_eq!(lifecycle_count(&fixture, session_id).await?, 1);
     assert_eq!(pending_count(&fixture, session_id).await?, 0);
     assert_eq!(session_count(&fixture, session_id).await?, 0);
-    Ok(())
+    fixture.cleanup().await
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
     let runtime = Arc::new(
@@ -246,14 +246,21 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
         .update_lifecycle(&running_lifecycle(session_id))
         .await?;
     sqlx::query(
+        "CREATE FUNCTION fail_resolve_before_event() RETURNS trigger AS $$
+         BEGIN
+           RAISE EXCEPTION 'forced tx b failure';
+         END;
+         $$ LANGUAGE plpgsql",
+    )
+    .execute(fixture.db.pool())
+    .await?;
+    sqlx::query(
         "CREATE TRIGGER fail_resolve_before_event
          BEFORE UPDATE OF status ON session_spawn_intents
-         WHEN NEW.status = 'resolved'
-         BEGIN
-           SELECT RAISE(ABORT, 'forced tx b failure');
-         END",
+         FOR EACH ROW WHEN (NEW.status = 'resolved')
+         EXECUTE FUNCTION fail_resolve_before_event()",
     )
-    .execute(fixture.db.session_pool())
+    .execute(fixture.db.pool())
     .await?;
 
     let service = lilo_session_daemon::SessionService::build(
@@ -269,8 +276,11 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     assert_eq!(pending_count(&fixture, session_id).await?, 1);
     assert_eq!(session_count(&fixture, session_id).await?, 0);
 
-    sqlx::query("DROP TRIGGER fail_resolve_before_event")
-        .execute(fixture.db.session_pool())
+    sqlx::query("DROP TRIGGER fail_resolve_before_event ON session_spawn_intents")
+        .execute(fixture.db.pool())
+        .await?;
+    sqlx::query("DROP FUNCTION fail_resolve_before_event()")
+        .execute(fixture.db.pool())
         .await?;
     service.reconcile_pending_spawn_intents().await?;
 
@@ -281,17 +291,17 @@ async fn startup_reconcile_appends_d9_only_after_tx_b_commit() -> Result<()> {
     runtime.append_event(running_event(session_id)).await?;
     assert_eq!(event_log_line_count(&fixture.paths)?, 1);
     runtime.shutdown().await?;
-    Ok(())
+    fixture.cleanup().await
 }
 
 async fn insert_audit<'e, E>(executor: E, id: &str, session_id: SessionId) -> Result<()>
 where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
     sqlx::query(
         "INSERT INTO identity_audit
          (id, timestamp, principal, action, resource, decision, session_ref)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2::timestamptz, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind("2026-05-28T00:00:00Z")
@@ -307,8 +317,8 @@ where
 
 async fn audit_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
-        fixture.db.identity_pool(),
-        "SELECT COUNT(*) FROM identity_audit WHERE session_ref = ?",
+        fixture.db.pool(),
+        "SELECT COUNT(*) FROM identity_audit WHERE session_ref = $1",
         &session_id.to_string(),
     )
     .await
@@ -316,8 +326,8 @@ async fn audit_count(fixture: &IntegrationFixture, session_id: SessionId) -> Res
 
 async fn lifecycle_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
-        fixture.db.runtime_pool(),
-        "SELECT COUNT(*) FROM runtime_lifecycle WHERE session_id = ?",
+        fixture.db.pool(),
+        "SELECT COUNT(*) FROM runtime_lifecycle WHERE session_id = $1",
         &session_id.to_string(),
     )
     .await
@@ -325,8 +335,8 @@ async fn lifecycle_count(fixture: &IntegrationFixture, session_id: SessionId) ->
 
 async fn pending_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
-        fixture.db.session_pool(),
-        "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'pending'",
+        fixture.db.pool(),
+        "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1 AND status = 'pending'",
         &session_id.to_string(),
     )
     .await
@@ -334,8 +344,8 @@ async fn pending_count(fixture: &IntegrationFixture, session_id: SessionId) -> R
 
 async fn resolved_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
-        fixture.db.session_pool(),
-        "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'resolved'",
+        fixture.db.pool(),
+        "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1 AND status = 'resolved'",
         &session_id.to_string(),
     )
     .await
@@ -343,8 +353,8 @@ async fn resolved_count(fixture: &IntegrationFixture, session_id: SessionId) -> 
 
 async fn session_count(fixture: &IntegrationFixture, session_id: SessionId) -> Result<i64> {
     count_rows(
-        fixture.db.session_pool(),
-        "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
+        fixture.db.pool(),
+        "SELECT COUNT(*) FROM session_sessions WHERE id = $1",
         &session_id.to_string(),
     )
     .await
@@ -355,9 +365,9 @@ async fn allowed_spawn_audit_count(
     session_id: SessionId,
 ) -> Result<i64> {
     count_rows(
-        fixture.db.identity_pool(),
+        fixture.db.pool(),
         "SELECT COUNT(*) FROM identity_audit
-         WHERE session_ref = ? AND action = '\"spawn\"' AND decision = '{\"kind\":\"allow\"}'",
+         WHERE session_ref = $1 AND action = '\"spawn\"' AND decision = '{\"kind\":\"allow\"}'",
         &session_id.to_string(),
     )
     .await
@@ -388,6 +398,7 @@ impl LiloDaemon {
             .args(["daemon", "start"])
             .env("LILO_HOME", &home)
             .env("LILO_SOCKET_PATH", &socket)
+            .env("LILO_DATABASE_URL", fixture.database_url())
             .env("HOME", &home)
             .env("PATH", &path)
             .stdout(Stdio::piped())

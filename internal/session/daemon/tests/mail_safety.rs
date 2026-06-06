@@ -28,6 +28,7 @@ use tokio::time::timeout;
 type TestRuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn depth_breaker_trips_one_context_only() {
     let mut daemon = TestDaemon::new(LOCAL_UID).await;
     daemon.state.set_mail_safety_limits(2, 100, 60);
@@ -81,9 +82,11 @@ async fn depth_breaker_trips_one_context_only() {
     )
     .await;
     assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 3);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn rate_breaker_throttles_sender_across_contexts() {
     let mut daemon = TestDaemon::new(LOCAL_UID).await;
     daemon.state.set_mail_safety_limits(100, 2, 60);
@@ -138,9 +141,11 @@ async fn rate_breaker_throttles_sender_across_contexts() {
     )
     .await;
     assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 3);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn idempotent_retry_returns_original_after_breaker_saturation() {
     let mut daemon = TestDaemon::new(LOCAL_UID).await;
     daemon.state.set_mail_safety_limits(1, 100, 60);
@@ -187,9 +192,11 @@ async fn idempotent_retry_returns_original_after_breaker_saturation() {
     )
     .await;
     assert!(matches!(rejected, RpcResponse::Error { .. }));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn notify_nudge_authz_failure_preserves_mail() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -231,9 +238,11 @@ async fn notify_nudge_authz_failure_preserves_mail() {
             .collect::<Vec<_>>(),
         vec![Action::MailSend, Action::Nudge]
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn notify_runtime_failure_is_warning_not_mail_failure() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -241,8 +250,7 @@ async fn notify_runtime_failure_is_warning_not_mail_failure() {
     let recipient = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(RecordingRuntimePort::failing_nudge("runtime offline"));
     let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
-        .await;
+        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Id { id: recipient.id },
         "wake and review",
@@ -272,9 +280,11 @@ async fn notify_runtime_failure_is_warning_not_mail_failure() {
         runtime.nudges(),
         vec![(recipient.id.to_string(), "you have mail".to_string(), None)]
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn notify_wait_timeout_is_forwarded_to_runtime_port() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -282,8 +292,7 @@ async fn notify_wait_timeout_is_forwarded_to_runtime_port() {
     let recipient = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(RecordingRuntimePort::new());
     let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
-        .await;
+        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Id { id: recipient.id },
         "wake and review",
@@ -310,9 +319,11 @@ async fn notify_wait_timeout_is_forwarded_to_runtime_port() {
             Some(2_000)
         )]
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn notify_timeout_requires_wait_on_handler_path() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -339,9 +350,11 @@ async fn notify_timeout_requires_wait_on_handler_path() {
     };
     assert!(message.contains("requires --notify wait"), "{message}");
     assert_eq!(mail_count(&daemon.state, context, recipient.id).await, 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn mail_append_event_fires_once_per_persisted_message() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -374,9 +387,11 @@ async fn mail_append_event_fires_once_per_persisted_message() {
             .await
             .is_err()
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn read_receipts_emit_on_drain_only_for_session_senders() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -449,6 +464,7 @@ async fn read_receipts_emit_on_drain_only_for_session_senders() {
     .await;
     assert_eq!(operator_message.messages.len(), 1);
     assert_eq!(mail_count(&daemon.state, context, sender.id).await, 0);
+    daemon.cleanup().await;
 }
 
 async fn send_mail(

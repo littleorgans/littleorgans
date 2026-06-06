@@ -5,6 +5,7 @@ use daemon::TestDaemon;
 use lilo_rm_core::{EventBatch, EventsRequest, StatusFilter};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn typed_helpers_round_trip_against_real_daemon() {
     let daemon = TestDaemon::start().await;
 

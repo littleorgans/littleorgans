@@ -44,6 +44,7 @@ exit 1
 "#;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn run_accepts_docker_isolation_and_preserves_host_default() {
     let runtime_path = common::fake_runtime_path("claude");
     common::write_fake_command(runtime_path.path(), "docker", FAKE_DOCKER_SCRIPT);

@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use lilo_common::id::SessionId;
-use lilo_db::{ImmediateTx, LiloDb};
+use lilo_db::LiloTransaction;
+use lilo_db::test_support::TestDb;
 use lilo_im_core::{Action, AuditRow, Principal, ResourceSpec};
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
@@ -37,8 +38,7 @@ pub const TEST_DAEMON_VERSION: &str = "test-daemon";
 
 pub struct TestDaemon {
     pub state: DaemonState,
-    pub db: LiloDb,
-    pub audit_path: PathBuf,
+    pub testdb: TestDb,
     pub dir: tempfile::TempDir,
     pub runtime: Arc<RuntimeService>,
     pub local_uid: u32,
@@ -53,13 +53,13 @@ impl TestDaemon {
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
         std::fs::create_dir_all(paths.run_root()).or_panic("run dir creates");
-        let db = LiloDb::open(&paths).await.or_panic("store db opens");
-        let audit_path = paths.db_path();
+        let testdb = TestDb::create().await.or_panic("store db opens");
+        let db = testdb.db();
         let identity = IdentityClient::new(
-            lilo_im_store::AuditStore::with_pool(db.identity_pool().clone()),
+            lilo_im_store::AuditStore::with_pool(db.pool().clone()),
             local_uid,
         );
-        let store = SessionStore::from_db(&db);
+        let store = SessionStore::from_db(db);
         let mut runtime_config =
             DaemonConfig::from_lilo_paths(&paths).or_panic("runtime config resolves");
         runtime_config.shim_path = assert_cmd::cargo::cargo_bin("lilo");
@@ -76,7 +76,7 @@ impl TestDaemon {
         let runtime_port = Arc::new(RtmdDriver::new(runtime_socket_path.clone()));
         let runtime_socket_task = spawn_runtime_socket(&runtime_socket_path, Arc::clone(&runtime));
         let state = DaemonState::new(
-            &db,
+            db,
             store,
             TEST_DAEMON_VERSION,
             runtime_port,
@@ -85,8 +85,7 @@ impl TestDaemon {
         );
         Self {
             state,
-            db,
-            audit_path,
+            testdb,
             dir,
             runtime,
             local_uid,
@@ -94,17 +93,15 @@ impl TestDaemon {
         }
     }
 
-    pub async fn state_with_runtime_port(&self, runtime_port: Arc<dyn RuntimePort>) -> DaemonState {
-        let db = LiloDb::open_path(self.audit_path.clone())
-            .await
-            .or_panic("store db reopens");
+    pub fn state_with_runtime_port(&self, runtime_port: Arc<dyn RuntimePort>) -> DaemonState {
+        let db = self.testdb.db();
         let identity = IdentityClient::new(
-            lilo_im_store::AuditStore::with_pool(db.identity_pool().clone()),
+            lilo_im_store::AuditStore::with_pool(db.pool().clone()),
             self.local_uid,
         );
         DaemonState::new(
-            &db,
-            SessionStore::from_db(&db),
+            db,
+            SessionStore::from_db(db),
             TEST_DAEMON_VERSION,
             runtime_port,
             Arc::new(identity),
@@ -114,7 +111,7 @@ impl TestDaemon {
 
     pub fn state_with_identity_port(&self, identity: Arc<dyn IdentityPort>) -> DaemonState {
         DaemonState::new(
-            &self.db,
+            self.testdb.db(),
             self.state.store.clone(),
             TEST_DAEMON_VERSION,
             Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))),
@@ -123,19 +120,22 @@ impl TestDaemon {
         )
     }
 
-    pub async fn in_process_state(&self) -> DaemonState {
+    pub fn in_process_state(&self) -> DaemonState {
         self.state_with_runtime_port(Arc::new(InProcessRuntime::new(Arc::clone(&self.runtime))))
-            .await
     }
 
     pub async fn audit_rows(&self) -> Vec<AuditRow> {
-        let db = lilo_db::LiloDb::open_path(&self.audit_path)
-            .await
-            .or_panic("audit db opens");
-        lilo_im_store::AuditStore::with_pool(db.identity_pool().clone())
+        lilo_im_store::AuditStore::with_pool(self.testdb.db().pool().clone())
             .query_audit(lilo_im_store::AuditFilters::default())
             .await
             .or_panic("audit query succeeds")
+    }
+
+    /// Tear down the throwaway Postgres database backing this daemon. Call at the
+    /// end of each test so the fixture does not leak databases.
+    pub async fn cleanup(self) {
+        self.runtime_socket_task.abort();
+        self.testdb.cleanup().await.or_panic("test db cleans up");
     }
 }
 
@@ -401,7 +401,7 @@ impl IdentityPort for RecordingIdentityPort {
 
     fn authorize_in_tx<'a>(
         &'a self,
-        _tx: &'a mut ImmediateTx,
+        _tx: &'a mut LiloTransaction<'_>,
         principal: &'a Principal,
         action: Action,
         resource: &'a ResourceSpec,

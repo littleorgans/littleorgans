@@ -13,6 +13,7 @@ fn pid_alive(pid: u32) -> bool {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn daemon_drain_reaps_spawned_shim() {
     // Regression: a spawned `lilo __shim` (and its runtime child) must not
     // outlive the daemon. Before the fix these accumulated as live orphans
@@ -43,4 +44,5 @@ async fn daemon_drain_reaps_spawned_shim() {
         !pid_alive(runtime_pid),
         "runtime child {runtime_pid} survived daemon drain"
     );
+    daemon.cleanup().await;
 }

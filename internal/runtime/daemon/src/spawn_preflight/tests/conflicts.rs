@@ -1,6 +1,7 @@
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn session_id_conflict_includes_terminal_lifecycle() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     state
@@ -22,11 +23,13 @@ async fn session_id_conflict_includes_terminal_lifecycle() {
         .expect("conflict");
 
     assert_conflict(&response, SpawnConflictKind::SessionId, session_id);
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn tmux_occupant_conflict_is_typed_without_force() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
     insert_running_tmux(&state, occupant, 60_000).await;
 
@@ -37,11 +40,13 @@ async fn tmux_occupant_conflict_is_typed_without_force() {
         .expect("conflict");
 
     assert_conflict(&response, SpawnConflictKind::TmuxPaneOccupancy, occupant);
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn force_kills_tmux_occupant_and_allows_spawn() {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let mut child = Command::new("sleep").arg("60").spawn().expect("sleep");
     let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
     insert_running_tmux(&state, occupant, child.id()).await;
@@ -53,4 +58,5 @@ async fn force_kills_tmux_occupant_and_allows_spawn() {
 
     assert!(response.is_none(), "force should clear pane conflict");
     wait_for_child_exit(&mut child);
+    testdb.cleanup().await.expect("test db cleans up");
 }

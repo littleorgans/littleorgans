@@ -8,6 +8,7 @@ use common::{
 use std::process::Command;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn config_help_lists_set_context() {
     let output = Command::new(env!("CARGO_BIN_EXE_sm"))
         .args(["config", "--help"])
@@ -19,6 +20,7 @@ fn config_help_lists_set_context() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn set_context_writes_sm_home_binding_after_daemon_lookup() {
     let daemon = common::DaemonFixture::start();
     create_namespace(&daemon, "alpha");
@@ -34,6 +36,7 @@ fn set_context_writes_sm_home_binding_after_daemon_lookup() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn set_context_accepts_default_namespace() {
     let daemon = common::DaemonFixture::start();
 
@@ -48,6 +51,7 @@ fn set_context_accepts_default_namespace() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn set_context_rejects_unknown_namespace_without_write() {
     let daemon = common::DaemonFixture::start();
 
@@ -63,6 +67,7 @@ fn set_context_rejects_unknown_namespace_without_write() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn set_context_uses_home_fallback_when_sm_home_is_unset() {
     let daemon = common::DaemonFixture::start();
     create_namespace(&daemon, "fallback");
@@ -81,6 +86,7 @@ fn set_context_uses_home_fallback_when_sm_home_is_unset() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn set_context_overwrites_binding_atomically() {
     let daemon = common::DaemonFixture::start();
     create_namespace(&daemon, "alpha");

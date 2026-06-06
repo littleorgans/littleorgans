@@ -6,6 +6,7 @@ use lilo_rm_core::{CaptureError, CaptureResponse};
 use lilo_session_core::{CaptureRequest, RpcResponse, SessionRpc};
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -18,19 +19,23 @@ async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
     };
     assert_eq!(response.session.tmux_pane, None);
     assert!(response.session.runtime_pid > 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_rejects_invalid_target_before_launch() {
     assert_spawn_rejects_target("tmux:not-a-pane", "invalid runtime target").await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_rejects_tmux_pane_dead_target_before_launch() {
     assert_spawn_rejects_target("tmux:dead:0.0", "tmux address dead:0.0 is not alive").await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_rejects_unsupported_target_before_launch() {
     assert_spawn_rejects_target("ssh:host", "invalid runtime target: ssh:host").await;
 }
@@ -46,6 +51,7 @@ async fn assert_spawn_rejects_target(target: &str, expected: &str) {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn capture_reports_runtime_headless_failure() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -71,6 +77,7 @@ async fn capture_reports_runtime_headless_failure() {
         response.capture,
         CaptureResponse::Failed(CaptureError::NotATmuxTarget)
     );
+    daemon.cleanup().await;
 }
 
 async fn spawn_with_target(

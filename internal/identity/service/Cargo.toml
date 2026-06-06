@@ -18,15 +18,14 @@ path = "src/lib.rs"
 anyhow.workspace = true
 lilo-db.workspace = true
 lilo-im-core.workspace = true
-lilo-im-store = { workspace = true, features = ["sqlite"] }
+lilo-im-store = { workspace = true, features = ["postgres"] }
 lilo-im-stub.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-lilo-paths.workspace = true
-tempfile.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 
 [lints]
 workspace = true

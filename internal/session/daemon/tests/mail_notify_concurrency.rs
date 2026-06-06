@@ -20,6 +20,7 @@ use tokio::sync::Barrier;
 type TestRuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn notify_wait_fanout_runs_concurrently_and_preserves_result_order() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -29,8 +30,7 @@ async fn notify_wait_fanout_runs_concurrently_and_preserves_result_order() {
     let third = spawn_test_session(&daemon, &context, "engineer").await;
     let runtime = Arc::new(ConcurrentNudgeRuntimePort::new(3));
     let state = daemon
-        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>)
-        .await;
+        .state_with_runtime_port(Arc::clone(&runtime) as Arc<dyn RuntimePort>);
     let mut request = mail_request(
         Selector::Role {
             name: "engineer".to_string(),
@@ -65,6 +65,7 @@ async fn notify_wait_fanout_runs_concurrently_and_preserves_result_order() {
             .collect::<Vec<_>>(),
         vec![first.id, second.id, third.id]
     );
+    daemon.cleanup().await;
 }
 
 struct ConcurrentNudgeRuntimePort {

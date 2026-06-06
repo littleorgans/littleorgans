@@ -52,7 +52,7 @@ impl DockerImageInspector for FakeDockerInspector {
     }
 }
 
-async fn test_state() -> Arc<ServerState> {
+async fn test_state() -> (Arc<ServerState>, lilo_db::test_support::TestDb) {
     test_state_with_docker_config(DockerPreflightConfig::new(
         "runtime-matters-agent:latest",
         false,
@@ -63,15 +63,16 @@ async fn test_state() -> Arc<ServerState> {
 
 async fn test_state_with_docker_config(
     docker_preflight: DockerPreflightConfig,
-) -> Arc<ServerState> {
+) -> (Arc<ServerState>, lilo_db::test_support::TestDb) {
     let temp = std::env::temp_dir().join(format!("rtm-preflight-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&temp).expect("tempdir");
-    let db = lilo_db::LiloDb::open_path(temp.join("rtm.sqlite"))
+    let testdb = lilo_db::test_support::TestDb::create()
         .await
         .expect("store db");
-    let store = LifecycleStore::from_db(&db);
-    Arc::new(
+    let store = LifecycleStore::from_db(testdb.db());
+    let state = Arc::new(
         ServerState::new(
+            testdb.db(),
             DaemonConfig {
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket(temp.join("rtm.sock")),
                 shim_path: temp.join("rtm"),
@@ -85,8 +86,9 @@ async fn test_state_with_docker_config(
             },
             store,
         )
-        .await.expect("state"),
-    )
+        .expect("state"),
+    );
+    (state, testdb)
 }
 
 async fn insert_running_tmux(state: &Arc<ServerState>, session_id: SessionId, runtime_pid: u32) {
@@ -145,7 +147,7 @@ fn docker_profile(name: Option<&str>) -> IsolationPolicy {
 }
 
 async fn assert_docker_profile_rejected(profile: &str, message: &str) {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(Some(profile));
@@ -160,10 +162,11 @@ async fn assert_docker_profile_rejected(profile: &str, message: &str) {
 
     assert_eq!(error.to_string(), message);
     assert_no_lifecycle_or_waiters(&state, session_id).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 async fn assert_docker_image_user_rejected(user: Option<&'static str>) {
-    let state = test_state().await;
+    let (state, testdb) = test_state().await;
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let mut request = headless_request(session_id, false);
     request.isolation = docker_profile(None);
@@ -186,13 +189,14 @@ async fn assert_docker_image_user_rejected(user: Option<&'static str>) {
         "docker image metadata is unavailable: docker image runtime-matters-agent:latest runs as root"
     );
     assert_no_lifecycle_or_waiters(&state, session_id).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 async fn assert_arm64_manifest_success(
     arm64_manifest: Result<bool, &'static str>,
     image_architecture: Result<&'static str, FakeDockerImageError>,
 ) {
-    let state = test_state_with_docker_config(DockerPreflightConfig::new(
+    let (state, testdb) = test_state_with_docker_config(DockerPreflightConfig::new(
         "test-agent:latest",
         false,
         false,
@@ -215,6 +219,7 @@ async fn assert_arm64_manifest_success(
     )
     .await
     .expect("arm64 image should pass preflight");
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 async fn assert_arm64_manifest_failure_with_architecture(
@@ -222,7 +227,7 @@ async fn assert_arm64_manifest_failure_with_architecture(
     image_architecture: Result<&'static str, FakeDockerImageError>,
     expected: RuntimeFailure,
 ) {
-    let state = test_state_with_docker_config(DockerPreflightConfig::new(
+    let (state, testdb) = test_state_with_docker_config(DockerPreflightConfig::new(
         "test-agent:latest",
         false,
         false,
@@ -249,10 +254,11 @@ async fn assert_arm64_manifest_failure_with_architecture(
 
     assert_runtime_failure(&error, expected);
     assert_no_lifecycle_or_waiters(&state, session_id).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 async fn assert_arm64_manifest_failure(arm64_manifest: Result<bool, &'static str>, expected: &str) {
-    let state = test_state_with_docker_config(DockerPreflightConfig::new(
+    let (state, testdb) = test_state_with_docker_config(DockerPreflightConfig::new(
         "test-agent:latest",
         false,
         false,
@@ -281,6 +287,7 @@ async fn assert_arm64_manifest_failure(arm64_manifest: Result<bool, &'static str
 
     assert_eq!(error.to_string(), expected);
     assert_no_lifecycle_or_waiters(&state, session_id).await;
+    testdb.cleanup().await.expect("test db cleans up");
 }
 
 fn assert_runtime_failure(error: &anyhow::Error, expected: RuntimeFailure) {

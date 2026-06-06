@@ -18,7 +18,7 @@ pub struct DaemonState {
     pub store: SessionStore,
     // Runtime lifecycle store sharing the unified database. Built from the same
     // `LiloDb` as `store`; the spawn path runs its lifecycle writes inside the
-    // shared `ImmediateTx`, so this instance's pool is only a handle.
+    // shared `LiloTransaction`, so this instance's pool is only a handle.
     pub(crate) lifecycle_store: LifecycleStore,
     pub(crate) daemon_version: String,
     pub(crate) runtime: Arc<dyn RuntimePort>,

@@ -5,6 +5,7 @@ use lilo_session_core::{
 };
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_launch_uses_runtime_service_without_driver_fallback() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -45,9 +46,11 @@ pub(crate) async fn spawn_launch_uses_runtime_service_without_driver_fallback() 
     );
     assert_eq!(response.session.dir, daemon.dir.path());
     assert!(response.session.runtime_pid > 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_launch_cwd_is_request_workspace() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let session = spawn_test_session(&daemon, &local_context(), "pm").await;
@@ -56,12 +59,14 @@ pub(crate) async fn spawn_launch_cwd_is_request_workspace() {
     assert_eq!(session.workspace, daemon.dir.path().display().to_string());
     assert_eq!(session.dir, daemon.dir.path());
     assert!(session.runtime_pid > 0);
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn composed_spawn_writes_one_session_door_audit_row() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
-    let state = daemon.in_process_state().await;
+    let state = daemon.in_process_state();
     let context = local_context();
     let principal = context.principal.clone();
 
@@ -100,4 +105,5 @@ pub(crate) async fn composed_spawn_writes_one_session_door_audit_row() {
     assert_eq!(spawn_rows.len(), 1);
     assert_eq!(spawn_rows[0].decision, AuditDecision::Allow);
     assert_eq!(spawn_rows[0].resource.session_id, Some(response.session.id));
+    daemon.cleanup().await;
 }

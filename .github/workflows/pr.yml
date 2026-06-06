@@ -86,11 +86,12 @@ jobs:
       - name: Moon CI
         run: moon ci
 
-      # The lilo-db Postgres tests are #[ignore]d (so the default suite skips
-      # them honestly when no DB is present). The job env + postgres service
-      # above make them run for real here against localhost:5432.
-      - name: lilo-db Postgres tests
-        run: cargo nextest run -p lilo-db --run-ignored all
+      # The Postgres-backed tests across the workspace are #[ignore]d (so the
+      # default suite / moon ci skip them honestly when no DB is present). The
+      # job env + postgres service above make them run for real here against
+      # localhost:5432. `ignored-only` runs exactly the DB-gated tests.
+      - name: Postgres-backed DB tests (workspace)
+        run: cargo nextest run --workspace --run-ignored ignored-only
 
       - name: Lilo binary smoke test
         run: |

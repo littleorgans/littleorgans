@@ -264,6 +264,7 @@ fn create_and_delete_resource_help_uses_current_lifecycle_copy() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn get_help_collapses_resources_to_singular_with_plural_aliases() {
     let get = help(&["get", "--help"]);
     assert!(get.contains("List session records, or get one session record by id."));

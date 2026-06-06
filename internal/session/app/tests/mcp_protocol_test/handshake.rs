@@ -3,6 +3,7 @@ use crate::{assert_deprecation_hint, find_tool, tool_names};
 use serde_json::json;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn initialize_and_tools_list_follow_mcp_shape() {
     let daemon = DaemonFixture::start();
     let mut mcp = daemon.spawn_mcp();

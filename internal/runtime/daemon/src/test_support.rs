@@ -2,14 +2,14 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use crate::{DaemonConfig, ReconcileConfig, RuntimeServiceContext};
-use lilo_db::LiloDb;
+use lilo_db::test_support::TestDb;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_runtime_store::StoreConfig;
 
 pub(crate) struct RuntimeServiceFixture {
     pub(crate) dir: tempfile::TempDir,
     pub(crate) config: DaemonConfig,
-    pub(crate) db: LiloDb,
+    pub(crate) testdb: TestDb,
 }
 
 impl RuntimeServiceFixture {
@@ -28,13 +28,21 @@ impl RuntimeServiceFixture {
             tmux_server_label: None,
         };
         install_fake_shim(&config.shim_path);
-        let db = LiloDb::open(&paths).await.expect("db");
+        let testdb = TestDb::create().await.expect("db");
 
-        Self { dir, config, db }
+        Self {
+            dir,
+            config,
+            testdb,
+        }
     }
 
     pub(crate) fn context(&self) -> RuntimeServiceContext {
-        RuntimeServiceContext::new(self.config.clone(), self.db.clone())
+        RuntimeServiceContext::new(self.config.clone(), self.testdb.db().clone())
+    }
+
+    pub(crate) async fn cleanup(self) {
+        self.testdb.cleanup().await.expect("test db cleans up");
     }
 }
 

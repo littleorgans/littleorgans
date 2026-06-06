@@ -23,7 +23,7 @@ futures-util.workspace = true
 lilo-db.workspace = true
 lilo-identity-service.workspace = true
 lilo-im-core.workspace = true
-lilo-im-store = { workspace = true, features = ["sqlite"] }
+lilo-im-store = { workspace = true, features = ["postgres"] }
 lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
 lilo-runtime-daemon.workspace = true
@@ -42,6 +42,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+lilo-db = { workspace = true, features = ["test-support"] }
 lilo-runtime-launchers.workspace = true
 nix.workspace = true
 tempfile.workspace = true

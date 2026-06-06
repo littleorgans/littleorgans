@@ -6,7 +6,7 @@ use std::time::Duration;
 use chrono::Utc;
 use common::{OrPanic, mail_request};
 use lilo_common::id::SessionId;
-use lilo_db::LiloDb;
+use lilo_db::test_support::TestDb;
 use lilo_paths::{DaemonEndpoint, LiloHome, LiloPaths};
 use lilo_session_core::{
     CallerContextRequest, MailIntent, MailLogFilter, MailTailRequest, Namespace, RpcResponse,
@@ -19,6 +19,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 const THREAD: &str = "serve-follow-thread";
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn follow_tail_does_not_block_concurrent_mail_send() {
     let fixture = ServerFixture::new().await;
     let sender = fixture.insert_session("pm").await;
@@ -76,9 +77,11 @@ async fn follow_tail_does_not_block_concurrent_mail_send() {
     assert_eq!(response.messages[0].content, "observe me");
 
     fixture.shutdown(daemon).await;
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn malformed_connection_does_not_stop_accept_loop() {
     let fixture = ServerFixture::new().await;
     fixture.insert_session("engineer").await;
@@ -101,9 +104,11 @@ async fn malformed_connection_does_not_stop_accept_loop() {
     assert!(matches!(response, RpcResponse::MailTail { .. }));
 
     fixture.shutdown(daemon).await;
+    fixture.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn shutdown_ack_is_written_before_daemon_exits() {
     let fixture = ServerFixture::new().await;
     let daemon = fixture.spawn_daemon().await;
@@ -117,13 +122,14 @@ async fn shutdown_ack_is_written_before_daemon_exits() {
         .or_panic("daemon exits after shutdown")
         .or_panic("daemon task joins")
         .or_panic("daemon exits cleanly");
+    fixture.cleanup().await;
 }
 
 struct ServerFixture {
     _dir: tempfile::TempDir,
     paths: LiloPaths,
     endpoint: DaemonEndpoint,
-    db: LiloDb,
+    testdb: TestDb,
     store: SessionStore,
 }
 
@@ -133,16 +139,20 @@ impl ServerFixture {
         let paths = LiloPaths::new(
             LiloHome::from_path(dir.path().join("lilo")).or_panic("lilo home resolves"),
         );
-        let db = LiloDb::open(&paths).await.or_panic("db opens");
-        let store = SessionStore::from_db(&db);
+        let testdb = TestDb::create().await.or_panic("db opens");
+        let store = SessionStore::from_db(testdb.db());
         let endpoint = DaemonEndpoint::from_paths(&paths);
         Self {
             _dir: dir,
             paths,
             endpoint,
-            db,
+            testdb,
             store,
         }
+    }
+
+    async fn cleanup(self) {
+        self.testdb.cleanup().await.or_panic("test db cleans up");
     }
 
     async fn insert_session(&self, role: &str) -> Session {
@@ -176,7 +186,7 @@ impl ServerFixture {
 
     async fn spawn_daemon(&self) -> tokio::task::JoinHandle<anyhow::Result<()>> {
         let paths = self.paths.clone();
-        let db = self.db.clone();
+        let db = self.testdb.db().clone();
         let endpoint = self.endpoint.clone();
         let daemon =
             tokio::spawn(async move { run_daemon_with_db(paths, "test-daemon", db).await });

@@ -14,6 +14,7 @@ use lilo_common::id::SessionId;
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn sigkill_runtime_transitions_to_exited() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -26,6 +27,7 @@ fn sigkill_runtime_transitions_to_exited() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn sigkill_shim_is_reported_lost_after_runtime_exit() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -45,6 +47,7 @@ fn sigkill_shim_is_reported_lost_after_runtime_exit() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn rtmd_restart_keeps_live_sessions_running() {
     let mut harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -59,6 +62,7 @@ fn rtmd_restart_keeps_live_sessions_running() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn rtmd_restart_reconciles_dead_sessions_lost() {
     let mut harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -76,10 +80,11 @@ fn rtmd_restart_reconciles_dead_sessions_lost() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn resume_gap_reconciliation_does_not_wait_for_full_sweep_interval() {
     let harness = RtmHarness::start_with_fast_resume_probe();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
-    persist_running(harness.db_path(), session_id, unused_pid());
+    persist_running(harness.database_url(), session_id, unused_pid());
 
     let status = wait_for_status_timeout(
         &harness,
@@ -91,6 +96,7 @@ fn resume_gap_reconciliation_does_not_wait_for_full_sweep_interval() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn tmux_pane_closed_while_session_alive_rejects_nudge() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-critical") else {
         eprintln!("skipping tmux critical scenario because tmux is unavailable");
@@ -124,6 +130,7 @@ fn tmux_pane_closed_while_session_alive_rejects_nudge() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn dead_tmux_address_rejects_spawn_without_lifecycle_row() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-dead-pane") else {
         eprintln!("skipping tmux dead-address scenario because tmux is unavailable");
@@ -151,6 +158,7 @@ fn dead_tmux_address_rejects_spawn_without_lifecycle_row() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn docker_isolation_rejects_spawn_without_lifecycle_row() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();

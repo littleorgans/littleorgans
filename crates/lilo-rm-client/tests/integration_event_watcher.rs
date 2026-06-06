@@ -81,6 +81,7 @@ async fn next_uses_configured_wait_ms_and_seek_cursor() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn cursor_durability_survives_watcher_rebuild() {
     let daemon = TestDaemon::start_with_data(|root| {
         write_event_log(root, &[event_record(1), event_record(2)]);
@@ -111,6 +112,7 @@ async fn cursor_durability_survives_watcher_rebuild() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn cursor_expired_advances_cursor_and_can_resume_from_oldest() {
     let daemon = TestDaemon::start_with_data(|root| {
         write_event_log(root, &[event_record(3)]);
@@ -134,6 +136,7 @@ async fn cursor_expired_advances_cursor_and_can_resume_from_oldest() {
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn seek_repositions_next_request() {
     let daemon = TestDaemon::start_with_data(|root| {
         write_event_log(root, &[event_record(1), event_record(2)]);

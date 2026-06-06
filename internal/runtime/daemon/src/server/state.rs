@@ -48,12 +48,14 @@ pub(crate) struct ServerState {
 
 impl ServerState {
     #[cfg(test)]
-    pub(crate) async fn new(config: DaemonConfig, store: LifecycleStore) -> Result<Self> {
-        // Build the test identity from the same database the store opened so
-        // audit writes land in the unified DB, without reaching the store's
-        // now crate-private SQLite pool across the crate boundary.
-        let db = lilo_db::LiloDb::open_path(&config.store.db_path).await?;
-        let identity = IdentityClient::from_db(&db, lilo_sys::creds::current_uid());
+    pub(crate) fn new(
+        db: &lilo_db::LiloDb,
+        config: DaemonConfig,
+        store: LifecycleStore,
+    ) -> Result<Self> {
+        // Build the test identity from the same shared pool the store uses so
+        // audit writes land in the unified DB.
+        let identity = IdentityClient::from_db(db, lilo_sys::creds::current_uid());
         Self::new_with_identity(config, store, identity)
     }
 

@@ -11,6 +11,7 @@ use lilo_session_driver::RtmdDriver;
 use std::sync::Arc;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn spawn_persists_runtime_stdout_path_for_logs() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -55,9 +56,11 @@ pub(crate) async fn spawn_persists_runtime_stdout_path_for_logs() {
         "{}: {log_body}",
         transcript.display()
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
@@ -131,13 +134,15 @@ pub(crate) async fn logs_wait_and_doctor_polish_paths_work() {
         Some(session.id.to_string())
     );
     assert!(response.findings[0].message.contains("PidNotAlive"));
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn doctor_includes_runtime_matters_payload() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
-    let state = daemon.in_process_state().await;
+    let state = daemon.in_process_state();
 
     let doctor = state
         .handle(
@@ -169,16 +174,17 @@ pub(crate) async fn doctor_includes_runtime_matters_payload() {
             .process_exit_watchers,
         0
     );
+    daemon.cleanup().await;
 }
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn doctor_reports_runtime_matters_unavailable() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
     let context = local_context();
     let socket_path = daemon.dir.path().join("missing-rtmd.sock");
     let state = daemon
-        .state_with_runtime_port(Arc::new(RtmdDriver::new(socket_path)))
-        .await;
+        .state_with_runtime_port(Arc::new(RtmdDriver::new(socket_path)));
 
     let doctor = state
         .handle(
@@ -203,4 +209,5 @@ pub(crate) async fn doctor_reports_runtime_matters_unavailable() {
             .message
             .contains("runtime-matters doctor failed")
     );
+    daemon.cleanup().await;
 }

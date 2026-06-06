@@ -12,6 +12,7 @@ use std::{thread, time::Duration};
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass5_spawn_inside_tmux_captures_pane_and_nudges_it() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-pass5") else {
         eprintln!("skipping tmux integration test because tmux is unavailable");
@@ -45,6 +46,7 @@ fn pass5_spawn_inside_tmux_captures_pane_and_nudges_it() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn nudge_rejects_terminal_tmux_session() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-terminal-nudge") else {
         eprintln!("skipping tmux terminal nudge test because tmux is unavailable");
@@ -81,6 +83,7 @@ fn nudge_rejects_terminal_tmux_session() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn tmux_spawn_cwd_flag_overrides_caller_cwd() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-tmux-cwd") else {
         eprintln!("skipping tmux cwd test because tmux is unavailable");
@@ -110,6 +113,7 @@ fn tmux_spawn_cwd_flag_overrides_caller_cwd() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn capture_tmux_pane_returns_snapshot_json() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-capture") else {
         eprintln!("skipping tmux integration test because tmux is unavailable");
@@ -169,6 +173,7 @@ fn capture_tmux_pane_returns_snapshot_json() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn capture_headless_target_returns_not_tmux_target() {
     let harness = RtmHarness::start();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
@@ -187,6 +192,7 @@ fn capture_headless_target_returns_not_tmux_target() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn capture_dead_tmux_pane_returns_pane_unavailable() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-capture-dead") else {
         eprintln!("skipping tmux integration test because tmux is unavailable");
@@ -216,6 +222,7 @@ fn capture_dead_tmux_pane_returns_pane_unavailable() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn docker_tmux_pattern_a_container_survives_pane_close() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-docker-pattern-a") else {
         eprintln!("skipping Docker tmux Pattern A test because tmux is unavailable");
@@ -265,6 +272,7 @@ fn docker_tmux_pattern_a_container_survives_pane_close() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn ctrl_c_induced_tmux_pane_loss_repro_covers_claude_and_codex() {
     for runtime in ["claude", "codex"] {
         ctrl_c_interrupts_runtime_without_losing_tmux_pane(runtime);

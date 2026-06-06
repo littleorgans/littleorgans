@@ -2,6 +2,7 @@ use crate::common::{self, OrPanic as _};
 use crate::{assert_success, canonical_display, first_field, get_session_json};
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -25,6 +26,7 @@ pub(crate) fn run_persists_canonical_dir_from_cli_resolution() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn run_resolves_spawn_intent_and_persists_session() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -37,13 +39,14 @@ pub(crate) fn run_resolves_spawn_intent_and_persists_session() {
     assert_success("sm run", &run);
     let id = first_field(&run.stdout);
 
-    let counts = spawn_intent_counts(&daemon.audit_path(), &id);
+    let counts = spawn_intent_counts(daemon.database_url(), &id);
     assert_eq!(counts.pending, 0);
     assert_eq!(counts.resolved, 1);
     assert_eq!(counts.sessions, 1);
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn workspace_arg_is_rejected_by_clap() {
     let daemon = common::DaemonFixture::start();
 
@@ -74,26 +77,28 @@ struct SpawnIntentCounts {
     sessions: i64,
 }
 
-fn spawn_intent_counts(path: &std::path::Path, id: &str) -> SpawnIntentCounts {
+fn spawn_intent_counts(database_url: &str, id: &str) -> SpawnIntentCounts {
     let runtime = tokio::runtime::Runtime::new().or_panic("tokio runtime");
     runtime.block_on(async move {
-        let db = lilo_db::LiloDb::open_path(path).await.or_panic("db opens");
+        let db = lilo_db::LiloDb::open_postgres(lilo_db::DbConfig::from_url(database_url))
+            .await
+            .or_panic("db opens");
         SpawnIntentCounts {
             pending: count_rows(
-                db.session_pool(),
-                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'pending'",
+                db.pool(),
+                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1 AND status = 'pending'",
                 id,
             )
             .await,
             resolved: count_rows(
-                db.session_pool(),
-                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = ? AND status = 'resolved'",
+                db.pool(),
+                "SELECT COUNT(*) FROM session_spawn_intents WHERE session_id = $1 AND status = 'resolved'",
                 id,
             )
             .await,
             sessions: count_rows(
-                db.session_pool(),
-                "SELECT COUNT(*) FROM session_sessions WHERE id = ?",
+                db.pool(),
+                "SELECT COUNT(*) FROM session_sessions WHERE id = $1",
                 id,
             )
             .await,
@@ -101,7 +106,7 @@ fn spawn_intent_counts(path: &std::path::Path, id: &str) -> SpawnIntentCounts {
     })
 }
 
-async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> i64 {
+async fn count_rows(pool: &sqlx::PgPool, sql: &str, id: &str) -> i64 {
     sqlx::query_scalar(sql)
         .bind(id)
         .fetch_one(pool)
@@ -110,6 +115,7 @@ async fn count_rows(pool: &sqlx::SqlitePool, sql: &str, id: &str) -> i64 {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn unknown_namespace_error_is_surfaced_from_daemon() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());

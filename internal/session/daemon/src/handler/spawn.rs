@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_common::id::{IntentId, SessionId};
-use lilo_db::{ImmediateTx, finish_immediate_pool_tx};
+use lilo_db::{LiloTransaction, commit_or_rollback};
 use lilo_im_core::Action;
 use lilo_rm_core::{
     LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, ShellResume, StatusFilter,
@@ -114,7 +114,7 @@ impl DaemonState {
             .await
         {
             // Commit the audit row authorize_in_tx wrote, then surface the error.
-            finish_immediate_pool_tx(tx, Ok::<(), anyhow::Error>(())).await?;
+            commit_or_rollback(tx, Ok::<(), anyhow::Error>(())).await?;
             return Err(error);
         }
         let result = async {
@@ -132,7 +132,7 @@ impl DaemonState {
             Ok(())
         }
         .await;
-        finish_immediate_pool_tx(tx, result).await
+        commit_or_rollback(tx, result).await
     }
 
     async fn complete_spawn_intent(
@@ -182,7 +182,7 @@ impl DaemonState {
             Ok(())
         }
         .await;
-        if let Err(error) = finish_immediate_pool_tx(tx, result).await {
+        if let Err(error) = commit_or_rollback(tx, result).await {
             match on_commit_failure {
                 OnCommitFailure::AbortRunning => {
                     let abort_reason = format!("session commit failed: {error}");
@@ -251,7 +251,7 @@ impl DaemonState {
             Ok(())
         }
         .await;
-        finish_immediate_pool_tx(tx, result).await
+        commit_or_rollback(tx, result).await
     }
 
     pub(crate) async fn reconcile_pending_spawn_intents(&self) -> Result<()> {
@@ -328,15 +328,11 @@ impl DaemonState {
     }
 
     /// Begin the shared spawn transaction as a single pool-scoped
-    /// [`ImmediateTx`]. The caller threads `&mut tx` to store methods and to
-    /// `authorize_in_tx`, then commits with `finish_immediate_pool_tx`. One
-    /// begin, one finish, both pool-scoped: never also call the
-    /// connection-scoped `begin_immediate_tx`/`finish_immediate_tx` here.
-    async fn begin_spawn_tx(&self, acquire_context: &'static str) -> Result<ImmediateTx> {
-        self.store
-            .begin_immediate_tx()
-            .await
-            .context(acquire_context)
+    /// [`LiloTransaction`]. The caller threads `&mut tx` to store methods and to
+    /// `authorize_in_tx`, then commits with [`commit_or_rollback`]. One begin,
+    /// one finish, both pool-scoped.
+    async fn begin_spawn_tx(&self, acquire_context: &'static str) -> Result<LiloTransaction<'_>> {
+        self.store.begin_tx().await.context(acquire_context)
     }
 }
 

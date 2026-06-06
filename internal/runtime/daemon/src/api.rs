@@ -187,6 +187,7 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn domain_surface_verbs_match_wire_responses() {
         let fixture = ApiFixture::new(ReconcileConfig::default()).await;
         let service = RuntimeService::build(fixture.context())
@@ -201,7 +202,7 @@ mod tests {
         assert_doctor_parity(&service).await;
 
         service.shutdown().await.expect("shutdown succeeds");
-        fixture.db.close().await;
+        fixture.cleanup().await;
     }
 
     async fn assert_status_parity(service: &RuntimeService) {
@@ -354,6 +355,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn spawn_domain_matches_wire_spawn_structure() {
         let fixture = ApiFixture::new(ReconcileConfig::default()).await;
         let service = RuntimeService::build(fixture.context())
@@ -386,10 +388,11 @@ mod tests {
             TEST_SHIM_PID,
         );
         service.shutdown().await.expect("shutdown succeeds");
-        fixture.db.close().await;
+        fixture.cleanup().await;
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn spawn_domain_and_wire_report_same_id_conflicts() {
         let fixture = ApiFixture::new(ReconcileConfig::default()).await;
         let service = RuntimeService::build(fixture.context())
@@ -425,10 +428,11 @@ mod tests {
             &expect_wire_conflict(wire_conflict),
         );
         service.shutdown().await.expect("shutdown succeeds");
-        fixture.db.close().await;
+        fixture.cleanup().await;
     }
 
     #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
     async fn poll_events_matches_wire_events_response() {
         let fixture = ApiFixture::new(ReconcileConfig::default()).await;
         let service = RuntimeService::build(fixture.context())
@@ -460,7 +464,7 @@ mod tests {
         }
 
         service.shutdown().await.expect("shutdown succeeds");
-        fixture.db.close().await;
+        fixture.cleanup().await;
     }
 
     async fn spawn_direct_with_ready(

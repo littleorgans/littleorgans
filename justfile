@@ -71,13 +71,15 @@ test *ARGS:
 test-doc:
     CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo test --workspace --doc
 
-# Run the #[ignore]d lilo-db Postgres tests (opt-in; require a database).
+# Run the #[ignore]d Postgres-backed tests across the whole workspace (opt-in;
+# require a database). `ignored-only` runs exactly the DB-gated tests; the no-DB
+# suite (`just test` / `moon ci`) skips them honestly.
 # Set LILO_TEST_DATABASE_URL (or copy settings.example.toml to
 # $LILO_HOME/settings.toml) first, e.g. with the local compose service:
 #   docker compose up -d --wait postgres
 #   LILO_TEST_DATABASE_URL=postgres://lilo:lilo@localhost:55432/lilo just test-db
 test-db:
-    CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo nextest run -p lilo-db --run-ignored all
+    CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo nextest run --workspace --run-ignored ignored-only
 
 lilo *ARGS:
     CARGO_TARGET_DIR={{TARGET_BUILD}} cargo run -p lilo --bin lilo -- {{ARGS}}

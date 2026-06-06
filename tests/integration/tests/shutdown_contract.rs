@@ -23,6 +23,7 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const REAPER_TICK: Duration = Duration::from_millis(200);
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn compose_shutdown_paths_stop_tasks_before_db_pool() -> Result<()> {
     for trigger in [
         ShutdownTrigger::StopRpc,
@@ -45,6 +46,16 @@ enum ShutdownTrigger {
 
 async fn run_shutdown_contract(trigger: ShutdownTrigger) -> Result<()> {
     let fixture = IntegrationFixture::open().await?;
+    // compose::run_with_shutdown_observer resolves its pool from the
+    // environment. Point it at this fixture's throwaway database so the
+    // in-process daemon and the test share one Postgres target. Safe under
+    // nextest, which runs each test in its own process.
+    //
+    // SAFETY: single-threaded test process; no other thread reads the env
+    // concurrently during this set.
+    unsafe {
+        std::env::set_var("LILO_DATABASE_URL", fixture.database_url());
+    }
     let socket_path = fixture.paths.socket_path();
     let endpoint = DaemonEndpoint::unix_socket(socket_path.clone());
     let (stages_tx, mut stages_rx) = mpsc::unbounded_channel();
@@ -88,11 +99,11 @@ async fn run_shutdown_contract(trigger: ShutdownTrigger) -> Result<()> {
     tokio::time::timeout(SHUTDOWN_TIMEOUT, compose_task).await???;
     assert_eq!(observed.last(), Some(&ShutdownStage::DbClosed));
     assert_zero_count(
-        fixture.db.session_pool(),
+        fixture.db.pool(),
         "SELECT COUNT(*) FROM session_spawn_intents",
     )
     .await?;
-    Ok(())
+    fixture.cleanup().await
 }
 
 type StopTask = Option<tokio::task::JoinHandle<Result<RpcResponse>>>;
@@ -275,17 +286,13 @@ fn is_socket_not_ready(error: &std::io::Error) -> bool {
 }
 
 async fn assert_no_session_partial_rows(db: &LiloDb) -> Result<()> {
-    assert_zero_count(
-        db.session_pool(),
-        "SELECT COUNT(*) FROM session_spawn_intents",
-    )
-    .await?;
-    assert_zero_count(db.session_pool(), "SELECT COUNT(*) FROM session_sessions").await?;
-    assert_zero_count(db.runtime_pool(), "SELECT COUNT(*) FROM runtime_lifecycle").await?;
+    assert_zero_count(db.pool(), "SELECT COUNT(*) FROM session_spawn_intents").await?;
+    assert_zero_count(db.pool(), "SELECT COUNT(*) FROM session_sessions").await?;
+    assert_zero_count(db.pool(), "SELECT COUNT(*) FROM runtime_lifecycle").await?;
     Ok(())
 }
 
-async fn assert_zero_count(pool: &sqlx::SqlitePool, sql: &str) -> Result<()> {
+async fn assert_zero_count(pool: &sqlx::PgPool, sql: &str) -> Result<()> {
     let count = count_all(pool, sql).await?;
     assert_eq!(count, 0, "{sql}");
     Ok(())

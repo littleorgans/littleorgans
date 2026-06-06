@@ -2,6 +2,7 @@ use crate::common::{self, OrPanic as _};
 use crate::{assert_success, canonical_display, first_field, get_session_json, stderr};
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn run_agent_config_paths_are_canonicalized_from_caller_context() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -56,6 +57,7 @@ pub(crate) fn run_agent_config_paths_are_canonicalized_from_caller_context() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn run_missing_named_agent_config_surfaces_resolved_path() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());

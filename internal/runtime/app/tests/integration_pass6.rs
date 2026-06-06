@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass6_mcp_lists_admin_tools_and_reports_status_version_watchers() {
     let harness = RtmHarness::start();
     let tools = mcp_json(&harness, request(1, "tools/list", json!({})));
@@ -45,6 +46,7 @@ fn pass6_mcp_lists_admin_tools_and_reports_status_version_watchers() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn pass6_mcp_kill_by_pid_signals_runtime() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();

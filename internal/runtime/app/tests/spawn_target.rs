@@ -25,6 +25,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn explicit_headless_spawn_records_no_tmux_pane_and_rejects_nudge() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -68,6 +69,7 @@ fn explicit_headless_spawn_records_no_tmux_pane_and_rejects_nudge() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn missing_session_nudge_uses_structured_error_code() {
     let harness = RtmHarness::start();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
@@ -95,6 +97,7 @@ fn missing_session_nudge_uses_structured_error_code() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
     let harness = RtmHarness::start_outside_tmux();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
@@ -134,6 +137,7 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn headless_spawn_cwd_flag_overrides_caller_cwd() {
     let harness = RtmHarness::start_outside_tmux();
     let session_id = Uuid::now_v7().to_string();
@@ -163,6 +167,7 @@ fn headless_spawn_cwd_flag_overrides_caller_cwd() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn headless_spawn_env_flag_forwards_caller_explicit_duplicate_and_empty_values() {
     let harness = RtmHarness::start_outside_tmux();
     let session_id = Uuid::now_v7().to_string();
@@ -275,6 +280,7 @@ fn docker_spawn_mount_flag_expands_leading_tilde_source() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn docker_spawn_env_flag_reaches_container_and_runtime() {
     let harness = RtmHarness::start_outside_tmux();
     let session_id = SessionId::from_uuid(Uuid::now_v7());
@@ -340,6 +346,7 @@ fn docker_spawn_env_flag_reaches_container_and_runtime() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn docker_spawn_image_flag_overrides_daemon_default() {
     let harness = RtmHarness::start_with_docker_image("daemon-default:latest");
     let session_id = SessionId::from_uuid(Uuid::now_v7());
@@ -364,6 +371,7 @@ fn docker_spawn_image_flag_overrides_daemon_default() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn spawn_rejects_live_and_terminal_session_id_reuse() {
     let harness = RtmHarness::start();
     let session_id = Uuid::now_v7().to_string();
@@ -388,6 +396,7 @@ fn spawn_rejects_live_and_terminal_session_id_reuse() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn validate_target_rpc_reports_headless_and_parse_outcomes() {
     let harness = RtmHarness::start();
 
@@ -418,6 +427,7 @@ fn validate_target_rpc_reports_headless_and_parse_outcomes() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn validate_target_cli_reports_json_and_human_outcomes() {
     let harness = RtmHarness::start();
 
@@ -448,6 +458,7 @@ fn validate_target_cli_reports_json_and_human_outcomes() {
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 fn validate_target_rpc_checks_tmux_liveness_when_available() {
     let Some(tmux_session) = common::tmux::TmuxSession::start("rtm-validate-target") else {
         eprintln!("skipping tmux validate target test because tmux is unavailable");

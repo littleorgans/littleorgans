@@ -10,6 +10,7 @@ use lilo_session_core::{
 use lilo_session_daemon::identity_client::RequestContext;
 
 #[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) async fn newly_door_gated_verbs_reject_unknown_principal() {
     let daemon = TestDaemon::new(LOCAL_UID).await;
 
@@ -33,6 +34,7 @@ pub(crate) async fn newly_door_gated_verbs_reject_unknown_principal() {
             }
     }));
     assert_eq!(action_counts(&rows), expected_action_counts());
+    daemon.cleanup().await;
 }
 
 fn newly_gated_rpc_cases() -> Vec<(&'static str, SessionRpc)> {

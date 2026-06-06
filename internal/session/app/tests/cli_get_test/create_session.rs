@@ -3,6 +3,7 @@ use crate::{assert_success, canonical_display, first_field, get_session_json};
 use serde_json::Value;
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn create_session_persists_headless_record_without_foreground_attach() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());
@@ -42,6 +43,7 @@ pub(crate) fn create_session_persists_headless_record_without_foreground_attach(
 }
 
 #[test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 pub(crate) fn create_session_and_run_persist_compatible_records_for_shared_inputs() {
     let runtime_path = common::fake_runtime_path("claude");
     let daemon = common::DaemonFixture::start_with_runtime_path(runtime_path.path());

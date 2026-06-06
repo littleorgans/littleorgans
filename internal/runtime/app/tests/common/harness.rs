@@ -22,7 +22,9 @@ pub const FAKE_RUNTIME_READY: &str = "rtm fake runtime ready";
 pub struct RtmHarness {
     temp: TempDir,
     socket: PathBuf,
-    db: PathBuf,
+    data_dir: PathBuf,
+    testdb: Option<lilo_db::test_support::TestDb>,
+    database_url: String,
     rtm_home: PathBuf,
     rtm: PathBuf,
     lilo: PathBuf,
@@ -76,17 +78,25 @@ impl RtmHarness {
         let temp = TempDir::new().expect("temp dir");
         let socket = temp.path().join("lilod.sock");
         let rtm_home = temp.path().join("lilo-home");
-        let db = rtm_home.join("data").join("lilo.db");
+        let data_dir = rtm_home.join("data");
         write_fake_runtime(temp.path(), "claude");
         write_fake_runtime(temp.path(), "codex");
         docker::write_fake_cli(temp.path());
         let rtm = workspace_bin("rtm");
         let lilo = workspace_bin("lilo");
+        // Provision a throwaway Postgres database and hand its URL to the daemon
+        // subprocess via LILO_DATABASE_URL; the daemon resolves it through
+        // open_postgres_resolved(). The fixture is kept alive for the harness
+        // lifetime and dropped explicitly on stop()/Drop.
+        let testdb =
+            block_on(lilo_db::test_support::TestDb::create()).expect("provision test database");
+        let database_url = testdb.database_url().to_owned();
         let mut daemon = start_daemon(
             &lilo,
             &socket,
             &rtm_home,
             temp.path(),
+            &database_url,
             &reconcile_env,
             start_outside_tmux,
         );
@@ -94,7 +104,9 @@ impl RtmHarness {
         Self {
             temp,
             socket,
-            db,
+            data_dir,
+            testdb: Some(testdb),
+            database_url,
             rtm_home,
             rtm,
             lilo,
@@ -242,6 +254,7 @@ impl RtmHarness {
             &self.socket,
             &self.rtm_home,
             self.temp.path(),
+            &self.database_url,
             &self.reconcile_env,
             self.start_outside_tmux,
         );
@@ -255,8 +268,15 @@ impl RtmHarness {
         let _ = std::fs::remove_file(self.rtm_home.join("run").join("lilod.pid"));
     }
 
-    pub fn db_path(&self) -> &Path {
-        &self.db
+    /// Postgres connection URL for the daemon's throwaway database. Tests that
+    /// inspect persisted rows directly open a pool against this URL.
+    pub fn database_url(&self) -> &str {
+        &self.database_url
+    }
+
+    /// Daemon data directory (`$LILO_HOME/data`); home of the event JSONL log.
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
     pub fn socket_path(&self) -> &Path {
@@ -278,6 +298,9 @@ impl RtmHarness {
     pub fn stop(mut self) {
         self.cleanup_processes();
         stop_daemon(&self.lilo, &self.socket, &self.rtm_home, &mut self.daemon);
+        if let Some(testdb) = self.testdb.take() {
+            block_on(testdb.cleanup()).expect("test db cleans up");
+        }
     }
 
     pub fn rtm_command(&self) -> Command {
@@ -342,6 +365,11 @@ impl Drop for RtmHarness {
             .output();
         let _ = self.daemon.kill();
         let _ = self.daemon.wait();
+        // Drop the throwaway database if stop() was not called (e.g. a panicking
+        // test). Best-effort: TestDb::Drop warns about a leak on failure.
+        if let Some(testdb) = self.testdb.take() {
+            let _ = block_on(testdb.cleanup());
+        }
     }
 }
 
@@ -360,11 +388,35 @@ fn write_fake_runtime(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
+/// Drive `future` to completion from the sync harness, whether or not the
+/// caller is already inside a tokio runtime. Runs on a dedicated OS thread with
+/// its own current-thread runtime so it works from a sync `#[test]` and from an
+/// async `#[tokio::test]` without nesting runtimes.
+fn block_on<F>(future: F) -> F::Output
+where
+    F: std::future::Future + Send,
+    F::Output: Send,
+{
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("tokio runtime")
+                    .block_on(future)
+            })
+            .join()
+            .expect("harness runtime thread joins")
+    })
+}
+
 fn start_daemon(
     lilo: &Path,
     socket: &Path,
     lilo_home: &Path,
     fake_bin_dir: &Path,
+    database_url: &str,
     reconcile_env: &[(&'static str, String)],
     start_outside_tmux: bool,
 ) -> Child {
@@ -374,6 +426,7 @@ fn start_daemon(
         .arg("start")
         .env("LILO_SOCKET_PATH", socket)
         .env("LILO_HOME", lilo_home)
+        .env("LILO_DATABASE_URL", database_url)
         .env("PATH", test_path(fake_bin_dir))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
