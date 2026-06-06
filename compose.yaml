@@ -1,5 +1,5 @@
 # Local Postgres service for lilo-db development and `cargo test -p lilo-db`.
-# Operator/test URL: postgres://lilo:lilo@localhost:5432/lilo
+# Operator/test URL: postgres://lilo:lilo@localhost:55432/lilo
 #
 #   docker compose up -d --wait postgres
 #
@@ -12,9 +12,9 @@ services:
       POSTGRES_PASSWORD: lilo
       POSTGRES_DB: lilo
     ports:
-      - "5432:5432"
+       - "127.0.0.1:${LILO_DOCKER_PG_PORT:-55432}:5432"
     volumes:
-      - lilo-postgres-data:/var/lib/postgresql/data
+      - lilo_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lilo -d lilo"]
       interval: 2s
@@ -22,4 +22,4 @@ services:
       retries: 30
 
 volumes:
-  lilo-postgres-data:
+  lilo_pgdata:
