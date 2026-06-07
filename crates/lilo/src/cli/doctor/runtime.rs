@@ -58,10 +58,10 @@ fn detail_warnings(doctor: &RuntimeDoctorResponse) -> Vec<String> {
         ));
     }
 
-    if !doctor.sqlite.pending_descriptions.is_empty() {
+    if !doctor.migrations.pending_descriptions.is_empty() {
         warnings.push(format!(
-            "runtime sqlite migrations pending: {}",
-            doctor.sqlite.pending_descriptions.join(", ")
+            "runtime migrations pending: {}",
+            doctor.migrations.pending_descriptions.join(", ")
         ));
     }
 
@@ -129,7 +129,7 @@ pub(super) fn response() -> RuntimeDoctorResponse {
         version: lilo_rm_core::version_info(),
         socket_path: "/tmp/rtmd.sock".to_string(),
         uptime_secs: 1,
-        sqlite: MigrationState {
+        migrations: MigrationState {
             applied: 0,
             total: 0,
             applied_descriptions: Vec::new(),
@@ -209,7 +209,7 @@ mod tests {
         let mut doctor = response();
         doctor.version.protocol_version = "old".to_string();
         doctor.version.capabilities.clear();
-        doctor.sqlite.pending_descriptions = vec!["add_runtime_events".to_string()];
+        doctor.migrations.pending_descriptions = vec!["add_runtime_events".to_string()];
         doctor.launchers[0].error = Some("not found".to_string());
         doctor.tmux.available = false;
         doctor.tmux.error = Some("tmux missing".to_string());
@@ -229,7 +229,7 @@ mod tests {
         for expected in [
             "runtime doctor status degraded socket=/tmp/rtmd.sock".to_string(),
             format!("runtime protocol mismatch: required {RUNTIME_PROTOCOL_VERSION}, got old"),
-            "runtime sqlite migrations pending: add_runtime_events".to_string(),
+            "runtime migrations pending: add_runtime_events".to_string(),
             "runtime launcher claude unavailable: not found".to_string(),
             "runtime tmux unavailable: tmux missing".to_string(),
             "runtime docker cli not ready: docker missing".to_string(),

@@ -119,8 +119,7 @@ where
     }
 }
 
-/// The Postgres target migration set (`internal/db/migrations`). The `SQLite`
-/// transition backing runs its own quarantined dir; see [`transition`].
+/// The Postgres migration set (`internal/db/migrations`).
 pub(crate) fn migrator() -> Migrator {
     sqlx::migrate!("./migrations")
 }

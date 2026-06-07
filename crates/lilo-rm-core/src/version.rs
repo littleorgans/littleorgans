@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::string_serde::{deserialize_string_parsed, serialize_string};
 
-pub const RUNTIME_PROTOCOL_VERSION: &str = "0.7";
+pub const RUNTIME_PROTOCOL_VERSION: &str = "0.8";
 
 pub const RUNTIME_PROTOCOL_CAPABILITIES: &[RuntimeCapability] = &[
     RuntimeCapability::StructuredProtocolErrors,
@@ -151,9 +151,9 @@ mod tests {
     };
 
     #[test]
-    fn protocol_version_advertises_v07_nudge_wait_timeout_contract() {
-        assert_eq!(RUNTIME_PROTOCOL_VERSION, "0.7");
-        assert_eq!(VersionInfo::new("rtm", "git").protocol_version, "0.7");
+    fn protocol_version_advertises_v08_nudge_wait_timeout_contract() {
+        assert_eq!(RUNTIME_PROTOCOL_VERSION, "0.8");
+        assert_eq!(VersionInfo::new("rtm", "git").protocol_version, "0.8");
     }
 
     #[test]

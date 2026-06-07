@@ -54,7 +54,7 @@ impl DoctorStatus {
             health: daemon,
             runtime,
         } = DaemonHealth::collect(&paths).await;
-        let database = DatabaseHealth::collect(&paths).await;
+        let database = DatabaseHealth::collect().await;
         let substrates = match database.db.as_ref() {
             Some(db) => SubstrateHealth::collect(db).await,
             None => SubstrateHealth::default(),
@@ -83,16 +83,11 @@ impl DoctorStatus {
         format!(
             "lilo doctor\n\
              daemon: {daemon_status} ({})\n\
-             db: {} ({})\n\
-             pragmas: journal_mode={} busy_timeout={} synchronous={}\n\
+             db: {}\n\
              substrates: sessions_active={} runtimes_active={} audit_rows={}\n\
              warnings: {}{}",
             self.daemon.socket_path,
             self.database.status,
-            self.database.path,
-            self.database.pragmas.journal_mode,
-            self.database.pragmas.busy_timeout,
-            self.database.pragmas.synchronous,
             self.substrates.sessions.active,
             self.substrates.runtimes.active,
             self.substrates.identity.audit_rows,
@@ -192,9 +187,7 @@ impl DaemonHealth {
 
 #[derive(Debug, Serialize)]
 struct DatabaseHealth {
-    path: String,
     status: &'static str,
-    pragmas: DbPragmas,
     error: Option<String>,
 }
 
@@ -204,60 +197,34 @@ struct DatabaseProbe {
 }
 
 impl DatabaseHealth {
-    async fn collect(paths: &LiloPaths) -> DatabaseProbe {
-        let path = paths.db_path();
-        let path_label = path.display().to_string();
+    async fn collect() -> DatabaseProbe {
         match LiloDb::open_postgres_resolved().await {
-            Ok(db) => match DbPragmas::collect(&db).await {
-                Ok(pragmas) => Self::probe(path_label, "ok", pragmas, None, Some(db)),
-                Err(error) => Self::error_probe(path_label, error, Some(db)),
+            Ok(db) => match Self::ping(&db).await {
+                Ok(()) => Self::probe("ok", None, Some(db)),
+                Err(error) => Self::error_probe(error, Some(db)),
             },
-            Err(error) => Self::error_probe(path_label, error.to_string(), None),
+            Err(error) => Self::error_probe(error.to_string(), None),
         }
     }
 
-    fn probe(
-        path: String,
-        status: &'static str,
-        pragmas: DbPragmas,
-        error: Option<String>,
-        db: Option<LiloDb>,
-    ) -> DatabaseProbe {
+    /// Validate the pool is live with a trivial round-trip.
+    async fn ping(db: &LiloDb) -> Result<(), String> {
+        sqlx::query_scalar::<_, i32>("SELECT 1")
+            .fetch_one(db.pool())
+            .await
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    fn probe(status: &'static str, error: Option<String>, db: Option<LiloDb>) -> DatabaseProbe {
         DatabaseProbe {
-            health: Self {
-                path,
-                status,
-                pragmas,
-                error,
-            },
+            health: Self { status, error },
             db,
         }
     }
 
-    fn error_probe(path: String, error: String, db: Option<LiloDb>) -> DatabaseProbe {
-        Self::probe(path, "error", DbPragmas::default(), Some(error), db)
-    }
-}
-
-#[derive(Debug, Default, PartialEq, Eq, Serialize)]
-struct DbPragmas {
-    journal_mode: String,
-    busy_timeout: i64,
-    synchronous: i64,
-}
-
-impl DbPragmas {
-    // Phase 2: Postgres has no per-connection journal/timeout/synchronous
-    // pragmas, so the probe validates the pool is live and reports the empty
-    // pragma shape. Renaming this struct and the doctor's `pragmas:` line is a
-    // later phase; the cutover only stops the old per-connection pragma queries
-    // from running against Postgres.
-    async fn collect(db: &LiloDb) -> Result<Self, String> {
-        sqlx::query_scalar::<_, i32>("SELECT 1")
-            .fetch_one(db.pool())
-            .await
-            .map_err(|error| error.to_string())?;
-        Ok(Self::default())
+    fn error_probe(error: String, db: Option<LiloDb>) -> DatabaseProbe {
+        Self::probe("error", Some(error), db)
     }
 }
 
@@ -346,7 +313,7 @@ mod tests {
             std::env::set_var("LILO_DATABASE_URL", testdb.database_url());
         }
 
-        let database = DatabaseHealth::collect(&paths).await;
+        let database = DatabaseHealth::collect().await;
         let db = database.db.expect("db opens");
         let status = DoctorStatus {
             daemon: DaemonHealth::collect(&paths).await.health,
@@ -359,9 +326,6 @@ mod tests {
         assert!(!status.daemon.reachable);
         assert_eq!(status.daemon.version, None);
         assert_eq!(status.database.status, "ok");
-        // Postgres has no journal/timeout/synchronous pragmas; the probe reports
-        // the empty pragma shape (renaming is a later phase).
-        assert_eq!(status.database.pragmas, DbPragmas::default());
         assert_eq!(status.substrates.sessions.active, 0);
         assert_eq!(status.substrates.runtimes.active, 0);
         assert_eq!(status.substrates.identity.audit_rows, 0);
@@ -432,9 +396,7 @@ mod tests {
             warnings: DoctorStatus::warnings_for_daemon(&daemon),
             daemon,
             database: DatabaseHealth {
-                path: "/tmp/lilo.db".to_string(),
                 status: "ok",
-                pragmas: DbPragmas::default(),
                 error: None,
             },
             substrates: SubstrateHealth::default(),
@@ -463,9 +425,7 @@ mod tests {
         let status = DoctorStatus {
             daemon: daemon_health(true, Some(crate::VERSION)),
             database: DatabaseHealth {
-                path: "/tmp/lilo.db".to_string(),
                 status: "ok",
-                pragmas: DbPragmas::default(),
                 error: None,
             },
             substrates: SubstrateHealth::default(),

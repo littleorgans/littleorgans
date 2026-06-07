@@ -211,7 +211,7 @@ pub struct DoctorResponse {
     pub version: VersionInfo,
     pub socket_path: String,
     pub uptime_secs: u64,
-    pub sqlite: MigrationState,
+    pub migrations: MigrationState,
     pub lifecycles: LifecycleCounts,
     pub watchers: WatcherCounts,
     pub launchers: Vec<LauncherStatus>,

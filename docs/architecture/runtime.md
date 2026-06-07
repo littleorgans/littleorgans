@@ -63,7 +63,7 @@ flowchart LR
     Daemon["lilo-runtime-daemon<br/>runtime daemon"]
     Handler["RPC dispatch"]
     State["daemon state facade"]
-    Store["lilo-runtime-store<br/>SQLite lifecycle state"]
+    Store["lilo-runtime-store<br/>Postgres lifecycle state"]
     Events["JSONL event stream"]
     Launchers["lilo-runtime-launchers<br/>command resolution"]
     Backend["runtime backend<br/>host or Docker"]
@@ -110,7 +110,7 @@ daemon handles socket accept, request dispatch, lifecycle coordination, event
 append, Docker wrapping, reconciliation, and doctor data.
 
 Runtime state has two records in Phase 3. `lilo-runtime-store` owns lifecycle
-rows in SQLite. The daemon owns the JSONL event stream and cursor reads. Phase
+rows in Postgres. The daemon owns the JSONL event stream and cursor reads. Phase
 7 moves the broader monorepo to one shared `LiloDb` pool, but Phase 3 keeps the
 runtime store on its imported pool boundary.
 
@@ -157,7 +157,7 @@ shim, tmux, and Docker evidence.
 | `lilo-runtime-daemon` | Internal daemon service. Owns request dispatch, lifecycle orchestration, event delivery, Docker wrapping, reconciliation, and `RuntimeService`. |
 | `lilo-runtime-launchers` | Internal launcher registry for runtime command resolution. |
 | `lilo-sys` | OS platform primitives for process status, signals, and exit watcher support on Unix (Linux and macOS). tmux behavior and `RuntimeSignal`/`KillOutcome` mapping stay daemon-internal. |
-| `lilo-runtime-store` | Internal SQLite lifecycle store, migrations, lifecycle reads, lifecycle writes, and migration metadata. |
+| `lilo-runtime-store` | Internal Postgres lifecycle store, migrations, lifecycle reads, lifecycle writes, and migration metadata. |
 
 ## Task Routing
 

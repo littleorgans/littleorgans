@@ -18,7 +18,7 @@ pub(crate) async fn collect(state: Arc<ServerState>) -> Result<DoctorResponse> {
         version: crate::version::runtime_version_info(),
         socket_path: state.config().endpoint.display_label(),
         uptime_secs: state.uptime_secs(),
-        sqlite: state.store().migration_state().await?,
+        migrations: state.store().migration_state().await?,
         lifecycles: state.store().lifecycle_counts().await?,
         watchers: state.watcher_counts().await,
         launchers: launcher_statuses(),

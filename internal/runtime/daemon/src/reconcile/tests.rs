@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use chrono::{DateTime, TimeZone};
 use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationPolicy, IsolationProfile, LifecycleState, RuntimeKind, ShimReady};
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 
 use super::*;
 use crate::server::DaemonConfig;
@@ -303,9 +303,7 @@ fn test_config(root: &Path) -> DaemonConfig {
         endpoint: lilo_paths::RuntimeEndpoint::unix_socket(root.join("rtm-test.sock")),
         shim_path: PathBuf::from("rtm"),
         log_root: root.join("logs"),
-        store: StoreConfig {
-            db_path: root.join("rtm-test.sqlite"),
-        },
+        data_root: root.to_path_buf(),
         reconcile: ReconcileConfig::default(),
         docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
         tmux_server_label: None,

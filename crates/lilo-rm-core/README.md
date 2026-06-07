@@ -42,7 +42,7 @@ session-matters may treat these JSON field names and value kinds as stable:
 
 - `version.version`, `version.git_sha`, `version.protocol_version`, and `version.capabilities`
 - `socket_path` and `uptime_secs`
-- `sqlite.applied`, `sqlite.total`, `sqlite.applied_descriptions`, and `sqlite.pending_descriptions`
+- `migrations.applied`, `migrations.total`, `migrations.applied_descriptions`, and `migrations.pending_descriptions`
 - `lifecycles.forking`, `lifecycles.running`, `lifecycles.exited`, and `lifecycles.lost`
 - `watchers.process_exit_watchers` and `watchers.shim_sockets`
 - `launchers[].runtime`, `launchers[].command`, and `launchers[].error`

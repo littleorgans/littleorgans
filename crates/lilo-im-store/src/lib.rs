@@ -14,12 +14,10 @@
 
 pub mod schema;
 
-// Module path stays `sqlite` until the Phase 5 cosmetic rename; the body is
-// Postgres.
 #[cfg(feature = "postgres")]
-pub mod sqlite;
+pub mod postgres;
 
 pub use lilo_im_core::{AuditError, AuditRow, AuditSink};
 
 #[cfg(feature = "postgres")]
-pub use sqlite::{AuditFilters, AuditStore, AuditTableColumn, StoreError};
+pub use postgres::{AuditFilters, AuditStore, AuditTableColumn, StoreError};

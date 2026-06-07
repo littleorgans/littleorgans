@@ -10,7 +10,7 @@ use lilo_rm_core::{
     MountSpec, RuntimeKind, ShimReady, SpawnConflictPayload, SpawnRequest, SpawnTarget,
     TmuxSpawnTarget, WatcherCounts,
 };
-use lilo_runtime_store::{LifecycleStore, StoreConfig};
+use lilo_runtime_store::LifecycleStore;
 
 use super::*;
 use crate::docker_preflight::DockerPreflightConfig;

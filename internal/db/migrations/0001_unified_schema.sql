@@ -8,8 +8,8 @@
 
 CREATE TABLE identity_audit (
     id TEXT NOT NULL PRIMARY KEY,
-    -- Monotonic insertion order (replaces the SQLite implicit rowid the audit
-    -- query ordered by). Distinct from `timestamp`, which can collide.
+    -- Monotonic insertion order the audit query orders by. Distinct from
+    -- `timestamp`, which can collide.
     seq BIGINT GENERATED ALWAYS AS IDENTITY,
     owner TEXT NOT NULL DEFAULT 'local',
     timestamp TIMESTAMPTZ NOT NULL,

@@ -73,7 +73,7 @@ flowchart LR
     Daemon["lilo-session-daemon<br/>session daemon"]
     Handler["RPC dispatch"]
     State["daemon state facade"]
-    Store["lilo-session-store<br/>SQLite session state"]
+    Store["lilo-session-store<br/>Postgres session state"]
     Driver["lilo-session-driver<br/>runtime bridge"]
     Identity["lilo-im-*<br/>authorization and audit"]
     Lifecycle["lifecycle task<br/>terminal reaping"]
@@ -126,9 +126,9 @@ events, reconciles lifecycle evidence, and returns typed protocol responses.
 The daemon invariant is: authorize, persist intent, drive runtime, persist
 evidence, respond.
 
-`lilo-session-store` owns SQLite persistence during Phase 4. Phase 7 moves
-session store access to the shared `LiloDb` pool, but Phase 4 keeps the imported
-rusqlite boundary. The durable table family uses session scoped names such as
+`lilo-session-store` owns Postgres persistence. Session store access goes
+through the shared `LiloDb` pool. The durable table family uses session scoped
+names such as
 `session_sessions` and `session_namespaces`, plus the mail log tables
 `messages` and `message_deliveries`, when it joins the shared database contract.
 
@@ -187,7 +187,7 @@ tool names onto the same `RpcRequest` variants used by commands.
 | `lilo-session-core` | Internal contract crate. Owns RPC, responses, spawn shape, sessions, selectors, labels, namespaces, mail, runtime mirrors, MCP envelope, and authored tool contracts. |
 | `lilo-session-daemon` | Internal daemon service. Owns socket serving, request dispatch, authorization, lifecycle tasks, runtime event tailing, reconciliation, MCP bridge, polish commands, and `SessionService`. |
 | `lilo-session-driver` | Internal runtime bridge. Owns the spawn driver trait, runtime client adapter, capture, nudge, termination, terminal reaping, and runtime to session conversions. |
-| `lilo-session-store` | Internal SQLite store. Owns session, namespace, mail, label, runtime event cursor, migration, and timestamp persistence during Phase 4. |
+| `lilo-session-store` | Internal Postgres store. Owns session, namespace, mail, label, runtime event cursor, migration, and timestamp persistence. |
 | `lilo-paths` | Published path policy crate. Owns littleorgans home, socket, data, log, cache, tmp, and session import path helpers until the Phase 5 cutover completes. |
 
 ## Task Routing

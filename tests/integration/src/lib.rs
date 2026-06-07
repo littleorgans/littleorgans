@@ -13,7 +13,6 @@ use lilo_rm_core::{
 };
 use lilo_runtime_daemon::docker_preflight::DockerPreflightConfig;
 use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig};
-use lilo_runtime_store::StoreConfig;
 use lilo_session_core::{Namespace, RuntimeKind as SessionRuntimeKind, Session, SessionState};
 use tempfile::TempDir;
 
@@ -62,9 +61,7 @@ pub fn runtime_config(paths: &LiloPaths) -> DaemonConfig {
         endpoint: RuntimeEndpoint::unix_socket(paths.socket_path()),
         shim_path: paths.run_root().join("shim"),
         log_root: paths.runtime_log_dir(uuid::Uuid::nil()),
-        store: StoreConfig {
-            db_path: paths.db_path(),
-        },
+        data_root: paths.data_root(),
         reconcile: ReconcileConfig {
             sweep_interval: Duration::from_secs(3_600),
             resume_poll_interval: Duration::from_secs(3_600),

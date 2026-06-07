@@ -215,7 +215,7 @@ FROM {AUDIT_TABLE}",
         query.push("timestamp >= ").push_bind(since);
     }
     // `seq` is a monotonic identity column: insertion order, stable even when
-    // two rows share a `timestamp` (Postgres has no SQLite rowid).
+    // two rows share a `timestamp` (Postgres has no implicit row order to fall back on).
     query.push(" ORDER BY seq ASC");
     if let Some(limit) = filters.limit {
         let limit = i64::try_from(limit).map_err(|_| StoreError::LimitTooLarge(limit))?;

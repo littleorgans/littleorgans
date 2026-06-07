@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use anyhow::Result;
 use lilo_common::id::SessionId;
 use lilo_paths::{LiloHome, LiloPaths, RuntimeEndpoint, env::LILO_TMUX_SERVER_LABEL};
-use lilo_runtime_store::StoreConfig;
 
 use crate::{docker_preflight::DockerPreflightConfig, reconcile};
 
@@ -12,7 +11,7 @@ pub struct DaemonConfig {
     pub endpoint: RuntimeEndpoint,
     pub shim_path: PathBuf,
     pub log_root: PathBuf,
-    pub store: StoreConfig,
+    pub data_root: PathBuf,
     pub reconcile: reconcile::ReconcileConfig,
     pub docker_preflight: DockerPreflightConfig,
     pub tmux_server_label: Option<String>,
@@ -30,9 +29,7 @@ impl DaemonConfig {
             endpoint: RuntimeEndpoint::unix_socket(paths.socket_path()),
             shim_path: lilo_paths::shim_path_from_env()?,
             log_root: paths.logs_root().join("runtimes"),
-            store: StoreConfig {
-                db_path: paths.db_path(),
-            },
+            data_root: paths.data_root(),
             reconcile: reconcile::ReconcileConfig::from_env()?,
             docker_preflight: DockerPreflightConfig::from_env(),
             tmux_server_label: tmux_server_label_from_env(),
@@ -52,9 +49,7 @@ impl DaemonConfig {
             endpoint: RuntimeEndpoint::unix_socket("/tmp/rtm.sock"),
             shim_path: PathBuf::from("/tmp/rtm-shim"),
             log_root: PathBuf::from("/tmp/rtm/logs"),
-            store: StoreConfig {
-                db_path: PathBuf::from("/tmp/rtm.db"),
-            },
+            data_root: PathBuf::from("/tmp"),
             reconcile: reconcile::ReconcileConfig::default(),
             docker_preflight,
             tmux_server_label: None,
@@ -79,10 +74,7 @@ impl DaemonConfig {
     }
 
     pub fn data_dir(&self) -> PathBuf {
-        self.store
-            .db_path
-            .parent()
-            .map_or_else(|| self.log_root.clone(), PathBuf::from)
+        self.data_root.clone()
     }
 }
 

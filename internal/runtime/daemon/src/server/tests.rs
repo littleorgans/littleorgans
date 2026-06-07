@@ -173,9 +173,6 @@ struct TestState {
 impl TestState {
     async fn new() -> Self {
         let temp = tempfile::TempDir::new().expect("temp dir");
-        let store_config = StoreConfig {
-            db_path: temp.path().join("rtm.sqlite"),
-        };
         let testdb = lilo_db::test_support::TestDb::create()
             .await
             .expect("store db");
@@ -186,7 +183,7 @@ impl TestState {
                 endpoint: lilo_paths::RuntimeEndpoint::unix_socket("/tmp/rtm-test.sock"),
                 shim_path: PathBuf::from("rtm"),
                 log_root: temp.path().join("logs"),
-                store: store_config,
+                data_root: temp.path().to_path_buf(),
                 reconcile: reconcile::ReconcileConfig::default(),
                 docker_preflight: crate::docker_preflight::DockerPreflightConfig::default(),
                 tmux_server_label: None,

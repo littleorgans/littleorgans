@@ -1,6 +1,5 @@
 ---
 source: internal/runtime/app/tests/surface_snapshots.rs
-assertion_line: 96
 expression: doctor
 ---
 {
@@ -46,9 +45,7 @@ expression: doctor
     "running": "[count]"
   },
   "log_availability": [],
-  "recent_lost": [],
-  "socket_path": "[socket]",
-  "sqlite": {
+  "migrations": {
     "applied": 1,
     "applied_descriptions": [
       "unified schema"
@@ -56,6 +53,8 @@ expression: doctor
     "pending_descriptions": [],
     "total": 1
   },
+  "recent_lost": [],
+  "socket_path": "[socket]",
   "tmux": {
     "available": "[tmux]",
     "error": "[launcher_error]",
@@ -79,7 +78,7 @@ expression: doctor
       "nudge_wait_timeout"
     ],
     "git_sha": "[git_sha]",
-    "protocol_version": "0.7",
+    "protocol_version": "0.8",
     "version": "[version]"
   },
   "watchers": {

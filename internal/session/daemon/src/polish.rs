@@ -206,10 +206,10 @@ fn runtime_doctor_message(report: &RuntimeDoctorReport) -> String {
             doctor.version.protocol_version
         );
     }
-    if !doctor.sqlite.pending_descriptions.is_empty() {
+    if !doctor.migrations.pending_descriptions.is_empty() {
         return format!(
-            "runtime-matters sqlite migration drift: pending {}",
-            doctor.sqlite.pending_descriptions.join(", ")
+            "runtime-matters migration drift: pending {}",
+            doctor.migrations.pending_descriptions.join(", ")
         );
     }
     format!("runtime-matters doctor status {}", report.status)

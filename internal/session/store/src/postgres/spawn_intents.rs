@@ -16,7 +16,7 @@ use super::SessionStore;
 #[derive(Debug, Error)]
 pub enum SpawnIntentError {
     #[error(transparent)]
-    Sqlite(#[from] sqlx::Error),
+    Database(#[from] sqlx::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
     #[error(transparent)]
