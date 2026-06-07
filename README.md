@@ -66,6 +66,7 @@ substrate. Run `lilo <command> --help` for flags and examples.
 | `lilo runtime …` | Raw runtime operator namespace (diagnostic; never creates a session record). |
 | `lilo session …` | Session substrate operator namespace. |
 | `lilo doctor` | Inspect local `lilo` health. |
+| `lilo daemon` | Manage the local `lilo` daemon: `start` (foreground; `--ready-check` brings it up and exits), `stop`, `status`. |
 
 `lilo run` and `lilo create session` are session-backed. Raw `lilo runtime
 spawn` is diagnostic access that stays identity-gated and appears only in
@@ -106,8 +107,12 @@ All local state lives under `~/.lilo/` (override the root with `LILO_HOME`):
 config, run files, event JSONL, logs, cache, and tmp. The database is Postgres,
 configured by `LILO_DATABASE_URL` (`LILO_HOME` no longer implies a database
 path). `lilo` owns exactly one environment prefix, `LILO_`, sub-namespaced by
-audience. The full contract is
-[`docs/reference/env-vars.md`](docs/reference/env-vars.md).
+audience.
+
+See [`docs/reference/postgres.md`](docs/reference/postgres.md) for database
+setup across local native, Docker Compose, and cloud-managed Postgres, plus the
+`lilo doctor` / `lilo daemon start --ready-check` connection smoke. The full
+environment contract is [`docs/reference/env-vars.md`](docs/reference/env-vars.md).
 
 ## License
 

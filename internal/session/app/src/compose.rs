@@ -58,14 +58,48 @@ impl ShutdownObserver {
     }
 }
 
+/// Daemon run mode. `Serve` runs the accept loop until a shutdown signal or
+/// shutdown RPC. `ReadyCheck` brings the daemon fully up, then triggers an
+/// immediate clean shutdown so the same teardown path runs and the process
+/// exits 0. The ready-check leaves no socket or pidfile behind.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum RunMode {
+    #[default]
+    Serve,
+    ReadyCheck,
+}
+
 pub async fn run_from_env(daemon_version: impl Into<String>) -> Result<()> {
-    let daemon_version = daemon_version.into();
+    run_core(
+        paths_from_env()?,
+        ShutdownObserver::default(),
+        daemon_version,
+        RunMode::Serve,
+    )
+    .await
+}
+
+/// Bring the daemon fully up against the resolved environment (open the
+/// database, run migrations, bind the socket, write the pidfile), confirm
+/// readiness, then cleanly shut down and return. Bounded and deterministic: the
+/// smoke primitive for verifying a Postgres URL across local, Compose, and
+/// cloud. Leaves no socket or pidfile behind.
+pub async fn ready_check_from_env(daemon_version: impl Into<String>) -> Result<()> {
+    run_core(
+        paths_from_env()?,
+        ShutdownObserver::default(),
+        daemon_version,
+        RunMode::ReadyCheck,
+    )
+    .await
+}
+
+fn paths_from_env() -> Result<LiloPaths> {
     let home = LiloHome::from_env().context("failed to resolve lilo home")?;
-    run(LiloPaths::new(home), daemon_version).await
+    Ok(LiloPaths::new(home))
 }
 
 pub async fn run(paths: LiloPaths, daemon_version: impl Into<String>) -> Result<()> {
-    let daemon_version = daemon_version.into();
     run_with_shutdown_observer(paths, ShutdownObserver::default(), daemon_version).await
 }
 
@@ -74,6 +108,15 @@ pub async fn run_with_shutdown_observer(
     paths: LiloPaths,
     shutdown: ShutdownObserver,
     daemon_version: impl Into<String>,
+) -> Result<()> {
+    run_core(paths, shutdown, daemon_version, RunMode::Serve).await
+}
+
+async fn run_core(
+    paths: LiloPaths,
+    shutdown: ShutdownObserver,
+    daemon_version: impl Into<String>,
+    mode: RunMode,
 ) -> Result<()> {
     let daemon_version = daemon_version.into();
     fs::create_dir_all(paths.run_root()).context("failed to create run directory")?;
@@ -104,6 +147,14 @@ pub async fn run_with_shutdown_observer(
     tokio::pin!(shutdown_signal);
     let mut runtime_shutdown = runtime.subscribe_shutdown();
     let mut connections = JoinSet::new();
+
+    // Ready-check: the daemon is fully up (database connected, migrations
+    // applied, socket bound, pidfile written). Trigger an immediate clean
+    // shutdown so the shared teardown below removes the socket and pidfile and
+    // closes the pool. Bounded and deterministic; nothing is left running.
+    if mode == RunMode::ReadyCheck {
+        cancellation.cancel();
+    }
 
     loop {
         tokio::select! {

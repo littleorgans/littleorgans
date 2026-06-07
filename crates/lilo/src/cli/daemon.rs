@@ -2,7 +2,7 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use lilo_common::diagnostic::Diagnostic;
 use lilo_paths::{DaemonEndpoint, LiloPaths};
 use lilo_session_core::SessionRpc;
@@ -20,17 +20,40 @@ pub struct DaemonCli {
 
 #[derive(Debug, Subcommand)]
 enum DaemonAction {
-    Start,
+    /// Start the daemon in the foreground. With `--ready-check`, bring it fully
+    /// up and exit instead of serving.
+    Start(StartArgs),
     Stop,
     Status,
 }
 
+#[derive(Debug, Args)]
+struct StartArgs {
+    /// Bring the daemon fully up (open the database, run migrations, bind the
+    /// socket, write the pidfile), confirm readiness, then cleanly shut down and
+    /// exit 0. Bounded and deterministic: the smoke primitive for verifying a
+    /// Postgres URL across local, Compose, and cloud. Leaves no socket or
+    /// pidfile behind.
+    #[arg(long)]
+    ready_check: bool,
+}
+
 impl DaemonCli {
     pub async fn run(&self, output: Output) -> Result<(), Diagnostic> {
-        match self.action {
-            DaemonAction::Start => lilo_session_app::compose::run_from_env(crate::VERSION)
-                .await
-                .map_err(Diagnostic::from),
+        match &self.action {
+            DaemonAction::Start(args) => {
+                if args.ready_check {
+                    lilo_session_app::compose::ready_check_from_env(crate::VERSION)
+                        .await
+                        .map_err(Diagnostic::from)?;
+                    print_ready_check(output);
+                    Ok(())
+                } else {
+                    lilo_session_app::compose::run_from_env(crate::VERSION)
+                        .await
+                        .map_err(Diagnostic::from)
+                }
+            }
             DaemonAction::Stop => stop(&paths()?, output).await.map_err(Diagnostic::from),
             DaemonAction::Status => {
                 print_status(output, &status(&paths()?));
@@ -150,4 +173,22 @@ struct DaemonStatus {
     pid: Option<u32>,
     running: bool,
     socket_exists: bool,
+}
+
+fn print_ready_check(output: Output) {
+    match output {
+        Output::Human => println!(
+            "lilod ready-check ok: database connected, migrations applied, socket bound; shut down cleanly"
+        ),
+        Output::Json => println!(
+            "{}",
+            serde_json::to_string(&ReadyCheck { ok: true })
+                .expect("ready-check serialization cannot fail")
+        ),
+    }
+}
+
+#[derive(Serialize)]
+struct ReadyCheck {
+    ok: bool,
 }
