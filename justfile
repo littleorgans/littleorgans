@@ -3,7 +3,11 @@ set shell := ["bash", "-cu"]
 # sccache caches every dependency compilation once and serves it to all three
 # target dirs below (and across branch switches), so the per-tool split is cheap
 # to fill. Local only: CI has no sccache, so this stays out of .cargo/config.toml.
-export RUSTC_WRAPPER := "sccache"
+# Falls back to no wrapper when sccache is not installed (cargo treats an empty
+# RUSTC_WRAPPER as unset), so a fresh checkout still builds, just without the
+# cache. The literal "sccache" is kept when present so the build fingerprint
+# never changes for machines that already have it.
+export RUSTC_WRAPPER := `command -v sccache >/dev/null 2>&1 && echo sccache || true`
 
 # Per-tool CARGO_TARGET_DIR. clippy runs the clippy-driver, a different rustc
 # fingerprint, so sharing target/ with build forces a full workspace recompile on
@@ -14,6 +18,11 @@ export RUSTC_WRAPPER := "sccache"
 # Absolute (via justfile_directory()): a relative target dir is resolved against
 # each cargo invocation's cwd, so a nested cargo run (e.g. an integration test
 # spawning cargo from a crate dir) would scatter stray crates/<x>/target trees.
+#
+# The trade is disk, not time: up to five sibling trees can coexist under
+# target/ (build, clippy, nextest, rust-analyzer, and the default that bare
+# cargo and CI use), easily tens of GB on this workspace. sccache saves
+# compile time, not space; `just clean` reclaims all of them at once.
 TARGET_CLIPPY := justfile_directory() / "target/clippy"
 TARGET_BUILD := justfile_directory() / "target/build"
 TARGET_NEXTEST := justfile_directory() / "target/nextest"
@@ -94,6 +103,13 @@ codegen *ARGS:
 # refills dependency compiles from the sccache cache (~15s), not a cold build.
 clean:
     rm -rf target
+
+# Wipe the sccache disk cache (macOS path; stop the server first so it is not
+# holding the directory). The next build after this is fully cold. Separate
+# from `clean` so the common path keeps its ~15s cache refill.
+clean-sccache:
+    -sccache --stop-server 2>/dev/null
+    rm -rf ~/Library/Caches/Mozilla.sccache
 
 # Install
 
