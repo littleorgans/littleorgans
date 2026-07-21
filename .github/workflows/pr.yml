@@ -34,7 +34,7 @@ jobs:
           )
         )
       )
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Both vars resolve to the health-checked postgres service below. They make
     # the lilo-db Postgres tests run in the gate (instead of skipping as they do
     # locally without a database) and give `lilo doctor` a real backend. The CI
