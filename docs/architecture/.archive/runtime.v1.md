@@ -26,17 +26,6 @@ the normal API. The daemon records durable lifecycle state and cursor addressed
 events so clients can reconcile without relying on stdout, pane state, or a
 single in memory watcher.
 
-The current implementation receives session backed launch requests directly
-from Session. The target architecture routes placement through Schedule.
-Schedule decides where an occupant runs; Runtime executes topology and process
-operations. Session may attach an opaque Transport capture lease before
-placement. Runtime applies the resulting launch specification without
-interpreting provider payload or overlay policy.
-
-See [system architecture](system.md),
-[Schedule architecture](schedule.md), and
-[Transport architecture](transport.md) for the target boundary.
-
 ## Contracts
 
 `lilo-runtime-daemon` exposes the Phase 7 composition hook:
@@ -131,17 +120,12 @@ runtime command. The backend chooses where that command runs.
 
 ## Stable Flows
 
-Current session spawn flows from the caller into a `SpawnRequest`, through
+Session spawn flows from the caller into a `SpawnRequest`, through
 `RuntimeRpc::Spawn`, preflight validation, launcher dispatch, backend launch
 preparation, and daemon `begin_spawn`. The backend launches the shim, the shim
 requests its launch spec, starts the runtime process, reports ready, and later
 reports exit. The client receives `RuntimeResponse::Spawned` only after the
 running lifecycle record and event are stored.
-
-After Schedule activates, the same Runtime path receives the execution request
-from Schedule. Runtime does not select the pane, interpret the occupant, or
-prepare Transport capture. Raw diagnostic spawn remains a direct Runtime
-surface and creates no Session or Schedule record.
 
 Kill flows through `RuntimeRpc::Kill` for a session id, or through
 `RuntimeRpc::KillByPid` for the explicit admin escape hatch. The daemon sends

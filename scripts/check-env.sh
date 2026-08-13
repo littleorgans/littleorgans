@@ -38,8 +38,16 @@ PRUNE = {"target", ".git", ".moon", ".nancy", "node_modules"}
 # Files that legitimately NAME the forbidden tokens to document/enforce the rule:
 # the gate itself, and the narrative convention/instruction/lesson docs. These are
 # descriptions, not references, so they are exempt (cf. scripts/check-seam.sh's
-# allowlist). Fixtures, snapshots, code, and config are NOT exempt.
-EXCLUDE = {"scripts/check-env.sh", "CLAUDE.md", "AGENTS.md", "LESSONS.md"}
+# allowlist). Fixtures, code, and config are NOT exempt. A snapshot is exempt
+# only when the exact archived path is listed here because its canonical
+# convention document is already exempt.
+EXCLUDE = {
+    "scripts/check-env.sh",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "LESSONS.md",
+    ".archive/CLAUDE.v1.md",
+}
 SKIP_SUFFIX = {".db", ".db-shm", ".db-wal", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".lock"}
 REGISTRY = Path("crates/lilo-paths/src/env.rs")
 

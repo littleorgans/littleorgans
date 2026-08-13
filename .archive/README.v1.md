@@ -13,8 +13,7 @@ host and gives you a kubectl-shaped surface to create, inspect, message, and
 tear them down. A single daemon (`lilod`) owns the live state behind a unix
 socket; the CLI is a thin client over it.
 
-Three bounded contexts compose the current daemon, with two designed for later
-activation:
+Four bounded contexts compose the daemon:
 
 - **Session** is the control plane. It owns session records, intent
   reconciliation, mail, nudge, labels, and the user verbs that turn a request
@@ -24,21 +23,13 @@ activation:
 - **Identity** is the local equivalent of a service account, RBAC, and audit. It
   authorizes at the library layer inside session and runtime; it has no command
   of its own yet.
-- **Schedule** is reserved. When activated, it becomes the sole placement
-  authority and reconciles desired topology and stable occupant bindings.
-- **Transport** is planned as the provider wire observation axis. It captures
-  exact traffic, interprets payloads, applies authorized transformations, and
-  records fidelity evidence. It does not authorize, place, launch, or
-  reconcile.
+- **Transport** is the wire-observation axis. It watches the bytes between an
+  agent and its model provider and captures turns, independent of who spawned
+  the process. It observes; it does not authorize, spawn, or reconcile.
 
-The mental model is Kubernetes: Session is the API server, Schedule is the
-scheduler, Runtime is the kubelet, Identity is the service account and RBAC,
-Transport is wire observation, and `lilo` is `kubectl`.
-
-Canvas is the planned human workspace and Desktop is its native host. They are
-one product surface. See the
-[`system architecture`](docs/architecture/system.md) for current and target
-flows.
+The mental model is Kubernetes: session is the API server, runtime is the
+kubelet, identity is the service account and RBAC, transport is mesh
+observability, and `lilo` is `kubectl`.
 
 ## Install
 
@@ -88,8 +79,7 @@ This is the private monorepo; one version number covers the whole family.
 | Path | Contents |
 |---|---|
 | `crates/` | Published crates (`lilo-` prefix), including the `lilo` binary. |
-| `internal/` | Non-published substrate, grouped by context and role: `session/{app,core,daemon,driver,store}`, `runtime/{app,daemon,launchers,store}`, `identity/service`, plus shared `db`, `wire`, `port`. Schedule activates here only after its boundary is proven. |
-| `apps/`, `packages/`, `python/` | Reserved product and language workspaces. Their exact activation follows the Transport and Canvas architecture proof. |
+| `internal/` | Non-published substrate, grouped by context and role: `session/{app,core,daemon,driver,store}`, `runtime/{app,daemon,launchers,store}`, `identity/service`, plus shared `db`, `wire`, `port`. |
 | `tools/` | Workspace tooling (`xtask`, future `mirror-publish`). |
 | `docs/` | Architecture, reference, ADRs, mirror and provenance material. |
 | `scripts/` | Repo gates (`check-env.sh`, `check-seam.sh`, `changed-crates.sh`). |
