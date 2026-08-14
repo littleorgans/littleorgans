@@ -212,6 +212,7 @@ The source reports contain detailed traces and candidate findings. This page is 
 | [Data boundary findings](data-boundaries-findings.md) | Detailed findings, explicit gaps, test evidence, and file counts |
 | [Documentation and code drift](doc-code-drift.md) | Target comparison, publishability, cycles, line limits, and evolution readiness |
 | [Comment review](comment-review.md) | Comments that hide stale phases, workarounds, unenforced rules, or ownership leaks |
+| [CLIProxyAPI lessons for the first Transport proof](cliproxyapi-lessons-for-first-transport-proof.md) | External case study mapped to the first Transport evidence contract and acceptance work |
 | [Architecture audit](architecture-audit.sh) | Repeatable checks for package, topology, documentation, type, and ownership findings |
 
 ## Verification at the reviewed commit
