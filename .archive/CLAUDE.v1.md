@@ -25,9 +25,9 @@ MoE-warroom-consensus cm lesson id
 ## Migration drivers
 
 Atomic releases are the first driver: one version covers the whole Rust crate
-family in lockstep, and `v0.8.0` is the first monorepo release. Any later Python
-workspace and the TS/Electron app version on independent lines, not in lockstep
-with the crates; see Release and mirrors. Tight
+family in lockstep, and `v0.8.0` is the first monorepo release. The later
+Python (transport-matters) and TS/Electron app surfaces version on independent
+lines, not in lockstep with the crates; see Release and mirrors. Tight
 cross-component refactors are the second driver: a contract change can move
 through producer, consumer, tests, and docs in one review.
 
@@ -48,32 +48,30 @@ events, and raw runtime status. Session owns user-level session records,
 intent reconciliation, mail, nudge, delete, and the user verbs that compose
 runtime work into a session.
 
-Schedule is the target sole placement authority. It owns desired topology,
-stable occupant bindings, and reconciliation of declared restart policy.
-Runtime executes its topology and process requests. Schedule is reserved in
-v0.8.0 and has no crate, daemon, schema, or command namespace yet. Do not expand
-its implementation scope while building the first Transport and Canvas proof.
+Schedule is reserved only. It has no crate, daemon, or command namespace in
+v0.8.0.
 
-Transport is the provider wire observation and capture context. It owns exact
-provider traffic, payload interpretation, authorized request transformation,
-and fidelity evidence. It does not authorize, choose an agent, decide
-placement, execute a process, or reconcile. Transport Matters is the knowledge
-base, executable reference, fixture library, and lessons record. Do not import
-its package boundaries or permanent launcher topology by default.
-
-Session prepares capture for the typed UUIDv4 `SessionId` and attaches an
-opaque capture lease to the launch payload. The current v0.8 path passes that
-payload directly to Runtime. The target path passes it through Schedule, which
-places the occupant and forwards the opaque payload to Runtime. `lilo capture`
-remains Runtime's tmux pane capture verb. Implementation language, process
-topology, storage ownership, and failure policy remain open until the first
-vertical slice proves them.
-
-Canvas and Desktop are one product surface. Canvas consumes Session and
-Transport read and command models through `lilod`; it does not read substrate
-storage directly. The governing bounded design lives in
-`docs/architecture/system.md`, `docs/architecture/schedule.md`,
-`docs/architecture/transport.md`, and `docs/architecture/canvas.md`.
+Transport is migrating into the monorepo as the wire-observation and capture
+context. It owns the wire between an agent and its model provider, together
+with the harness transcript. It proxies agent traffic, captures turns, and
+surfaces the fidelity diff between what the harness believed it sent and what
+actually reached the provider. Two consumers drive it: agents inspecting and
+sharing captured sessions, and the littleorgans human UI (a separate TS/Electron
+train; only transport's Python API migrates, not its `www/` or `desktop/`). The
+CLI binary is `tm` and the crate/package is `transport`. The launch chain
+inverts: `lilo run claude` execs `tm claude`, which brings up the proxy and
+spawns the agent, so capture is a side effect of every run, and
+`schedule-matters` will reuse the same `tm` wrapper when it lands. Transport is
+now interposed in the launch path but still does not authorize, decide what to
+spawn, or reconcile, so it stays outside the control plane in the load-bearing
+sense. Its user surface is the operator namespace `lilo transport ...`;
+`lilo capture` is runtime's tmux pane-capture verb, not transport. Captured
+sessions correlate to the control-plane `SessionId`, a UUIDv4 platform join key
+(`tm` reads `LILO_AGENT_SESSION_ID`), so agents and the UI share a session by
+that id rather than by a provider-minted conversation id. The `tm` packaging
+split, read surface, reliability semantics, and migration phase are being
+finalized in `NOTES/transport-integration.md`; do not lock them ahead of that
+note.
 
 ## K8s mental model post-monorepo
 
@@ -81,11 +79,13 @@ storage directly. The governing bounded design lives in
 server boundary. `internal/runtime` is the kubelet-shaped host executor.
 Identity is the local equivalent of ServiceAccount, RBAC, and audit.
 
-Schedule is the kube scheduler shaped placement boundary reserved for later
-activation. Transport is the wire observation axis outside placement and
-process authority. After Phase 7, `lilod` is the composed daemon process behind
-the local socket, with composition rooted in the Session app layer and Runtime
-remaining the host execution substrate.
+`transport` (CLI `tm`) is the wire-observation axis migrating into the monorepo.
+It is now the default launch wrapper (`lilo run` execs `tm`), yet still provides
+observability only: it watches the wire and does not authorize, decide what to
+spawn, or reconcile, so it sits outside the local control plane. After Phase 7,
+`lilod` is the composed daemon process behind the local socket, with composition
+rooted in the session app layer and runtime remaining a substrate behind that
+boundary.
 
 This vocabulary is a design contract, not a topology claim. v1 is local-first;
 v2 mapping is linked from the strategy note and stays out of v0.8.0 scope.
@@ -111,12 +111,12 @@ for later migration work.
 User verbs are kubectl-shaped: `lilo run`, `lilo create session`,
 `lilo get session`, `lilo delete session`, `lilo label`, `lilo mail`,
 `lilo nudge`, `lilo capture`, `lilo logs`, `lilo wait`, and `lilo mcp`.
-Operator namespaces are explicit substrate access. `lilo runtime ...` and
-`lilo session ...` exist today. Transport inspection and operations belong
-under a future `lilo transport ...` namespace once the first vertical slice
-proves real verbs. It does not own a spawn command. See
-`docs/architecture/transport.md`. Identity has no command namespace until it
-owns real verbs
+Operator namespaces are explicit substrate access: `lilo runtime ...`,
+`lilo session ...`, and `lilo transport ...`. Transport's launchers collapse
+into the runtime-invoked `tm` wrapper, so its namespace holds inspection and ops
+verbs (`list`, `paths`, `show <session>`), not a spawn path; see
+`NOTES/transport-integration.md`. Identity has no command namespace until it owns
+real verbs
 (`whoami` / `can-i` / audit); its authorization runs at the library layer
 inside session and runtime, not as a CLI command.
 
@@ -240,12 +240,11 @@ reference docs once a generator owns them.
 
 ## Release and mirrors
 
-Releases may run as three independent trains once all workspaces activate. The
-Rust crates move in lockstep on one shared `[workspace.package]` version,
-released with `cargo-release` (shared-version) plus `git-cliff` for the
-changelog; an activated Python workspace and the TS/Electron app each version
-on their own line with their own `git-cliff` changelog scoped to that train's
-paths. Moon
+Releases run as three independent trains. The Rust crates move in lockstep on
+one shared `[workspace.package]` version, released with `cargo-release`
+(shared-version) plus `git-cliff` for the changelog; the Python
+(transport-matters) package and the TS/Electron app each version on their own
+line with their own `git-cliff` changelog scoped to that train's paths. Moon
 ships no release tooling and stays the gate runner (`moon ci`); release
 orchestration is language-native per train (`cargo-release` for crates, native
 build for Python, `electron-builder` for the app). The crate-train release

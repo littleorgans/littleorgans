@@ -31,17 +31,6 @@ Unmanaged session adoption is deferred until there is a coherent reconcile
 model, such as import, adopt, or scheduler owned binding. The v1 session
 contract does not guess ownership for processes it did not create.
 
-The current implementation drives Runtime directly. The target architecture
-inserts Schedule as the sole placement authority. Session prepares logical
-intent and an opaque launch payload, then Schedule places the occupant and asks
-Runtime to execute it. Transport capture preparation remains a Session
-primitive and is attached to that opaque payload. Schedule never interprets
-provider or transcript semantics.
-
-See [system architecture](system.md),
-[Schedule architecture](schedule.md), and
-[Transport architecture](transport.md) for the target boundary.
-
 ## Contracts
 
 `lilo-session-daemon` exposes the Phase 7 composition hook:
@@ -148,16 +137,10 @@ and the monorepo `~/.lilo/` policy while Phase 5 finishes the cutover.
 
 ## Stable Flows
 
-Session creation currently resolves namespace and directory context, builds a
+Session creation resolves namespace and directory context, builds a
 `SpawnRequest`, sends `RpcRequest::Spawn`, authorizes the principal, inserts a
 spawning session row, calls the runtime driver, stores running evidence, and
 returns `RpcResponse::Spawned` with the hydrated session.
-
-The target flow preserves the same logical intent but replaces the direct
-runtime call. Session prepares Transport capture, submits the opaque occupant
-launch payload to Schedule, and stores the placement and Runtime evidence
-returned through that boundary. The direct path is removed after Schedule
-acceptance rather than retained in parallel.
 
 Delete resolves the requested selector under its namespace scope, authorizes
 the principal against each matched session, asks the runtime driver to terminate
