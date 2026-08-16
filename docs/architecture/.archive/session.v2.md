@@ -1,13 +1,14 @@
-# Session architecture
+# Session Architecture
 
 Session is the user level control plane for littleorgans. It turns operator
 intent into durable session records, mailbox state, namespace context, labels,
 polish commands, and runtime spawn requests.
 
-This document describes the current Session architecture. The provenance note
-at the end records the source import and its historic names.
+This document is the durable Phase 4 merge of the session source architecture
+map and project intent. It uses monorepo crate names. The import provenance
+note at the end records the historic source naming.
 
-## Design intent
+## Design Intent
 
 Session is the API server and etcd shaped boundary in the v1 local control
 plane. Operators speak through kubectl shaped verbs. Session records are first
@@ -15,9 +16,10 @@ class daemon records. Runtime owns process launch and raw lifecycle evidence.
 Identity owns authorization and audit. Session owns the user verbs that compose
 those substrates into useful work.
 
-The v1 system has one operator, one host, and one composed `lilod` process. The
-v2 strategy maps the same bounded contexts to Kubernetes services and CRD
-groups. The strategy note lives at
+The v1 strategy remains local first: one operator, one host, and one `lilod`
+process after Phase 7 composition. The v2 strategy maps the same substrate
+service boundaries to Kubernetes services and CRD groups. The strategy note
+lives at
 `/Users/alphab/Dev/LLM/DEV/helioy/littleorgans/littleorgans/NOTES/v1-v2-strategy.md`.
 
 `lilo create session` is the declarative path for headless session creation.
@@ -42,21 +44,17 @@ See [system architecture](system.md),
 
 ## Contracts
 
-`internal/session/app/src/compose.rs` is the production composition root. It
-opens one `LiloDb`, builds `RuntimeService`, passes that service into
-`SessionService::build`, and serves both contexts through one `LilodRpc` socket.
-
-`SessionServiceContext` carries the path policy, daemon version, shared
-`LiloDb`, and composed `RuntimeService`. `SessionService::build` creates the
-Session store, Identity client, lifecycle tasks, event task, and
-`InProcessRuntime`. Session calls Runtime through that in process adapter.
-`RtmdDriver` implements the same `RuntimePort` over the socket protocol for
-contract and conformance tests. Production Session traffic does not use it.
+`lilo-session-daemon` exposes the Phase 7 composition hook:
+`SessionService::build(ctx) -> Result<Self>`. `SessionServiceContext` wraps the
+session path policy input consumed by the imported daemon loop, validates it
+during build, and `run()` delegates to the existing daemon. This keeps Phase 4
+as a lift of the session daemon while giving `lilod` a stable factory API
+later.
 
 `lilo-session-core` owns the internal session protocol, domain types, selector
 grammar, mail vocabulary, label mutations, namespace records, runtime mirrors,
-tool contracts, and MCP JSON RPC envelope. `SessionRpc` and `RpcResponse` are
-tagged inside `LilodRpc::Session` on the composed socket. `SpawnRequest` carries runtime,
+tool contracts, and MCP JSON RPC envelope. `RpcRequest` and `RpcResponse` are
+tagged JSON over the session daemon socket. `SpawnRequest` carries runtime,
 role, workspace, directory, namespace, target, agent config, isolation, image,
 environment, mounts, shell resume data, labels, and force behavior.
 
@@ -76,87 +74,84 @@ Mail is durable session to session state. Nudge is ephemeral delivery through
 the runtime driver. The two share command and MCP routing, but they do not share
 persistence semantics.
 
-## Architecture diagram
+## Architecture Diagram
 
 ```mermaid
 flowchart LR
     User["Operator or upstream agent"]
-    App["lilo<br/>command and MCP surface"]
-    Socket["lilod socket<br/>LilodRpc"]
-    Database[("Postgres<br/>shared LiloDb pool")]
-    Agent["Claude or Codex process"]
-
-    subgraph Lilod["lilod process"]
-        Compose["compose.rs<br/>production composition root"]
-        Session["SessionService"]
-        Handler["Session RPC dispatch"]
-        Store["SessionStore"]
-        Identity["Identity authorization and audit"]
-        Driver["InProcessRuntime"]
-        Runtime["RuntimeService"]
-        RuntimeStore["LifecycleStore"]
-    end
+    App["lilo-session-app<br/>session command and MCP surface"]
+    Socket["session daemon socket"]
+    Daemon["lilo-session-daemon<br/>session daemon"]
+    Handler["RPC dispatch"]
+    State["daemon state facade"]
+    Store["lilo-session-store<br/>Postgres session state"]
+    Driver["lilo-session-driver<br/>runtime bridge"]
+    Identity["lilo-im-*<br/>authorization and audit"]
+    Lifecycle["lifecycle task<br/>terminal reaping"]
+    Events["runtime event task<br/>cursor tail"]
+    Polish["wait, logs, capture, doctor"]
+    Core["lilo-session-core<br/>protocol and domain contracts"]
+    Paths["lilo-paths<br/>home, socket, data, log paths"]
+    RuntimeClient["lilo-rm-client<br/>runtime client"]
+    RuntimeDaemon["lilo-runtime-daemon<br/>host executor"]
+    Runtime["Claude or Codex process"]
+    Mcp["MCP bridge"]
 
     User --> App
     App --> Socket
-    Socket --> Compose
-    Compose --> Session
-    Compose --> Runtime
-    Session --> Handler
+    App --> Mcp
+    Socket --> Daemon
+    Daemon --> Handler
+    Handler --> Core
+    Handler --> State
     Handler --> Identity
-    Handler --> Store
-    Handler --> Driver
-    Driver --> Runtime
-    Store --> Database
-    RuntimeStore --> Database
-    Runtime --> RuntimeStore
-    Runtime --> Agent
+    State --> Store
+    State --> Driver
+    State --> Polish
+    State --> Paths
+    Daemon --> Lifecycle
+    Daemon --> Events
+    Lifecycle --> Driver
+    Events --> Driver
+    Driver --> RuntimeClient
+    RuntimeClient --> RuntimeDaemon
+    RuntimeDaemon --> Runtime
+    Mcp --> Handler
 ```
 
-## System shape
+## System Shape
 
-`lilod` is the only production daemon process. `compose.rs` owns its socket,
-shared database handle, Session service, Runtime service, and shutdown order.
-The socket accepts `LilodRpc::Session` and `LilodRpc::Runtime` requests. Session
-requests dispatch to `SessionService`. Diagnostic Runtime requests dispatch to
-the same `RuntimeService` that Session calls in process.
+Phase 4 keeps the session daemon as a separate imported process. Phase 6 folds
+the user verb tree into the unified `lilo` command surface. Phase 7 composes
+session behind `lilod` through `SessionService::build`.
 
 The session app crate owns the command parser, command dispatch, embedded MCP
 transport, generated help text, generated MCP schema, and generated MCP
 instructions. Authored tool contracts live in `lilo-session-core`; generated
 session app surfaces follow those contracts.
 
-The composed listener extracts peer credentials and dispatches typed requests.
-Session authorizes through Identity, persists Session state, calls Runtime
-through `lilo-session-driver`, tails Runtime events, reconciles lifecycle
-evidence, and returns typed responses. The Session spawn invariant is:
-authorize, persist intent, drive Runtime, persist evidence, then respond.
+The daemon accepts socket requests, extracts peer credentials, builds a request
+context, authorizes through identity, dispatches typed RPC requests, persists
+session state, drives runtime through `lilo-session-driver`, tails runtime
+events, reconciles lifecycle evidence, and returns typed protocol responses.
+The daemon invariant is: authorize, persist intent, drive runtime, persist
+evidence, respond.
 
-`lilo-session-store` owns Session persistence in Postgres. Session and Runtime
-store handles share the `LiloDb` pool created by `compose.rs`. The Session table
-family includes `session_sessions`, `session_spawn_intents`,
-`session_namespaces`, and `session_labels`. The mail log uses `messages` and
-`message_deliveries`.
+`lilo-session-store` owns Postgres persistence. Session store access goes
+through the shared `LiloDb` pool. The durable table family uses session scoped
+names such as
+`session_sessions` and `session_namespaces`, plus the mail log tables
+`messages` and `message_deliveries`, when it joins the shared database contract.
 
-Path policy lives in `lilo-paths`. It owns the `~/.lilo/` paths for config, run
-files, events, logs, cache, and temporary files. Postgres configuration comes
-from `LILO_DATABASE_URL` or `$LILO_HOME/settings.toml`.
+Path policy lives in `lilo-paths`. It carries the current session path adapter
+and the monorepo `~/.lilo/` policy while Phase 5 finishes the cutover.
 
-## Stable flows
+## Stable Flows
 
-Session creation resolves namespace and directory context, then builds a
-`SpawnRequest`. The handler mints the `SessionId` before Runtime work begins.
-
-Transaction A records the authorization audit, the pending
-`session_spawn_intents` row, and the Runtime `Forking` lifecycle. Session then
-calls `InProcessRuntime::spawn`. Runtime starts the shim and returns a `Running`
-lifecycle.
-
-Transaction B inserts the `Running` Session row, persists the returned Runtime
-`Running` lifecycle, and resolves the spawn intent. Session appends the Runtime
-`Running` event only after Transaction B commits. A failed Runtime launch aborts
-the intent and removes the `Forking` lifecycle. Startup reconciliation completes
-or aborts any intent left pending across a process failure.
+Session creation currently resolves namespace and directory context, builds a
+`SpawnRequest`, sends `RpcRequest::Spawn`, authorizes the principal, inserts a
+spawning session row, calls the runtime driver, stores running evidence, and
+returns `RpcResponse::Spawned` with the hydrated session.
 
 The target flow preserves the same logical intent but replaces the direct
 runtime call. Session prepares Transport capture, submits the opaque occupant
@@ -175,8 +170,8 @@ Mail check reports unread counts without consuming content. Stop check clears
 active waiting state for a mailbox style workflow.
 
 Nudge resolves a target session or scope, authorizes the principal, and asks
-the runtime driver to deliver the content to the live target. Nudge does not
-create durable mail.
+the runtime driver to deliver the content to the live target. It is not durable
+mail.
 
 Labels are mutations on session records. There is no standalone label CRUD
 surface. Reads expose labels on sessions, and selector grammar can target
@@ -201,18 +196,18 @@ MCP exposure flows through the same core contracts as the CLI. The embedded
 server forwards MCP shaped JSON RPC to the daemon bridge. Tool handlers map MCP
 tool names onto the same `RpcRequest` variants used by commands.
 
-## Crate map
+## Crate Map
 
 | Crate | Role |
 | --- | --- |
-| `lilo-session-app` | Internal Session command, MCP, and composition package. Owns command dispatch, generated help, generated schema, embedded MCP transport, and the production `lilod` composition root. |
+| `lilo-session-app` | Internal session command and MCP surface. Owns command dispatch, generated help, generated schema, embedded MCP transport, and imported diagnostic binary behavior until Phase 6. |
 | `lilo-session-core` | Internal contract crate. Owns RPC, responses, spawn shape, sessions, selectors, labels, namespaces, mail, runtime mirrors, MCP envelope, and authored tool contracts. |
-| `lilo-session-daemon` | Internal Session service. Owns request dispatch, authorization, lifecycle tasks, runtime event tailing, reconciliation, MCP bridge, polish commands, and `SessionService`. |
+| `lilo-session-daemon` | Internal daemon service. Owns socket serving, request dispatch, authorization, lifecycle tasks, runtime event tailing, reconciliation, MCP bridge, polish commands, and `SessionService`. |
 | `lilo-session-driver` | Internal runtime bridge. Owns the spawn driver trait, runtime client adapter, capture, nudge, termination, terminal reaping, and runtime to session conversions. |
 | `lilo-session-store` | Internal Postgres store. Owns session, namespace, mail, label, runtime event cursor, migration, and timestamp persistence. |
-| `lilo-paths` | Published path policy crate. Owns the littleorgans home, socket, run, event, log, cache, and temporary paths. |
+| `lilo-paths` | Published path policy crate. Owns littleorgans home, socket, data, log, cache, tmp, and session import path helpers until the Phase 5 cutover completes. |
 
-## Task routing
+## Task Routing
 
 | Change | Primary home | Expected follow through |
 | --- | --- | --- |
@@ -224,7 +219,7 @@ tool names onto the same `RpcRequest` variants used by commands.
 | Path policy, home layout, socket layout, or cutover behavior | `lilo-paths` | Check every app, daemon, store, client endpoint, and test fixture consumer. |
 | Identity authorization resource shape | `lilo-session-daemon` | Keep identity service contracts, audit expectations, and peer credential extraction aligned. |
 
-## fmm workflow
+## fmm Workflow
 
 Use fmm for current structure instead of copying snapshot file inventories into
 this document. Regenerate the monorepo index after file moves, workspace
