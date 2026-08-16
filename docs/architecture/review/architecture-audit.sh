@@ -43,6 +43,14 @@ rg -n 'session_id:.*str|pub session_id: String|pub target: String' \
     internal/session/driver/src/in_process.rs \
     internal/session/driver/src/rtmd.rs
 
+printf 'alternate_session_socket_host\n'
+if rg -n \
+    'lilo_sys::ipc::bind|UnixListener::bind|run_daemon_with_db|pub async fn run_daemon|pub mod server;|pub use server::' \
+    internal/session/daemon/src; then
+    printf 'alternate Session socket host found under internal/session/daemon/src\n' >&2
+    exit 1
+fi
+
 printf 'session_runtime_backdoors\n'
 rg -n 'lifecycle_store|runtime_service' \
     internal/session/daemon/src/handler/state.rs \

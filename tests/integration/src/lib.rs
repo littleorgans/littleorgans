@@ -1,8 +1,8 @@
 use std::io::ErrorKind;
-use std::path::PathBuf;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use lilo_common::id::{IntentId, SessionId};
 use lilo_db::LiloDb;
@@ -15,6 +15,9 @@ use lilo_runtime_daemon::docker_preflight::DockerPreflightConfig;
 use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig};
 use lilo_session_core::{Namespace, RuntimeKind as SessionRuntimeKind, Session, SessionState};
 use tempfile::TempDir;
+use tokio::net::UnixStream;
+
+const SOCKET_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct IntegrationFixture {
     _dir: TempDir,
@@ -160,4 +163,36 @@ pub fn fixed_intent_id(suffix: u128) -> IntentId {
     IntentId::from_uuid(uuid::Uuid::from_u128(
         0x018f_6e28_0000_7000_8000_0000_0000_0000 + suffix,
     ))
+}
+
+pub async fn wait_for_accepting_socket(path: &Path) -> Result<()> {
+    let deadline = Instant::now() + SOCKET_TIMEOUT;
+    while Instant::now() < deadline {
+        match UnixStream::connect(path).await {
+            Ok(_) => return Ok(()),
+            Err(error) if is_socket_not_ready(&error) => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(error) => return Err(error).context("failed while waiting for compose socket"),
+        }
+    }
+    bail!(
+        "compose socket did not accept connections at {}",
+        path.display()
+    )
+}
+
+pub async fn assert_socket_rejects(path: &Path) -> Result<()> {
+    match UnixStream::connect(path).await {
+        Ok(_) => bail!("compose listener accepted a connection after shutdown started"),
+        Err(error) if is_socket_not_ready(&error) => Ok(()),
+        Err(error) => Err(error).context("unexpected socket error after listener close"),
+    }
+}
+
+pub fn is_socket_not_ready(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        ErrorKind::NotFound | ErrorKind::ConnectionRefused
+    )
 }

@@ -11,6 +11,7 @@ chrono.workspace = true
 lilo-common.workspace = true
 lilo-db = { workspace = true, features = ["test-support"] }
 lilo-paths.workspace = true
+lilo-rm-client.workspace = true
 lilo-rm-core.workspace = true
 lilo-session-app.workspace = true
 lilo-runtime-daemon.workspace = true
@@ -18,6 +19,7 @@ lilo-runtime-store.workspace = true
 lilo-session-core.workspace = true
 lilo-session-daemon.workspace = true
 lilo-session-store.workspace = true
+lilo-sys.workspace = true
 lilo-wire.workspace = true
 libc.workspace = true
 serde_json.workspace = true

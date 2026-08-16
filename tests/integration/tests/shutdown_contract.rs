@@ -1,13 +1,14 @@
-use std::io::ErrorKind;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
-use lilo_integration_tests::{IntegrationFixture, count_all, draft_session, running_lifecycle};
+use lilo_integration_tests::{
+    IntegrationFixture, assert_socket_rejects, count_all, draft_session, running_lifecycle,
+    wait_for_accepting_socket,
+};
 use lilo_paths::DaemonEndpoint;
 use lilo_rm_core::{LifecycleState, RuntimeExit, read_json_line, write_json_line};
 use lilo_runtime_store::LifecycleStore;
@@ -251,38 +252,6 @@ async fn collect_until(
             return Ok(());
         }
     }
-}
-
-async fn wait_for_accepting_socket(path: &Path) -> Result<()> {
-    let deadline = Instant::now() + SHUTDOWN_TIMEOUT;
-    while Instant::now() < deadline {
-        match UnixStream::connect(path).await {
-            Ok(_) => return Ok(()),
-            Err(error) if is_socket_not_ready(&error) => {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-            Err(error) => return Err(error).context("failed while waiting for compose socket"),
-        }
-    }
-    bail!(
-        "compose socket did not accept connections at {}",
-        path.display()
-    )
-}
-
-async fn assert_socket_rejects(path: &Path) -> Result<()> {
-    match UnixStream::connect(path).await {
-        Ok(_) => bail!("compose listener accepted a connection after shutdown started"),
-        Err(error) if is_socket_not_ready(&error) => Ok(()),
-        Err(error) => Err(error).context("unexpected socket error after listener close"),
-    }
-}
-
-fn is_socket_not_ready(error: &std::io::Error) -> bool {
-    matches!(
-        error.kind(),
-        ErrorKind::NotFound | ErrorKind::ConnectionRefused
-    )
 }
 
 async fn assert_no_session_partial_rows(db: &LiloDb) -> Result<()> {
