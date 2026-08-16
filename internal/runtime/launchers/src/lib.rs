@@ -81,6 +81,7 @@ pub fn warm_registry() -> Result<(), LauncherError> {
             target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
             force: false,
             shell_resume: None,
+            launch_attachment: None,
         };
         launcher.argv(&request)?;
     }

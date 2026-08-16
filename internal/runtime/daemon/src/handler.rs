@@ -131,7 +131,7 @@ async fn handle_rpc_result(
 ) -> Result<RuntimeResponse> {
     authorize_runtime_rpc(&state, &principal, &rpc).await?;
     match rpc {
-        RuntimeRpc::Spawn { request } => Ok(spawn_response(spawn_domain(&state, request).await?)),
+        RuntimeRpc::Spawn { request } => Ok(spawn_response(spawn_domain(&state, *request).await?)),
         RuntimeRpc::ValidateTarget { request } => {
             Ok(RuntimeResponse::ValidateTarget(ValidateTargetPayload {
                 response: state.validate_target_request(request).await?,

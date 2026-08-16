@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
@@ -106,11 +106,11 @@ fn headless_spawn_pipes_stdout_and_stderr_to_session_logs() {
         .block_on(lilo_runtime_app::shared::request(
             harness.socket_path(),
             RuntimeRpc::Spawn {
-                request: headless_spawn_request_with_env(
+                request: Box::new(headless_spawn_request_with_env(
                     session_id,
                     harness.rtm_home(),
                     vec![LaunchEnv::new("LILO_TEST_STDIO_SENTINELS", "1")],
-                ),
+                )),
             },
         ))
         .expect("headless spawn");
@@ -551,8 +551,16 @@ fn accept_spawn_request(listener: &UnixListener) -> SpawnRequest {
 }
 
 fn read_spawn_request(stream: UnixStream) -> SpawnRequest {
+    stream
+        .set_nonblocking(false)
+        .expect("restore blocking capture socket");
     let mut reader = BufReader::new(stream);
-    let rpc: LilodRpc = read_json_line_blocking(&mut reader).expect("read captured request");
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .expect("read captured request JSON");
+    assert!(!line.contains("\"launch_attachment\""), "{line}");
+    let rpc: LilodRpc = serde_json::from_str(&line).expect("decode captured request");
     write_json_line_blocking(
         reader.get_mut(),
         &RuntimeResponse::error(ErrorCode::SpawnConflict, "captured spawn request"),
@@ -564,7 +572,7 @@ fn read_spawn_request(stream: UnixStream) -> SpawnRequest {
     let RuntimeRpc::Spawn { request } = rpc else {
         panic!("unexpected captured rpc: {rpc:?}");
     };
-    request
+    *request
 }
 
 fn request_raw(harness: &RtmHarness, rpc: &RuntimeRpc) -> RuntimeResponse {

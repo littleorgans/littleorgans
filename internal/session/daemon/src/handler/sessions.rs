@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use lilo_common::id::SessionId;
 use lilo_im_core::Action;
+use lilo_rm_core::RuntimeSignal;
 use lilo_session_core::{
     CaptureRequest, CaptureResponse, DeleteRequest, DeleteResponse, LabelRequest, LabelResponse,
     ListRequest, ListResponse, RpcResponse, Selector, Session, SessionState, TargetError,
@@ -48,7 +49,7 @@ impl DaemonState {
             .await?;
         let capture = self
             .runtime
-            .capture(&session.id.to_string(), request.scrollback_lines)
+            .capture(session.id, request.scrollback_lines)
             .await
             .context("runtime capture failed")?
             .response;
@@ -62,9 +63,13 @@ impl DaemonState {
         context: &RequestContext,
         request: DeleteRequest,
     ) -> Result<RpcResponse> {
+        let signal = request
+            .signal
+            .parse::<RuntimeSignal>()
+            .context("invalid runtime signal")?;
         let (sessions, errors) = self
             .collect_target_sessions(&request.selector, |id| {
-                self.delete_one(context, &request, id)
+                self.delete_one(context, &request, id, signal)
             })
             .await?;
 
@@ -93,12 +98,12 @@ impl DaemonState {
         context: &RequestContext,
         request: &DeleteRequest,
         id: SessionId,
+        signal: RuntimeSignal,
     ) -> Result<Session> {
         self.identity
             .authorize(&context.principal, Action::Kill, &session_resource(id))
             .await?;
         crate::lifecycle::refresh_exits(self).await?;
-        let id_string = id.to_string();
         let session = self
             .store()
             .get_session(&id)
@@ -110,11 +115,7 @@ impl DaemonState {
         }
         let exit = self
             .runtime
-            .terminate(
-                &id_string,
-                &request.signal,
-                Duration::from_secs(request.grace_secs),
-            )
+            .terminate(id, signal, Duration::from_secs(request.grace_secs))
             .await
             .context("failed to terminate runtime")?
             .with_context(|| {

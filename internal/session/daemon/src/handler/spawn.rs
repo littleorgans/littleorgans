@@ -6,8 +6,8 @@ use lilo_common::id::{IntentId, SessionId};
 use lilo_db::{LiloTransaction, commit_or_rollback};
 use lilo_im_core::Action;
 use lilo_rm_core::{
-    LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, ShellResume, StatusFilter,
-    capture_caller_env, capture_shell_resume,
+    LaunchEnv, Lifecycle, LifecycleState, RuntimeEvent, RuntimeSignal, ShellResume, SpawnTarget,
+    SpawnTargetParseError, StatusFilter, capture_caller_env, capture_shell_resume,
 };
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::{RpcResponse, Session, SessionState, SpawnRequest, SpawnResponse};
@@ -35,11 +35,10 @@ impl DaemonState {
         let agent_config_path = agent_config
             .as_ref()
             .map(|config| config.path.display().to_string());
-        let launch = spawn_launch(id, &request, agent_config.as_ref());
+        let launch = spawn_launch(id, &request, agent_config.as_ref())?;
         let mut labels = request.labels.clone();
         labels.sort();
-        let runtime_request =
-            runtime_spawn_request(id, &launch).context("failed to build runtime spawn request")?;
+        let runtime_request = runtime_spawn_request(launch);
         let draft_created_at = Utc::now();
         let draft_session = Session {
             id,
@@ -68,8 +67,7 @@ impl DaemonState {
         );
 
         self.begin_spawn_intent(context, &request, &intent).await?;
-        let id_string = id.to_string();
-        let spawned = match self.runtime.spawn(&id_string, &launch).await {
+        let spawned = match self.runtime.spawn(runtime_request).await {
             Ok(spawned) => spawned,
             Err(error) => {
                 let failure = runtime_spawn_failure(&error);
@@ -210,10 +208,9 @@ impl DaemonState {
     }
 
     async fn abort_running_spawn(&self, session_id: SessionId, reason: &str) -> Result<()> {
-        let session_id_string = session_id.to_string();
         match self
             .runtime
-            .terminate(&session_id_string, "SIGTERM", Duration::from_secs(5))
+            .terminate(session_id, RuntimeSignal::Term, Duration::from_secs(5))
             .await
         {
             Ok(Some(_)) => {}
@@ -370,7 +367,8 @@ fn spawn_launch(
     id: SessionId,
     request: &SpawnRequest,
     agent_config: Option<&ResolvedAgentConfig>,
-) -> SpawnLaunch {
+) -> Result<SpawnLaunch, SpawnTargetParseError> {
+    let target = request.target.parse::<SpawnTarget>()?;
     let mut env = request.env.clone();
     if env.is_empty() {
         env = capture_caller_env();
@@ -392,33 +390,33 @@ fn spawn_launch(
         LaunchEnv::new("LILO_AGENT_WORKSPACE", request.workspace.clone()),
     );
     let cwd = std::path::PathBuf::from(&request.workspace);
-    let shell_resume = shell_resume(request, &cwd);
-    SpawnLaunch {
+    let shell_resume = shell_resume(request, &target, &cwd);
+    Ok(SpawnLaunch {
+        session_id: id,
         runtime: request.runtime,
         isolation: request.isolation.clone(),
         image: request.image.clone(),
         cwd,
-        target: request.target.clone(),
+        target,
         env,
         mounts: request.mounts.clone(),
         shell_resume,
         force: request.force,
-    }
+        launch_attachment: None,
+    })
 }
 
-fn shell_resume(request: &SpawnRequest, cwd: &std::path::Path) -> Option<ShellResume> {
+fn shell_resume(
+    request: &SpawnRequest,
+    target: &SpawnTarget,
+    cwd: &std::path::Path,
+) -> Option<ShellResume> {
     if request.shell_resume.is_some() {
         return request.shell_resume.clone();
     }
-    request
-        .target
-        .parse::<lilo_rm_core::SpawnTarget>()
-        .ok()
-        .and_then(|target| {
-            target
-                .tmux_address()
-                .map(|_| capture_shell_resume(cwd.to_path_buf()))
-        })
+    target
+        .tmux_address()
+        .map(|_| capture_shell_resume(cwd.to_path_buf()))
 }
 
 fn merge_env(env: &mut Vec<LaunchEnv>, next: Vec<LaunchEnv>) {

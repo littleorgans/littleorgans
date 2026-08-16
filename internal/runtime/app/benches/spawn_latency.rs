@@ -24,7 +24,10 @@ fn main() {
             .block_on(lilo_runtime_app::shared::request(
                 harness.socket_path(),
                 RuntimeRpc::Spawn {
-                    request: common::headless_spawn_request(session_id, harness.rtm_home()),
+                    request: Box::new(common::headless_spawn_request(
+                        session_id,
+                        harness.rtm_home(),
+                    )),
                 },
             ))
             .expect("spawn rpc");

@@ -73,10 +73,10 @@ pub use spawn_context::{
     launcher_probe_cwd,
 };
 pub use types::{
-    HeadlessSpawnTarget, KillRequest, Lifecycle, LifecycleState, LostEvidence, MountSpec,
-    MountSpecParseError, NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest, NudgeResponse,
-    RuntimeEvent, RuntimeExit, RuntimeKind, RuntimeSignal, RuntimeSignalParseError, ShimExit,
-    ShimLaunchRequest, ShimReady, SpawnRequest, SpawnTarget, SpawnTargetParseError,
+    HeadlessSpawnTarget, KillRequest, LaunchAttachment, Lifecycle, LifecycleState, LostEvidence,
+    MountSpec, MountSpecParseError, NudgeFailureReason, NudgeMode, NudgeOutcome, NudgeRequest,
+    NudgeResponse, RuntimeEvent, RuntimeExit, RuntimeKind, RuntimeSignal, RuntimeSignalParseError,
+    ShimExit, ShimLaunchRequest, ShimReady, SpawnRequest, SpawnTarget, SpawnTargetParseError,
     TerminationEvidence, TmuxAddress, TmuxAddressParseError, TmuxSpawnTarget,
     ValidateTargetOutcome, ValidateTargetRequest, ValidateTargetResponse, expand_mount_source,
 };

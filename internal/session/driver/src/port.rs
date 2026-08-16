@@ -3,43 +3,40 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use lilo_common::id::SessionId;
-use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
+use lilo_rm_core::{
+    EventBatch, EventsRequest, Lifecycle, NudgeMode, RuntimeSignal,
+    SpawnRequest as RuntimeSpawnRequest, StatusFilter,
+};
 use lilo_session_core::RuntimeDoctorReport;
 use tokio::time::{Instant, sleep};
 
 use crate::conv::{status_session, terminal_child_exit};
-use crate::driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
-};
+use crate::driver::{CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnedProcess};
 
 pub type RuntimePortFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
 
 pub trait RuntimePort: Send + Sync {
-    fn spawn<'a>(
-        &'a self,
-        session_id: &'a str,
-        launch: &'a SpawnLaunch,
-    ) -> RuntimePortFuture<'a, SpawnedProcess>;
+    fn spawn(&self, request: RuntimeSpawnRequest) -> RuntimePortFuture<'_, SpawnedProcess>;
 
     fn reap_exited(&self) -> RuntimePortFuture<'_, Vec<ChildExit>>;
 
-    fn capture<'a>(
-        &'a self,
-        session_id: &'a str,
+    fn capture(
+        &self,
+        session_id: SessionId,
         scrollback_lines: Option<u32>,
-    ) -> RuntimePortFuture<'a, CaptureResult>;
+    ) -> RuntimePortFuture<'_, CaptureResult>;
 
-    fn terminate<'a>(
-        &'a self,
-        session_id: &'a str,
-        signal: &'a str,
+    fn terminate(
+        &self,
+        session_id: SessionId,
+        signal: RuntimeSignal,
         grace: Duration,
-    ) -> RuntimePortFuture<'a, Option<ChildExit>>;
+    ) -> RuntimePortFuture<'_, Option<ChildExit>>;
 
     fn nudge<'a>(
         &'a self,
-        session_id: &'a str,
+        session_id: SessionId,
         content: &'a str,
         mode: NudgeMode,
         timeout_ms: Option<u64>,

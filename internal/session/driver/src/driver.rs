@@ -1,7 +1,9 @@
+use lilo_common::id::SessionId;
 use lilo_port::PortError;
 pub use lilo_rm_core::LaunchEnv;
 use lilo_rm_core::{
-    CaptureResponse, IsolationPolicy, Lifecycle, MountSpec, ShellResume, SpawnConflictKind,
+    CaptureResponse, IsolationPolicy, LaunchAttachment, Lifecycle, MountSpec, ShellResume,
+    SpawnConflictKind, SpawnTarget,
 };
 use lilo_session_core::RuntimeKind;
 use std::path::PathBuf;
@@ -19,20 +21,22 @@ pub struct SpawnedProcess {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpawnLaunch {
+    pub session_id: SessionId,
     pub runtime: RuntimeKind,
     pub isolation: IsolationPolicy,
     pub image: Option<String>,
     pub cwd: PathBuf,
-    pub target: String,
+    pub target: SpawnTarget,
     pub env: Vec<LaunchEnv>,
     pub mounts: Vec<MountSpec>,
     pub shell_resume: Option<ShellResume>,
     pub force: bool,
+    pub launch_attachment: Option<LaunchAttachment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildExit {
-    pub session_id: String,
+    pub session_id: SessionId,
     pub runtime_pid: u32,
     pub exit_code: Option<i32>,
     pub transcript_path: Option<PathBuf>,
@@ -40,17 +44,11 @@ pub struct ChildExit {
 
 #[derive(Debug, PartialEq, Eq, Error)]
 pub enum RuntimeFault {
-    #[error("unsupported signal: {0}")]
-    InvalidSignal(String),
-    #[error("invalid runtime session id: {0}")]
-    InvalidSessionId(String),
     #[error("{message}")]
     SpawnConflict {
         kind: SpawnConflictKind,
         message: String,
     },
-    #[error("invalid runtime target: {0}")]
-    InvalidTarget(String),
 }
 
 pub type RuntimeError = PortError<RuntimeFault>;

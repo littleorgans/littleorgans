@@ -37,11 +37,38 @@ printf 'active_strategy_storage_drift\n'
 rg -n 'SQLite|SqlitePool|BEGIN IMMEDIATE' NOTES/v1-v2-strategy.md
 
 printf 'untyped_session_runtime_boundary\n'
-rg -n 'session_id:.*str|pub session_id: String|pub target: String' \
-    internal/session/driver/src/port.rs \
-    internal/session/driver/src/driver.rs \
+if rg -n \
+    'session_id:[^,;)]*(str|String)|target:[^,;)]*(str|String)|signal:[^,;)]*(str|String)|parse_session_id|parse_runtime_signal' \
+    internal/session/driver/src; then
+    printf 'untyped Session to Runtime boundary found\n' >&2
+    exit 1
+fi
+
+printf 'runtime_adapter_spawn_reconstruction\n'
+if rg -n 'runtime_spawn_request\(' \
     internal/session/driver/src/in_process.rs \
-    internal/session/driver/src/rtmd.rs
+    internal/session/driver/src/rtmd.rs; then
+    printf 'Runtime adapter reconstructs a spawn request\n' >&2
+    exit 1
+fi
+
+printf 'launch_attachment_child_delivery\n'
+if rg -n 'launch_attachment|LaunchAttachment' \
+    crates/lilo-rm-core/src/launcher.rs \
+    crates/lilo-rm-core/src/types/lifecycle.rs \
+    internal/runtime/app/src/cli/shim.rs \
+    internal/runtime/daemon/src/docker_argv.rs \
+    internal/runtime/daemon/src/docker_mount_plan.rs \
+    internal/runtime/daemon/src/docker_runtime.rs; then
+    printf 'launch attachment crossed the Runtime child delivery boundary\n' >&2
+    exit 1
+fi
+if sed -n '1,/^#\[cfg(test)\]/p' \
+    internal/runtime/daemon/src/shim_socket.rs | \
+    rg -n 'launch_attachment|LaunchAttachment'; then
+    printf 'launch attachment crossed the Runtime child delivery boundary\n' >&2
+    exit 1
+fi
 
 printf 'alternate_session_socket_host\n'
 if rg -n \

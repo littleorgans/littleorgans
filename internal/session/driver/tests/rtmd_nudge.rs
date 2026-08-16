@@ -6,7 +6,7 @@ use lilo_rm_core::{
     NudgeFailureReason, NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse,
     RuntimeResponse, RuntimeRpc, read_json_line, write_json_line,
 };
-use lilo_session_driver::RtmdDriver;
+use lilo_session_driver::{RtmdDriver, RuntimePort};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::task::JoinHandle;
@@ -17,7 +17,7 @@ async fn rtmd_nudge_maps_delivered_outcome() {
     let (driver, server) = mock_rtmd_nudge(session_id, NudgeOutcome::Delivered);
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate, None)
+        .nudge(session_id, "hello", NudgeMode::Immediate, None)
         .await
         .or_panic("nudge delegates to rtmd");
 
@@ -35,7 +35,7 @@ async fn rtmd_nudge_maps_tmux_pane_dead_outcome() {
     );
 
     let result = driver
-        .nudge(&session_id.to_string(), "hello", NudgeMode::Immediate, None)
+        .nudge(session_id, "hello", NudgeMode::Immediate, None)
         .await
         .or_panic("failed nudge outcome remains a response");
 

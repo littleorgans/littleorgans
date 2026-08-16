@@ -75,7 +75,7 @@ async fn non_local_spawn_and_kill_are_denied_before_runtime_work() {
         .handle(
             principal.clone(),
             RuntimeRpc::Spawn {
-                request: spawn_request(spawn_id, &runtime.paths.run_root()),
+                request: Box::new(spawn_request(spawn_id, &runtime.paths.run_root())),
             },
         )
         .await;
@@ -108,7 +108,7 @@ async fn local_spawn_and_kill_are_audited_before_runtime_errors() {
         .handle(
             principal.clone(),
             RuntimeRpc::Spawn {
-                request: spawn_request(spawn_id, &runtime.paths.run_root()),
+                request: Box::new(spawn_request(spawn_id, &runtime.paths.run_root())),
             },
         )
         .await;
@@ -191,6 +191,7 @@ fn spawn_request(session_id: SessionId, cwd: &Path) -> SpawnRequest {
         target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
         force: false,
         shell_resume: None,
+        launch_attachment: None,
     }
 }
 

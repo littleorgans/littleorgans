@@ -7,18 +7,15 @@ use lilo_common::id::SessionId;
 use lilo_rm_client::{ClientError, RuntimeClient};
 use lilo_rm_core::{
     CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeMode,
-    NudgeRequest, StatusFilter,
+    NudgeRequest, RuntimeSignal, SpawnRequest as RuntimeSpawnRequest, StatusFilter,
 };
 use lilo_session_core::RuntimeDoctorReport;
 
 use crate::conv::{
-    capture_result, kill_outcome_label, nudge_result, parse_runtime_signal, parse_session_id,
-    runtime_doctor_error, runtime_doctor_report, runtime_spawn_request, spawned_process,
-    terminal_child_exit,
+    capture_result, kill_outcome_label, nudge_result, runtime_doctor_error, runtime_doctor_report,
+    spawned_process, terminal_child_exit,
 };
-use crate::driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
-};
+use crate::driver::{CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnedProcess};
 use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
 #[derive(Clone, Debug)]
@@ -40,142 +37,7 @@ impl RtmdDriver {
     pub fn client(&self) -> &RuntimeClient {
         &self.client
     }
-}
 
-impl RtmdDriver {
-    pub async fn spawn(
-        &self,
-        session_id: &str,
-        launch: &SpawnLaunch,
-    ) -> Result<SpawnedProcess, RuntimeError> {
-        let session_id = parse_session_id(session_id)?;
-        self.locked_terminal_sessions().remove(&session_id);
-        let request = runtime_spawn_request(session_id, launch)?;
-        let payload = self.client.spawn(request).await.map_err(spawn_error)?;
-        spawned_process(payload)
-    }
-
-    pub async fn capture(
-        &self,
-        session_id: &str,
-        scrollback_lines: Option<u32>,
-    ) -> Result<CaptureResult, RuntimeError> {
-        let session_id = parse_session_id(session_id)?;
-        let response = self
-            .client
-            .capture(CaptureRequest {
-                session_id,
-                scrollback_lines,
-            })
-            .await
-            .map_err(RuntimeError::wire)?;
-        Ok(capture_result(response))
-    }
-
-    pub async fn reap_exited(&self) -> Result<Vec<ChildExit>, RuntimeError> {
-        let payload = self
-            .client
-            .status(StatusFilter::empty())
-            .await
-            .map_err(RuntimeError::wire)?;
-        let mut terminal_sessions = self.locked_terminal_sessions();
-        let mut exits = Vec::new();
-        for lifecycle in payload.lifecycles {
-            if let Some(exit) = terminal_child_exit(&lifecycle)?
-                && terminal_sessions.insert(lifecycle.session_id)
-            {
-                exits.push(exit);
-            }
-        }
-        Ok(exits)
-    }
-
-    pub async fn terminate(
-        &self,
-        session_id: &str,
-        signal: &str,
-        grace: Duration,
-    ) -> Result<Option<ChildExit>, RuntimeError> {
-        let session_id = parse_session_id(session_id)?;
-        let signal = parse_runtime_signal(signal)?;
-        let outcome = self
-            .client
-            .kill(KillRequest {
-                session_id,
-                signal,
-                grace_secs: grace.as_secs(),
-            })
-            .await
-            .map_err(RuntimeError::wire)?;
-
-        let exit = match outcome {
-            KillOutcome::Signalled | KillOutcome::AlreadyExited => {
-                wait_for_terminal(self, session_id, grace).await?
-            }
-            _ => {
-                return Err(RuntimeError::local(format!(
-                    "unknown runtime variant: {}",
-                    kill_outcome_label(outcome)
-                )));
-            }
-        };
-        if exit.is_some() {
-            self.locked_terminal_sessions().insert(session_id);
-        }
-        Ok(exit)
-    }
-
-    pub async fn nudge(
-        &self,
-        session_id: &str,
-        content: &str,
-        mode: NudgeMode,
-        timeout_ms: Option<u64>,
-    ) -> Result<NudgeResult, RuntimeError> {
-        let session_id = parse_session_id(session_id)?;
-        let response = self
-            .client
-            .nudge(NudgeRequest {
-                session_id,
-                content: content.to_string(),
-                mode,
-                timeout_ms,
-            })
-            .await
-            .map_err(RuntimeError::wire)?;
-        Ok(nudge_result(&response.outcome))
-    }
-
-    pub async fn status(&self, filter: StatusFilter) -> Result<Vec<Lifecycle>, RuntimeError> {
-        Ok(self
-            .client
-            .status(filter)
-            .await
-            .map_err(RuntimeError::wire)?
-            .lifecycles)
-    }
-
-    pub async fn poll_events(&self, request: EventsRequest) -> Result<EventBatch, RuntimeError> {
-        self.client
-            .events(request)
-            .await
-            .map_err(RuntimeError::wire)
-    }
-
-    pub async fn doctor(&self) -> Result<RuntimeDoctorReport, RuntimeError> {
-        let socket_path = Some(self.socket_path.display().to_string());
-        Ok(match self.client.doctor().await {
-            Ok(payload) => runtime_doctor_report(payload.doctor, socket_path),
-            Err(error) => runtime_doctor_error(
-                Some(error.code().as_str().to_string()),
-                error.to_string(),
-                socket_path,
-            ),
-        })
-    }
-}
-
-impl RtmdDriver {
     fn locked_terminal_sessions(&self) -> MutexGuard<'_, HashSet<SessionId>> {
         self.terminal_sessions
             .lock()
@@ -191,57 +53,141 @@ fn spawn_error(error: ClientError) -> RuntimeError {
 }
 
 impl RuntimePort for RtmdDriver {
-    fn spawn<'a>(
-        &'a self,
-        session_id: &'a str,
-        launch: &'a SpawnLaunch,
-    ) -> RuntimePortFuture<'a, SpawnedProcess> {
-        Box::pin(async move { RtmdDriver::spawn(self, session_id, launch).await })
+    fn spawn(&self, request: RuntimeSpawnRequest) -> RuntimePortFuture<'_, SpawnedProcess> {
+        Box::pin(async move {
+            self.locked_terminal_sessions().remove(&request.session_id);
+            let payload = self.client.spawn(request).await.map_err(spawn_error)?;
+            spawned_process(payload)
+        })
     }
 
     fn reap_exited(&self) -> RuntimePortFuture<'_, Vec<ChildExit>> {
-        Box::pin(async move { RtmdDriver::reap_exited(self).await })
+        Box::pin(async move {
+            let payload = self
+                .client
+                .status(StatusFilter::empty())
+                .await
+                .map_err(RuntimeError::wire)?;
+            let mut terminal_sessions = self.locked_terminal_sessions();
+            let mut exits = Vec::new();
+            for lifecycle in payload.lifecycles {
+                if let Some(exit) = terminal_child_exit(&lifecycle)?
+                    && terminal_sessions.insert(lifecycle.session_id)
+                {
+                    exits.push(exit);
+                }
+            }
+            Ok(exits)
+        })
     }
 
-    fn capture<'a>(
-        &'a self,
-        session_id: &'a str,
+    fn capture(
+        &self,
+        session_id: SessionId,
         scrollback_lines: Option<u32>,
-    ) -> RuntimePortFuture<'a, CaptureResult> {
-        Box::pin(async move { RtmdDriver::capture(self, session_id, scrollback_lines).await })
+    ) -> RuntimePortFuture<'_, CaptureResult> {
+        Box::pin(async move {
+            let response = self
+                .client
+                .capture(CaptureRequest {
+                    session_id,
+                    scrollback_lines,
+                })
+                .await
+                .map_err(RuntimeError::wire)?;
+            Ok(capture_result(response))
+        })
     }
 
-    fn terminate<'a>(
-        &'a self,
-        session_id: &'a str,
-        signal: &'a str,
+    fn terminate(
+        &self,
+        session_id: SessionId,
+        signal: RuntimeSignal,
         grace: Duration,
-    ) -> RuntimePortFuture<'a, Option<ChildExit>> {
-        Box::pin(async move { RtmdDriver::terminate(self, session_id, signal, grace).await })
+    ) -> RuntimePortFuture<'_, Option<ChildExit>> {
+        Box::pin(async move {
+            let outcome = self
+                .client
+                .kill(KillRequest {
+                    session_id,
+                    signal,
+                    grace_secs: grace.as_secs(),
+                })
+                .await
+                .map_err(RuntimeError::wire)?;
+
+            let exit = match outcome {
+                KillOutcome::Signalled | KillOutcome::AlreadyExited => {
+                    wait_for_terminal(self, session_id, grace).await?
+                }
+                _ => {
+                    return Err(RuntimeError::local(format!(
+                        "unknown runtime variant: {}",
+                        kill_outcome_label(outcome)
+                    )));
+                }
+            };
+            if exit.is_some() {
+                self.locked_terminal_sessions().insert(session_id);
+            }
+            Ok(exit)
+        })
     }
 
     fn nudge<'a>(
         &'a self,
-        session_id: &'a str,
+        session_id: SessionId,
         content: &'a str,
         mode: NudgeMode,
         timeout_ms: Option<u64>,
     ) -> RuntimePortFuture<'a, NudgeResult> {
-        Box::pin(
-            async move { RtmdDriver::nudge(self, session_id, content, mode, timeout_ms).await },
-        )
+        Box::pin(async move {
+            let response = self
+                .client
+                .nudge(NudgeRequest {
+                    session_id,
+                    content: content.to_string(),
+                    mode,
+                    timeout_ms,
+                })
+                .await
+                .map_err(RuntimeError::wire)?;
+            Ok(nudge_result(&response.outcome))
+        })
     }
 
     fn status(&self, filter: StatusFilter) -> RuntimePortFuture<'_, Vec<Lifecycle>> {
-        Box::pin(async move { RtmdDriver::status(self, filter).await })
+        Box::pin(async move {
+            Ok(self
+                .client
+                .status(filter)
+                .await
+                .map_err(RuntimeError::wire)?
+                .lifecycles)
+        })
     }
 
     fn poll_events(&self, request: EventsRequest) -> RuntimePortFuture<'_, EventBatch> {
-        Box::pin(async move { RtmdDriver::poll_events(self, request).await })
+        Box::pin(async move {
+            self.client
+                .events(request)
+                .await
+                .map_err(RuntimeError::wire)
+        })
     }
 
     fn doctor(&self) -> RuntimePortFuture<'_, RuntimeDoctorReport> {
-        Box::pin(async move { RtmdDriver::doctor(self).await })
+        Box::pin(async move {
+            let socket_path = Some(self.socket_path.display().to_string());
+            Ok(match self.client.doctor().await {
+                Ok(payload) => runtime_doctor_report(payload.doctor, socket_path),
+                Err(error) => runtime_doctor_error(
+                    Some(error.code().as_str().to_string()),
+                    error.to_string(),
+                    socket_path,
+                ),
+            })
+        })
     }
 
     fn terminate_all(&self) {

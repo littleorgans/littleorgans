@@ -87,7 +87,7 @@ impl From<StatusFilter> for StatusRequest {
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RuntimeRpc {
     Spawn {
-        request: SpawnRequest,
+        request: Box<SpawnRequest>,
     },
     ValidateTarget {
         request: ValidateTargetRequest,

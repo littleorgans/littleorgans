@@ -1,13 +1,11 @@
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use lilo_common::id::SessionId;
 use lilo_rm_core::{
     CaptureResponse, DoctorResponse as RuntimeDoctorResponse, KillOutcome, Lifecycle,
     LifecycleState, NudgeFailureReason, NudgeOutcome, RUNTIME_PROTOCOL_VERSION,
-    RuntimeKind as RuntimeRuntimeKind, RuntimeSignal, SpawnConflictKind, SpawnConflictPayload,
-    SpawnRequest as RuntimeSpawnRequest, SpawnTarget as RuntimeSpawnTarget, SpawnedPayload,
-    StatusFilter,
+    RuntimeKind as RuntimeRuntimeKind, SpawnConflictKind, SpawnConflictPayload,
+    SpawnRequest as RuntimeSpawnRequest, SpawnedPayload, StatusFilter,
 };
 use lilo_runtime_daemon::SpawnOutcome;
 use lilo_session_core::{
@@ -19,23 +17,20 @@ use crate::driver::{
     CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, SpawnLaunch, SpawnedProcess,
 };
 
-pub fn runtime_spawn_request(
-    session_id: SessionId,
-    launch: &SpawnLaunch,
-) -> Result<RuntimeSpawnRequest, RuntimeError> {
-    Ok(RuntimeSpawnRequest {
-        session_id,
+pub fn runtime_spawn_request(launch: SpawnLaunch) -> RuntimeSpawnRequest {
+    RuntimeSpawnRequest {
+        session_id: launch.session_id,
         runtime: runtime_kind(launch.runtime),
-        isolation: launch.isolation.clone(),
-        image: launch.image.clone(),
-        env: launch.env.clone(),
-        mounts: launch.mounts.clone(),
-        cwd: launch.cwd.clone(),
-        target: RuntimeSpawnTarget::from_str(&launch.target)
-            .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidTarget(launch.target.clone())))?,
+        isolation: launch.isolation,
+        image: launch.image,
+        env: launch.env,
+        mounts: launch.mounts,
+        cwd: launch.cwd,
+        target: launch.target,
         force: launch.force,
-        shell_resume: launch.shell_resume.clone(),
-    })
+        shell_resume: launch.shell_resume,
+        launch_attachment: launch.launch_attachment,
+    }
 }
 
 pub fn spawned_process(payload: SpawnedPayload) -> Result<SpawnedProcess, RuntimeError> {
@@ -100,7 +95,7 @@ pub(crate) fn terminal_child_exit(
         }
     };
     Ok(Some(ChildExit {
-        session_id: lifecycle.session_id.to_string(),
+        session_id: lifecycle.session_id,
         runtime_pid: lifecycle.runtime_pid.unwrap_or_default(),
         exit_code,
         transcript_path: lifecycle_transcript_path(lifecycle),
@@ -166,17 +161,6 @@ pub(crate) fn runtime_doctor_error(
         code,
         message: Some(message),
     }
-}
-
-pub(crate) fn parse_session_id(session_id: &str) -> Result<SessionId, RuntimeError> {
-    session_id
-        .parse()
-        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
-}
-
-pub(crate) fn parse_runtime_signal(signal: &str) -> Result<RuntimeSignal, RuntimeError> {
-    RuntimeSignal::from_str(signal)
-        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSignal(signal.to_string())))
 }
 
 pub(crate) fn spawn_conflict(payload: &SpawnConflictPayload) -> RuntimeError {

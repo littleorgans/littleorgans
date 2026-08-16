@@ -51,6 +51,8 @@ async fn lilo_session_user_verbs_route_through_session_spawn() -> Result<()> {
         assert_eq!(resolved_count(&fixture, session_id).await?, 1);
         assert_eq!(pending_count(&fixture, session_id).await?, 0);
         assert!(allowed_spawn_audit_count(&fixture, session_id).await? >= 1);
+        let request = stored_spawn_request(&fixture, session_id).await?;
+        assert!(request.get("launch_attachment").is_none(), "{request}");
     }
 
     let raw_runtime_id = fixed_session_id(30);
@@ -358,6 +360,19 @@ async fn session_count(fixture: &IntegrationFixture, session_id: SessionId) -> R
         &session_id.to_string(),
     )
     .await
+}
+
+async fn stored_spawn_request(
+    fixture: &IntegrationFixture,
+    session_id: SessionId,
+) -> Result<serde_json::Value> {
+    let json: String = sqlx::query_scalar(
+        "SELECT spawn_request_json FROM session_spawn_intents WHERE session_id = $1",
+    )
+    .bind(session_id.to_string())
+    .fetch_one(fixture.db.pool())
+    .await?;
+    serde_json::from_str(&json).context("stored Runtime spawn request JSON parses")
 }
 
 async fn allowed_spawn_audit_count(

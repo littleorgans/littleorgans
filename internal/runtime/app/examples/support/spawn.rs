@@ -17,7 +17,7 @@ pub async fn spawn_runtime(
     lilo_runtime_app::shared::request(
         socket_path,
         RuntimeRpc::Spawn {
-            request: SpawnRequest {
+            request: Box::new(SpawnRequest {
                 session_id,
                 runtime,
                 isolation: IsolationPolicy::default(),
@@ -28,7 +28,8 @@ pub async fn spawn_runtime(
                 target,
                 force: false,
                 shell_resume: None,
-            },
+                launch_attachment: None,
+            }),
         },
     )
     .await

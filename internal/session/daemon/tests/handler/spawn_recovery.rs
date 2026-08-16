@@ -8,13 +8,13 @@ use lilo_common::id::SessionId;
 use lilo_db::LiloDb;
 use lilo_rm_core::{
     EventBatch, EventsRequest, IsolationPolicy, Lifecycle, NudgeMode,
-    RuntimeKind as RuntimeRuntimeKind, ShimReady, StatusFilter,
+    RuntimeKind as RuntimeRuntimeKind, RuntimeSignal, ShimReady,
+    SpawnRequest as RuntimeSpawnRequest, StatusFilter,
 };
 use lilo_runtime_store::LifecycleStore;
-use lilo_session_core::{RpcResponse, RuntimeDoctorReport, RuntimeKind, SessionRpc};
+use lilo_session_core::{RpcResponse, RuntimeDoctorReport, SessionRpc};
 use lilo_session_driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch,
-    SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnedProcess,
 };
 
 use crate::common::{LOCAL_UID, OrPanic as _, TestDaemon, local_context, spawn_request};
@@ -147,10 +147,9 @@ impl FaultingRuntimePort {
 
     async fn spawn_with_fault(
         &self,
-        session_id: &str,
-        launch: &SpawnLaunch,
+        request: RuntimeSpawnRequest,
     ) -> Result<SpawnedProcess, RuntimeError> {
-        let session_id = parse_session_id(session_id)?;
+        let session_id = request.session_id;
         *self
             .spawned_session_id
             .lock()
@@ -160,8 +159,8 @@ impl FaultingRuntimePort {
                 install_tx_b_resolve_failure(&self.db, session_id).await?;
                 Ok(spawned_process(
                     session_id,
-                    launch.runtime,
-                    launch.isolation.clone(),
+                    request.runtime,
+                    request.isolation,
                 ))
             }
             SpawnFault::FailRuntimeSpawn => {
@@ -172,40 +171,35 @@ impl FaultingRuntimePort {
 }
 
 impl RuntimePort for FaultingRuntimePort {
-    fn spawn<'a>(
-        &'a self,
-        session_id: &'a str,
-        launch: &'a SpawnLaunch,
-    ) -> PortFuture<'a, SpawnedProcess> {
-        Box::pin(async move { self.spawn_with_fault(session_id, launch).await })
+    fn spawn(&self, request: RuntimeSpawnRequest) -> PortFuture<'_, SpawnedProcess> {
+        Box::pin(async move { self.spawn_with_fault(request).await })
     }
 
     fn reap_exited(&self) -> PortFuture<'_, Vec<ChildExit>> {
         unsupported("reap_exited")
     }
 
-    fn capture<'a>(
-        &'a self,
-        _session_id: &'a str,
+    fn capture(
+        &self,
+        _session_id: SessionId,
         _scrollback_lines: Option<u32>,
-    ) -> PortFuture<'a, CaptureResult> {
+    ) -> PortFuture<'_, CaptureResult> {
         unsupported("capture")
     }
 
-    fn terminate<'a>(
-        &'a self,
-        session_id: &'a str,
-        _signal: &'a str,
+    fn terminate(
+        &self,
+        session_id: SessionId,
+        _signal: RuntimeSignal,
         _grace: Duration,
-    ) -> PortFuture<'a, Option<ChildExit>> {
+    ) -> PortFuture<'_, Option<ChildExit>> {
         Box::pin(async move {
-            let session_id_uuid = parse_session_id(session_id)?;
             self.terminated_session_ids
                 .lock()
                 .or_panic("terminated ids lock succeeds")
-                .push(session_id_uuid);
+                .push(session_id);
             Ok(Some(ChildExit {
-                session_id: session_id.to_string(),
+                session_id,
                 runtime_pid: TEST_RUNTIME_PID,
                 exit_code: Some(143),
                 transcript_path: None,
@@ -215,7 +209,7 @@ impl RuntimePort for FaultingRuntimePort {
 
     fn nudge<'a>(
         &'a self,
-        _session_id: &'a str,
+        _session_id: SessionId,
         _content: &'a str,
         _mode: NudgeMode,
         _timeout_ms: Option<u64>,
@@ -246,18 +240,12 @@ fn unsupported<T: Send + 'static>(operation: &'static str) -> PortFuture<'static
     })
 }
 
-fn parse_session_id(session_id: &str) -> Result<SessionId, RuntimeError> {
-    session_id
-        .parse()
-        .map_err(|_| RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string())))
-}
-
 fn spawned_process(
     session_id: SessionId,
-    runtime: RuntimeKind,
+    runtime: RuntimeRuntimeKind,
     isolation: IsolationPolicy,
 ) -> SpawnedProcess {
-    let mut lifecycle = Lifecycle::forking(session_id, runtime_kind(runtime));
+    let mut lifecycle = Lifecycle::forking(session_id, runtime);
     lifecycle.isolation = isolation;
     assert!(lifecycle.mark_running(ShimReady {
         session_id,
@@ -273,13 +261,6 @@ fn spawned_process(
         stdout_path: None,
         stderr_path: None,
         tmux_pane: None,
-    }
-}
-
-fn runtime_kind(runtime: RuntimeKind) -> RuntimeRuntimeKind {
-    match runtime {
-        RuntimeKind::Claude => RuntimeRuntimeKind::Claude,
-        RuntimeKind::Codex => RuntimeRuntimeKind::Codex,
     }
 }
 

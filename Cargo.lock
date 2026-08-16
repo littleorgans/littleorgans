@@ -1400,6 +1400,7 @@ dependencies = [
  "lilo-runtime-store",
  "lilo-session-core",
  "lilo-wire",
+ "serde_json",
  "tempfile",
  "thiserror",
  "tokio",

@@ -53,6 +53,7 @@ fn launcher_status(launcher: &'static dyn lilo_rm_core::RuntimeLauncher) -> Laun
         target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
         force: false,
         shell_resume: None,
+        launch_attachment: None,
     };
     match launcher.argv(&request) {
         Ok(argv) => LauncherStatus {

@@ -1,8 +1,8 @@
-use crate::common::{LOCAL_UID, TestDaemon, local_context, spawn_test_session};
-use lilo_im_core::{Action, AuditDecision};
-use lilo_session_core::{
-    IsolationPolicy, Namespace, RpcResponse, RuntimeKind, SessionRpc, SpawnRequest,
+use crate::common::{
+    LOCAL_UID, TestDaemon, headless_spawn_request, local_context, spawn_request, spawn_test_session,
 };
+use lilo_im_core::{Action, AuditDecision};
+use lilo_session_core::{Namespace, RpcResponse, RuntimeKind, SessionRpc};
 
 #[tokio::test]
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
@@ -15,22 +15,10 @@ pub(crate) async fn spawn_launch_uses_runtime_service_without_driver_fallback() 
         .handle(
             context,
             SessionRpc::Spawn {
-                request: Box::new(SpawnRequest {
-                    runtime: RuntimeKind::Claude,
-                    role: "pm".to_string(),
-                    workspace: daemon.dir.path().display().to_string(),
-                    dir: None,
-                    namespace: None,
-                    target: "headless".to_string(),
-                    agent_config: None,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: Vec::new(),
-                    mounts: Vec::new(),
-                    shell_resume: None,
-                    labels: Vec::new(),
-                    force: false,
-                }),
+                request: Box::new(headless_spawn_request(
+                    "pm",
+                    daemon.dir.path().display().to_string(),
+                )),
             },
         )
         .await;
@@ -74,22 +62,10 @@ pub(crate) async fn composed_spawn_writes_one_session_door_audit_row() {
         .handle(
             context,
             SessionRpc::Spawn {
-                request: Box::new(SpawnRequest {
-                    runtime: RuntimeKind::Claude,
-                    role: "pm".to_string(),
-                    workspace: daemon.dir.path().display().to_string(),
-                    dir: None,
-                    namespace: None,
-                    target: "headless".to_string(),
-                    agent_config: None,
-                    isolation: IsolationPolicy::default(),
-                    image: None,
-                    env: Vec::new(),
-                    mounts: Vec::new(),
-                    shell_resume: None,
-                    labels: Vec::new(),
-                    force: false,
-                }),
+                request: Box::new(headless_spawn_request(
+                    "pm",
+                    daemon.dir.path().display().to_string(),
+                )),
             },
         )
         .await;
@@ -105,5 +81,37 @@ pub(crate) async fn composed_spawn_writes_one_session_door_audit_row() {
     assert_eq!(spawn_rows.len(), 1);
     assert_eq!(spawn_rows[0].decision, AuditDecision::Allow);
     assert_eq!(spawn_rows[0].resource.session_id, Some(response.session.id));
+    daemon.cleanup().await;
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+pub(crate) async fn spawn_rejects_invalid_target_before_transaction_a() {
+    let daemon = TestDaemon::new(LOCAL_UID).await;
+    let response = daemon
+        .state
+        .handle(
+            local_context(),
+            SessionRpc::Spawn {
+                request: Box::new(spawn_request(
+                    "pm",
+                    daemon.dir.path().display().to_string(),
+                    "invalid-target",
+                )),
+            },
+        )
+        .await;
+    let RpcResponse::Error { message } = response.response else {
+        panic!("expected invalid target error");
+    };
+    assert!(
+        message.contains("invalid spawn target invalid-target"),
+        "{message}"
+    );
+    let intent_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_spawn_intents")
+        .fetch_one(daemon.testdb.db().pool())
+        .await
+        .expect("spawn intent count reads");
+    assert_eq!(intent_count, 0);
     daemon.cleanup().await;
 }

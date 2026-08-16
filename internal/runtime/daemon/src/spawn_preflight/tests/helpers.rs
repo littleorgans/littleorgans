@@ -122,6 +122,7 @@ fn headless_request(session_id: SessionId, force: bool) -> SpawnRequest {
         target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
         force,
         shell_resume: None,
+        launch_attachment: None,
     }
 }
 

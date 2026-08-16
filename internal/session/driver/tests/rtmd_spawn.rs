@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use common::OrPanic as _;
 use lilo_common::id::SessionId;
 use lilo_rm_core::{
-    IsolationPolicy, LaunchEnv, Lifecycle, LifecycleState, LostEvidence, MountSpec, RuntimeEvent,
-    RuntimeKind, RuntimeResponse, RuntimeRpc, ShellResume, SpawnRequest, SpawnedPayload,
-    read_json_line, write_json_line,
+    HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, Lifecycle, LifecycleState, LostEvidence,
+    MountSpec, RuntimeEvent, RuntimeKind, RuntimeResponse, RuntimeRpc, ShellResume, SpawnRequest,
+    SpawnTarget, SpawnedPayload, read_json_line, write_json_line,
 };
 use lilo_session_core::RuntimeKind as SmRuntimeKind;
-use lilo_session_driver::SpawnLaunch;
+use lilo_session_driver::{RuntimePort, SpawnLaunch, runtime_spawn_request};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 
@@ -39,11 +39,21 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
         read_only: true,
     }];
 
+    let request = runtime_spawn_request(SpawnLaunch {
+        session_id,
+        runtime: SmRuntimeKind::Claude,
+        isolation,
+        image,
+        cwd: PathBuf::from("/tmp/session"),
+        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
+        env: vec![LaunchEnv::new("HOME", "/Users/tester")],
+        mounts,
+        shell_resume: Some(shell_resume),
+        force,
+        launch_attachment: Some(common::shared_test_support::launch_attachment_fixture()),
+    });
+    let expected_request = request.clone();
     let (driver, server) = common::mock_rtmd_server({
-        let shell_resume = shell_resume.clone();
-        let isolation = isolation.clone();
-        let image = image.clone();
-        let mounts = mounts.clone();
         move |stream| async move {
             let (read_half, mut write_half) = stream.into_split();
             let mut reader = BufReader::new(read_half);
@@ -54,12 +64,7 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
             let RuntimeRpc::Spawn { request } = rpc else {
                 panic!("expected spawn rpc");
             };
-            assert_eq!(request.env, vec![LaunchEnv::new("HOME", "/Users/tester")]);
-            assert_eq!(request.isolation, isolation);
-            assert_eq!(request.image, image);
-            assert_eq!(request.mounts, mounts);
-            assert_eq!(request.shell_resume, Some(shell_resume));
-            assert_eq!(request.force, force);
+            assert_eq!(*request, expected_request);
             write_json_line(
                 &mut write_half,
                 &RuntimeResponse::Spawned(spawned(&request)),
@@ -70,20 +75,7 @@ async fn rtmd_spawn_forwards_env_shell_resume_and_force(force: bool) {
     });
 
     let spawned = driver
-        .spawn(
-            &session_id.to_string(),
-            &SpawnLaunch {
-                runtime: SmRuntimeKind::Claude,
-                isolation,
-                image,
-                cwd: PathBuf::from("/tmp/session"),
-                target: "headless".to_string(),
-                env: vec![LaunchEnv::new("HOME", "/Users/tester")],
-                mounts,
-                shell_resume: Some(shell_resume),
-                force,
-            },
-        )
+        .spawn(request)
         .await
         .or_panic("spawn delegates to rtmd");
     assert_eq!(spawned.lifecycle.session_id, session_id);
