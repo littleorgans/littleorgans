@@ -196,9 +196,9 @@ format-stable: `Display`/`FromStr` stay full 36-char, serde is
 `#[serde(transparent)]`, sqlx delegates to `Uuid` behind a `lilo-common/sqlx`
 feature. The short form is a separate `short()` accessor on human surfaces only
 (`lilo get session`, `lilo mail peek`), git-style adaptive with a 7-hex floor.
-Prefix *selection* extends the existing `internal/session/core` `Selector` with a
-prefix variant resolved by a store `WHERE id LIKE ? || '%'` query that errors
-with candidates on ambiguity.
+Prefix *selection* extends the existing `internal/session/core` `Selector`
+with a prefix variant resolved by a store `WHERE id LIKE ? || '%'` query that
+errors with candidates on ambiguity.
 
 Old v7 rows coexist with new v4 ids; no DB migration. On execution, also flip the
 parent `littleorgans/CLAUDE.md` join-key line and the transport spawn-id note
@@ -272,8 +272,10 @@ the remote matches the manifest, and `previous_history_url` is present.
 ## Closeout checklist
 
 Follow the phase sequence and exit criteria from synthesis §5 §8 and the
-day-one mechanics from synthesis §5 §9 verbatim. For issue work, update Linear
-first, then the external Nancy checklist, then commit, then write handover.
+day-one mechanics from synthesis §5 §9 verbatim. GitHub issues and pull
+requests are the only issue workflow. Linear and Nancy are retired and must not
+be used. For issue work, keep the GitHub issue current, commit, push, and write
+handover when needed.
 
 Do not mark work complete until it has been proven. The normal proof is
 `just check && just build && just test`, plus any narrower acceptance commands
