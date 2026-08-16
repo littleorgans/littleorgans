@@ -1,11 +1,13 @@
 # Architecture review and convergence proposal
 
-- Status: Discussion draft
+- Status: Discussion draft. Proposal 3 accepted
 - Reviewed commit: `753e2ee91e3d41ae74dbe1cae3ec3ee6797e61da`
 - Review date: 2026-08-14
 - Scope: v0.8.0 architecture and readiness for the first Transport and Canvas proof
 
-This page is the discussion landing for the architecture review. It separates accepted evidence from proposed changes. No proposal on this page is a locked decision.
+This page is the discussion landing for the architecture review. It separates
+accepted evidence from proposed changes. Proposal 3 records the locked Issue 35
+decision. The other proposals remain open.
 
 ## Review judgment
 
@@ -15,7 +17,7 @@ Three structural issues should be resolved before the first Transport and Canvas
 
 1. The public package graph depends on private packages.
 2. Session reaches through the Runtime boundary into Runtime storage and services.
-3. The documented opaque launch payload has no implemented type or handoff point.
+3. The documented launch attachment has no implemented type or handoff point.
 
 Two cleanup tasks should travel with that work. The repository still exposes legacy daemon topology, and typed identifiers become strings inside the in-process Session to Runtime path.
 
@@ -112,26 +114,21 @@ Acceptance criteria:
 3. `lilo-rm-client` has no Session dependency, direct or transitive.
 4. The composed daemon keeps one private request envelope.
 
-## Proposal 3: add the opaque launch payload
+<a id="proposal-3-add-the-opaque-launch-payload"></a>
 
-The governing architecture requires Session to attach an opaque capture lease or launch payload. Future Schedule forwards the value unchanged. Runtime carries the value to process launch without interpreting Transport semantics.
+## Proposal 3: add the launch attachment
 
-Add one domain neutral payload to the Session execution request. The type needs these properties:
+**Accepted by Issue 35.** The governing [launch attachment
+contract](../system.md#launch-attachment-contract) records the shared rules.
+Local ownership is recorded in [Session Contracts](../session.md#contracts),
+[Runtime Contracts](../runtime.md#contracts), [Schedule Transport
+Boundary](../schedule.md#transport-boundary), and [Transport Launch
+Boundary](../transport.md#launch-boundary).
 
-1. Opaque contents at the Schedule and Runtime boundaries.
-2. A version or kind that permits safe decoding by the owner.
-3. No provider specific fields in Session, Schedule, or Runtime.
-4. An absent value for launches that do not use Transport.
-5. Stable serialization across the local socket and persisted intent when recovery requires it.
-
-The final type name and encoding remain discussion items. The design should establish the data structure before provider handling code arrives.
-
-Acceptance criteria:
-
-1. The Session launch request carries the payload.
-2. The current Runtime adapter forwards the payload unchanged.
-3. A round trip test proves byte or value equality across the handoff.
-4. A launch without a payload behaves exactly as it does at the reviewed commit.
+Issue 41 will implement the typed field and prove its compatibility and
+unchanged forwarding. Raw `lilo runtime spawn` will keep `launch_attachment`
+absent. Runtime will receive the field at `RuntimeService::spawn`. Later child
+delivery remains outside Issue 41.
 
 ## Proposal 4: restore the Session to Runtime boundary
 
@@ -182,22 +179,21 @@ Each change should end in a verifiable repository state.
 
 1. **Topology subtraction.** Remove alternate production entrypoints, old distribution metadata, and stale topology prose.
 2. **Publication repair.** Separate the public Runtime contract from the private composed envelope. Prove every published package with `cargo package`.
-3. **Typed launch command.** Keep domain types across the in-process port and add the opaque payload.
+3. **Typed launch command.** Keep domain types across the in-process port and add `launch_attachment`.
 4. **Ownership correction.** Move Runtime store and event work behind the execution port while preserving the two transaction protocol.
-5. **Transport proof.** Implement the first provider traffic capture path through the established payload handoff.
+5. **Transport proof.** Implement the first provider traffic capture path through the established launch attachment handoff.
 6. **Canvas proof.** Read and command Session and Transport through `lilod` without direct storage access.
 
 Schedule stays reserved throughout this sequence.
 
 ## Discussion points
 
-The first discussion should resolve these choices:
+The next discussion should resolve these remaining choices:
 
 1. Should the `lilo` binary package be published to crates.io, or only distributed as a binary?
 2. Can `lilo-rm-core` own the public Runtime wire contract without mixing transport framing into domain types?
-3. What exact opaque payload representation gives Transport versioning without provider fields outside Transport?
-4. Should the current `RuntimePort` evolve into the future execution port, or should a new port replace it in the same change?
-5. Which component retries post commit Runtime event publication after a crash?
+3. Should the current `RuntimePort` evolve into the future execution port, or should a new port replace it in the same change?
+4. Which component retries post commit Runtime event publication after a crash?
 
 My recommendations are binary only distribution for `lilo`, the existing Runtime core package for public Runtime contracts, and a direct execution port before any outbox. Those choices minimize new structure while keeping the future Schedule insertion local.
 

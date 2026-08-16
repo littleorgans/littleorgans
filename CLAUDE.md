@@ -61,13 +61,13 @@ placement, execute a process, or reconcile. Transport Matters is the knowledge
 base, executable reference, fixture library, and lessons record. Do not import
 its package boundaries or permanent launcher topology by default.
 
-Session prepares capture for the typed UUIDv4 `SessionId` and attaches an
-opaque capture lease to the launch payload. The current v0.8 path passes that
-payload directly to Runtime. The target path passes it through Schedule, which
-places the occupant and forwards the opaque payload to Runtime. `lilo capture`
-remains Runtime's tmux pane capture verb. Implementation language, process
-topology, storage ownership, and failure policy remain open until the first
-vertical slice proves them.
+Session will prepare capture for the typed UUIDv4 `SessionId` and add one
+Transport launch attachment to the occupant launch spec. The current v0.8
+Session to Runtime path remains attachment free until Issue 41. The target path
+passes the occupant launch spec through Schedule, which places the occupant and
+forwards the spec to Runtime. `lilo capture` remains Runtime's pane snapshot
+verb. Implementation language, process topology, storage ownership, and failure
+policy remain open until the first vertical slice proves them.
 
 Canvas and Desktop are one product surface. Canvas consumes Session and
 Transport read and command models through `lilod`; it does not read substrate

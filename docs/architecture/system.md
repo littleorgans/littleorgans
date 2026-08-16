@@ -60,25 +60,83 @@ Canvas or lilo -> Session -> Schedule -> Runtime
 Identity authorizes Session, Schedule, Runtime, and Transport service actions.
 ```
 
-Schedule receives an opaque launch payload. Session may attach a Transport
-capture lease to that payload before asking Schedule to place the occupant.
-Schedule records and forwards the payload without interpreting provider,
-overlay, transcript, role, or harness semantics.
+## Launch attachment contract
+
+| Term | Meaning |
+| --- | --- |
+| Occupant launch spec | The complete Runtime request plus one optional launch attachment. |
+| Launch attachment | The optional outer object named `launch_attachment`, with `kind`, `version`, and `value`. |
+| Capture lease | Transport owned content inside the launch attachment `value`. |
+| Pane snapshot | Terminal output returned by `lilo capture` or diagnostic `lilo runtime capture`. |
+| Provider or wire capture | Transport observation of harness to provider traffic. |
+
+`lilo-rm-core` will own `LaunchAttachment` with exactly three fields:
+`kind: String`, `version: u32`, and `value: serde_json::Value`. The one
+attachment contains the capture lease and all other Transport prepare data
+inside `value`. `LaunchEnv` carries only already typed process environment and
+does not form a second envelope.
+
+Transport owns the meaning of each version for each `kind`. The first version
+that Transport writes is `1`. Session, Schedule, and Runtime carry every `u32`
+unchanged. Attachment versions are unrelated to `RUNTIME_PROTOCOL_VERSION`.
+
+Session, Schedule, and Runtime will deserialize the outer typed object and copy
+it. Only Transport will interpret `kind`, `version`, or `value`.
+`LaunchAttachment` will reject unknown outer members with
+`deny_unknown_fields`, while unknown keys inside `value` remain part of the
+value. Neither the external Session `SpawnRequest` nor Runtime `SpawnRequest`
+will use `deny_unknown_fields`.
+Runtime `SpawnRequest.launch_attachment` will use
+`#[serde(default, skip_serializing_if = "Option::is_none")]`. A missing key
+will decode as `None`, and writers will omit `None`. A present malformed
+attachment will fail Runtime request deserialization. The failure will make
+`list_pending_spawn_intents` fail instead of producing `None`.
+
+Unchanged forwarding means `LaunchAttachment` value equality after a clone, a
+Runtime request JSON round trip, recovery from `spawn_request_json`, and receipt
+by `RuntimeService::spawn` through each Runtime adapter. The contract excludes
+lexical whitespace and JSON object member order.
+
+The current v0.8 Session to Runtime path has no attachment until Issue 41. The
+external Session `SpawnRequest` will never accept the field, and raw
+`lilo runtime spawn` will keep it absent. Session will persist the complete
+Runtime request, including any attachment, only in
+`session_spawn_intents.spawn_request_json`. Pending, resolved, and aborted rows
+retain that JSON. This contract adds no table, encryption, or cleanup.
+Transport must not put provider credentials, API keys, or bearer secrets in
+the attachment under that retention rule.
+
+Issue 41 will give `LaunchAttachment` a manual redacted `Debug`
+implementation. Logs, CLI output, API projections, and errors will never show
+`value`. Runtime will receive and retain the attachment on Runtime
+`SpawnRequest` at `RuntimeService::spawn`. Runtime will not copy it into
+`LaunchSpec`, the shim, the child process, environment variables, or files.
+Schedule will record and forward the occupant launch spec without interpreting
+provider, overlay, transcript, role, harness, or launch attachment semantics.
 
 ## Session Backed Launch
 
 The target launch sequence is:
 
-1. Session mints the typed `SessionId` and persists occupant intent.
+1. Session mints the typed `SessionId`.
 2. Identity authorizes the requested operation.
-3. Session asks Transport to prepare capture for the `SessionId`.
-4. Transport returns an opaque capture lease and launch additions.
-5. Session submits the occupant and opaque launch payload to Schedule.
-6. Schedule selects or creates topology and records the stable binding.
-7. Schedule asks Runtime to execute the launch at the selected target.
-8. Runtime starts the shim and harness without interpreting capture policy.
-9. Transport observes the provider wire and records the captured turn.
-10. Session exposes the joined session and capture read model to Canvas.
+3. Session asks Transport to prepare capture for the `SessionId`. Transport
+   returns one launch attachment.
+4. Session adds the attachment and builds the complete Runtime request.
+5. Transaction A atomically records the authorization audit, the pending
+   Session intent with that complete request, and the pending Runtime `Forking`
+   lifecycle.
+6. The current v0.8 path sends the complete request to Runtime. The target path
+   sends the occupant launch spec to Schedule.
+7. Schedule selects or creates topology, records the stable binding, and asks
+   Runtime to execute the launch at the selected target.
+8. Runtime starts the shim and harness without interpreting capture policy, then
+   returns the `Running` lifecycle.
+9. Transaction B inserts the `Running` Session row, persists the Runtime
+   `Running` lifecycle, and resolves the Session intent.
+10. Session appends the Runtime `Running` event after Transaction B commits.
+11. Transport observes the provider wire and records the captured turn.
+12. Session exposes the joined session and capture read model to Canvas.
 
 Raw `lilo runtime spawn` remains diagnostic access. It creates no Session or
 Schedule record. The first Transport and Canvas slice applies only to session
@@ -121,9 +179,9 @@ The smallest coherent product proof is:
 7. The provider response reaches the harness normally.
 8. Canvas shows original, forwarded, response, and audit evidence.
 
-The current Session to Runtime route may implement this proof. Its capture
-attachment must remain opaque so Schedule can later mediate the same launch
-without changing Transport or Canvas.
+The current Session to Runtime route may implement this proof. Its
+`launch_attachment` must remain opaque so Schedule can later mediate the same
+occupant launch spec without changing Transport or Canvas.
 
 ## Explicit Deferrals
 
@@ -143,7 +201,8 @@ Stuart retains authority over:
 4. Failure behavior when capture cannot prepare or persist.
 5. Automatic report opening or explicit navigation.
 6. Curated first or raw first report hierarchy.
-7. Redaction, secret handling, retention, and export policy.
+7. Transport record redaction, retention, and export policy beyond the launch
+   attachment contract.
 8. Static HTML proof before Canvas integration or direct Canvas delivery.
 
 ## Related Documents
