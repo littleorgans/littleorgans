@@ -70,7 +70,7 @@ Do not introduce speculative id types before a stored field requires them.
 ## Thin Topology Intent
 
 The topology manifest carries identity and topology only. Its occupant launch
-payload is opaque to Schedule.
+spec is opaque to Schedule.
 
 ```text
 manifest version
@@ -81,13 +81,15 @@ windows
     occupant token
     restart policy
     working directory
-    opaque launch payload
+    occupant launch spec
 ```
 
-Session prepares the launch payload. It may include Runtime launch fields,
-agent configuration references, native resume material, and a Transport
-capture lease. Schedule validates only the fields required to place and attach
-the occupant. It forwards the payload to Runtime without interpreting it.
+Session will prepare the occupant launch spec defined by the [canonical launch
+attachment contract](system.md#launch-attachment-contract). Schedule will
+validate only the topology fields required to place and attach the occupant.
+It will carry the occupant launch spec as a unit and deserialize the optional
+outer typed launch attachment only to copy it unchanged. Only Transport will
+interpret the attachment fields.
 
 This seam allows Transport capture to work before and after the Schedule
 cutover.
@@ -102,7 +104,7 @@ The target placement flow is:
    control plane.
 4. Ask Runtime to create or resolve live topology.
 5. Persist live tmux ids as realization evidence.
-6. Ask Runtime to execute the opaque launch payload in the selected pane.
+6. Ask Runtime to execute the occupant launch spec in the selected pane.
 7. Bind the occupant token to the stable pane identity.
 8. Return placement evidence to Session.
 
@@ -121,8 +123,9 @@ Schedule.
 ## Transport Boundary
 
 Schedule never sees provider request bytes, normalized payloads, overlays,
-transcripts, or fidelity reports. Capture setup is part of the opaque launch
-payload prepared by Session.
+transcripts, or fidelity reports. It will copy the optional launch attachment
+without interpreting `kind`, `version`, or `value`. See the [canonical launch
+attachment contract](system.md#launch-attachment-contract).
 
 Transport records remain joined through `SessionId`. Schedule stores only the
 opaque fields required to place and resume the occupant. WebSocket behavior,

@@ -31,14 +31,21 @@ intent, reconcile placement, or execute a process.
 
 ## Launch Boundary
 
-Session asks Transport to prepare capture for a typed `SessionId`. Transport
-returns an opaque capture lease and launch additions. Session includes them in
-the launch payload supplied to the current Runtime path or the target Schedule
-path.
+Session will ask Transport to prepare capture for a typed `SessionId`.
+Transport will return one launch attachment. The attachment contains the
+capture lease and all other Transport prepare data inside `value`. Transport
+owns the meaning of `kind`, `version`, and `value`. The [canonical launch
+attachment contract](system.md#launch-attachment-contract) defines the shared
+rules.
 
-Schedule treats the entire launch payload as opaque. Runtime applies the
-authoritative launch specification and starts the harness. Neither context
-interprets payload policy.
+Transport alone will interpret the attachment fields. It must not put provider
+credentials, API keys, or bearer secrets in the attachment while pending,
+resolved, and aborted intent rows retain the value.
+
+`lilo capture` and `lilo runtime capture` remain pane snapshot commands.
+Transport observation uses provider capture or wire capture. Its future
+commands belong under `lilo transport ...` after the first vertical slice
+proves real verbs. Transport has no spawn command.
 
 The implementation language remains open. A Little Organs owned Rust service
 or a Little Organs owned Python helper may satisfy the Transport port. The
@@ -155,6 +162,6 @@ Codex may remain pass through for that slice. Its WebSocket, HTTPS fallback,
 and continuation guards are required from the start because Transport becomes
 part of the launch path.
 
-The blocking interaction model, failure posture, redaction policy, storage
-shape, and implementation language remain open product or architecture
-decisions. See [system architecture](system.md).
+The blocking interaction model, failure posture, Transport record redaction
+policy, storage shape, and implementation language remain open product or
+architecture decisions. See [system architecture](system.md).

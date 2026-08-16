@@ -31,10 +31,12 @@ contract does not guess ownership for processes it did not create.
 
 The current implementation drives Runtime directly. The target architecture
 inserts Schedule as the sole placement authority. Session prepares logical
-intent and an opaque launch payload, then Schedule places the occupant and asks
-Runtime to execute it. Transport capture preparation remains a Session
-primitive and is attached to that opaque payload. Schedule never interprets
-provider or transcript semantics.
+intent and the occupant launch spec, then Schedule places the occupant and asks
+Runtime to execute it. After Session mints `SessionId` and Identity authorizes
+the operation, Session will ask Transport to prepare capture. Session will add
+the returned attachment to `SpawnLaunch`, then build the complete Runtime
+request before Transaction A. Schedule will never interpret provider,
+transcript, or attachment semantics.
 
 See [system architecture](system.md),
 [Schedule architecture](schedule.md), and
@@ -59,6 +61,15 @@ tool contracts, and MCP JSON RPC envelope. `SessionRpc` and `RpcResponse` are
 tagged inside `LilodRpc::Session` on the composed socket. `SpawnRequest` carries runtime,
 role, workspace, directory, namespace, target, agent config, isolation, image,
 environment, mounts, shell resume data, labels, and force behavior.
+
+Issue 41 will leave that external Session `SpawnRequest` unchanged. Session
+will add the optional `launch_attachment` only to `SpawnLaunch` after minting
+`SessionId`. Session will deserialize and copy the outer typed attachment, but
+only Transport will interpret its fields. Session will persist the complete
+Runtime request through the existing
+`session_spawn_intents.spawn_request_json` field. The [canonical launch
+attachment contract](system.md#launch-attachment-contract) defines the shared
+rules.
 
 Session state is explicit: `Spawning`, `Running`, `Terminated`, or `Lost`.
 Session rows carry the runtime link, transcript path, optional tmux pane,
@@ -158,11 +169,14 @@ Transaction B inserts the `Running` Session row, persists the returned Runtime
 the intent and removes the `Forking` lifecycle. Startup reconciliation completes
 or aborts any intent left pending across a process failure.
 
-The target flow preserves the same logical intent but replaces the direct
-runtime call. Session prepares Transport capture, submits the opaque occupant
-launch payload to Schedule, and stores the placement and Runtime evidence
-returned through that boundary. The direct path is removed after Schedule
-acceptance rather than retained in parallel.
+The target flow preserves the two transaction protocol but replaces the direct
+runtime call. Session will mint `SessionId`, obtain authorization, prepare
+Transport capture, attach the result to `SpawnLaunch`, and build the complete
+Runtime request before Transaction A. The current path sends that request to
+Runtime. The target path submits the occupant launch spec to Schedule. Raw
+`lilo runtime spawn` will keep `launch_attachment` absent because it bypasses
+Session. The direct path will be removed after Schedule acceptance rather than
+retained in parallel.
 
 Delete resolves the requested selector under its namespace scope, authorizes
 the principal against each matched session, asks the runtime driver to terminate

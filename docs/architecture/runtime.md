@@ -28,9 +28,9 @@ single in memory watcher.
 The current implementation receives session backed launch requests directly
 from Session. The target architecture routes placement through Schedule.
 Schedule decides where an occupant runs; Runtime executes topology and process
-operations. Session may attach an opaque Transport capture lease before
-placement. Runtime applies the resulting launch specification without
-interpreting provider payload or overlay policy.
+operations. Runtime will execute the occupant launch spec. The [canonical
+launch attachment contract](system.md#launch-attachment-contract) defines how
+Runtime handles its optional attachment.
 
 See [system architecture](system.md),
 [Schedule architecture](schedule.md), and
@@ -69,6 +69,12 @@ target, cwd, environment, mounts, isolation policy, optional image, force
 behavior, and shell resume data. `Lifecycle`, `RuntimeEvent`, `EventCursor`,
 `StatusFilter`, `MountSpec`, `RuntimeLauncher`, and `LaunchSpec` are shared
 across the client, daemon, launchers, store, app, and platform crates.
+
+After Issue 41, Runtime `SpawnRequest` will also carry the optional
+`launch_attachment`. Runtime will deserialize and retain the outer typed object
+through receipt at `RuntimeService::spawn`. Only Transport will interpret its
+fields. Runtime will apply the concrete process fields without copying the
+attachment into `LaunchSpec`, the shim, or the child process.
 
 ## Architecture diagram
 
@@ -148,7 +154,8 @@ Session appends the Runtime `Running` event only after Transaction B commits.
 
 Raw `lilo runtime spawn` uses `RuntimeRpc::Spawn` through the composed socket.
 It writes Runtime lifecycle and event evidence, but it creates no Session row or
-Session spawn intent.
+Session spawn intent. After Issue 41, that diagnostic path will also keep
+`launch_attachment` absent.
 
 After Schedule activates, the same Runtime path receives the execution request
 from Schedule. Runtime does not select the pane, interpret the occupant, or
