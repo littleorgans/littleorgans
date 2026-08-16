@@ -74,6 +74,7 @@ pub async fn run(args: SpawnArgs) -> Result<()> {
             target,
             force,
             shell_resume,
+            launch_attachment: None,
         })
         .await?;
 

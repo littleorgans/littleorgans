@@ -25,7 +25,7 @@ async fn spawn_headless_uses_runtime_service_without_driver_fallback() {
 #[tokio::test]
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_rejects_invalid_target_before_launch() {
-    assert_spawn_rejects_target("tmux:not-a-pane", "invalid runtime target").await;
+    assert_spawn_rejects_target("tmux:not-a-pane", "invalid spawn target tmux:not-a-pane").await;
 }
 
 #[tokio::test]
@@ -37,7 +37,7 @@ async fn spawn_rejects_tmux_pane_dead_target_before_launch() {
 #[tokio::test]
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn spawn_rejects_unsupported_target_before_launch() {
-    assert_spawn_rejects_target("ssh:host", "invalid runtime target: ssh:host").await;
+    assert_spawn_rejects_target("ssh:host", "invalid spawn target ssh:host").await;
 }
 
 async fn assert_spawn_rejects_target(target: &str, expected: &str) {

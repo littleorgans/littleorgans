@@ -3,7 +3,7 @@ mod support;
 use lilo_rm_core::{
     CaptureError, CapturePayload, CaptureRequest, CaptureResponse, CursorExpiredPayload,
     DoctorPayload, ErrorCode, ErrorPayload, EventsPayload, EventsRequest, IsolationPolicy,
-    IsolationProfile, KillByPidRequest, KillRequest, Lifecycle, LogAvailability,
+    IsolationProfile, KillByPidRequest, KillRequest, LaunchAttachment, Lifecycle, LogAvailability,
     LogsUnavailableReason, LostEvidence, McpBridgeRequest, MountSpec, NudgeFailureReason,
     NudgeMode, NudgeOutcome, NudgePayload, NudgeRequest, NudgeResponse, RuntimeEvent, RuntimeExit,
     RuntimeKind, RuntimeResponse, RuntimeRpc, RuntimeSignal, ShimExit, ShimLaunchPayload,
@@ -24,7 +24,7 @@ fn runtime_rpc_json_shapes_are_stable() {
     let ready = ready(session_id);
     let rpcs = vec![
         RuntimeRpc::Spawn {
-            request: SpawnRequest {
+            request: Box::new(SpawnRequest {
                 session_id,
                 runtime: RuntimeKind::Claude,
                 isolation: IsolationPolicy::default(),
@@ -37,7 +37,8 @@ fn runtime_rpc_json_shapes_are_stable() {
                 }),
                 force: true,
                 shell_resume: None,
-            },
+                launch_attachment: None,
+            }),
         },
         RuntimeRpc::ValidateTarget {
             request: ValidateTargetRequest {
@@ -421,6 +422,7 @@ fn spawn_request_json_round_trips_explicit_isolation_policies() {
             target: SpawnTarget::Headless(lilo_rm_core::HeadlessSpawnTarget {}),
             force: false,
             shell_resume: None,
+            launch_attachment: None,
         };
         assert_spawn_request_round_trip(&request);
     }
@@ -443,6 +445,7 @@ fn spawn_request_json_round_trips_mounts() {
         target: SpawnTarget::Headless(lilo_rm_core::HeadlessSpawnTarget {}),
         force: false,
         shell_resume: None,
+        launch_attachment: None,
     };
 
     insta::assert_json_snapshot!(request);
@@ -500,4 +503,169 @@ fn spawn_request_json_rejects_invalid_isolation_policy() {
         "unknown variant `sandbox`",
         "spawn request with invalid isolation should fail",
     );
+}
+
+const ATTACHMENT_VALUE_SENTINEL_41: &str = "ATTACHMENT_VALUE_SENTINEL_41";
+
+fn launch_attachment_fixture() -> LaunchAttachment {
+    LaunchAttachment {
+        kind: "issue41.test".to_owned(),
+        version: 1,
+        value: json!({
+            "lease": "cap_lease",
+            "nested": { "z": 1, "a": 2 },
+            "secret": ATTACHMENT_VALUE_SENTINEL_41,
+            "mixed": [null, true, 7, { "deep": "value" }]
+        }),
+    }
+}
+
+fn launch_attachment_request() -> SpawnRequest {
+    SpawnRequest {
+        session_id: session_id(),
+        runtime: RuntimeKind::Claude,
+        isolation: IsolationPolicy::Host,
+        image: None,
+        env: Vec::new(),
+        mounts: Vec::new(),
+        cwd: "/tmp/rtm".into(),
+        target: SpawnTarget::Headless(lilo_rm_core::HeadlessSpawnTarget {}),
+        force: false,
+        shell_resume: None,
+        launch_attachment: Some(launch_attachment_fixture()),
+    }
+}
+
+#[test]
+fn launch_attachment_round_trips_opaque_json_semantically() {
+    let request = launch_attachment_request();
+    assert_spawn_request_round_trip(&request);
+
+    let reordered: LaunchAttachment = serde_json::from_str(&format!(
+        r#"{{
+            "value": {{
+                "mixed": [null, true, 7, {{ "deep": "value" }}],
+                "secret": "{ATTACHMENT_VALUE_SENTINEL_41}",
+                "nested": {{ "a": 2, "z": 1 }},
+                "lease": "cap_lease"
+            }},
+            "version": 1,
+            "kind": "issue41.test"
+        }}"#
+    ))
+    .expect("reordered attachment");
+    assert_eq!(reordered, launch_attachment_fixture());
+
+    let extended: LaunchAttachment = serde_json::from_value(json!({
+        "kind": "issue41.test",
+        "version": 1,
+        "value": {
+            "mixed": [null, true, 7, { "deep": "value" }],
+            "secret": ATTACHMENT_VALUE_SENTINEL_41,
+            "nested": { "a": 2, "z": 1 },
+            "lease": "cap_lease",
+            "provider_extension": { "retained": true }
+        }
+    }))
+    .expect("attachment with opaque provider data");
+    let expected = launch_attachment_fixture();
+    assert_eq!(extended.value["nested"], expected.value["nested"]);
+    assert_eq!(extended.value["mixed"], expected.value["mixed"]);
+    assert_eq!(
+        extended.value["provider_extension"],
+        json!({ "retained": true })
+    );
+}
+
+#[test]
+fn launch_attachment_rejects_unknown_outer_fields_without_disclosing_value() {
+    let error = serde_json::from_value::<LaunchAttachment>(json!({
+        "kind": "issue41.test",
+        "version": 1,
+        "value": { "secret": ATTACHMENT_VALUE_SENTINEL_41 },
+        "unexpected": true
+    }))
+    .expect_err("unknown attachment outer field should fail");
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("unknown field `unexpected`"),
+        "{rendered}"
+    );
+    assert!(
+        !rendered.contains(ATTACHMENT_VALUE_SENTINEL_41),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn spawn_request_defaults_and_omits_absent_attachment() {
+    let mut json = serde_json::to_value(launch_attachment_request()).expect("serialize request");
+    json.as_object_mut()
+        .expect("request object")
+        .remove("launch_attachment");
+    let request: SpawnRequest = serde_json::from_value(json).expect("old request shape");
+    assert_eq!(request.launch_attachment, None);
+
+    let serialized = serde_json::to_value(request).expect("serialize old request shape");
+    assert!(serialized.get("launch_attachment").is_none());
+}
+
+#[test]
+fn spawn_request_rejects_malformed_present_attachment() {
+    let mut json = serde_json::to_value(launch_attachment_request()).expect("serialize request");
+    json["launch_attachment"] = json!({
+        "kind": "issue41.test",
+        "value": { "secret": ATTACHMENT_VALUE_SENTINEL_41 }
+    });
+    let error = serde_json::from_value::<SpawnRequest>(json)
+        .expect_err("present attachment without version should fail");
+    assert!(
+        error.to_string().contains("missing field `version`"),
+        "{error}"
+    );
+    assert!(!error.to_string().contains(ATTACHMENT_VALUE_SENTINEL_41));
+}
+
+#[test]
+fn attachment_value_is_redacted_from_nested_debug_output() {
+    let request = launch_attachment_request();
+    let attachment_debug = format!(
+        "{:?}",
+        request.launch_attachment.as_ref().expect("attachment")
+    );
+    let request_debug = format!("{request:?}");
+    let rpc_debug = format!(
+        "{:?}",
+        RuntimeRpc::Spawn {
+            request: Box::new(request),
+        }
+    );
+
+    for rendered in [attachment_debug, request_debug, rpc_debug] {
+        assert!(rendered.contains("[REDACTED]"), "{rendered}");
+        assert!(
+            !rendered.contains(ATTACHMENT_VALUE_SENTINEL_41),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("cap_lease"), "{rendered}");
+    }
+}
+
+#[test]
+fn runtime_nudge_json_rejects_malformed_session_id() {
+    let error = serde_json::from_value::<NudgeRequest>(json!({
+        "session_id": "not-a-uuid",
+        "content": "hello",
+        "mode": "immediate"
+    }))
+    .expect_err("malformed session id should fail Runtime JSON decode");
+    assert!(error.to_string().contains("invalid"), "{error}");
+}
+
+#[test]
+fn runtime_signal_from_str_rejects_unknown_signal() {
+    let error = "not-a-signal"
+        .parse::<RuntimeSignal>()
+        .expect_err("unknown signal should fail RuntimeSignal parsing");
+    assert_eq!(error.to_string(), "unsupported signal NOT-A-SIGNAL");
 }

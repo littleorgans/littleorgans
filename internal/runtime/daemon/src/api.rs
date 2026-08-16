@@ -418,7 +418,7 @@ mod tests {
             .handle_rpc(
                 local_principal(),
                 RuntimeRpc::Spawn {
-                    request: wire_request,
+                    request: Box::new(wire_request),
                 },
             )
             .await;
@@ -486,7 +486,12 @@ mod tests {
     ) -> RuntimeResponse {
         let ready =
             complete_ready_after_wait(Arc::clone(service.state()), request.session_id, runtime_pid);
-        let response = service.handle_rpc(local_principal(), RuntimeRpc::Spawn { request });
+        let response = service.handle_rpc(
+            local_principal(),
+            RuntimeRpc::Spawn {
+                request: Box::new(request),
+            },
+        );
         let (response, ready) = tokio::join!(response, ready);
         ready.expect("shim ready accepted");
         response
@@ -638,6 +643,7 @@ mod tests {
             target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
             force: false,
             shell_resume: None,
+            launch_attachment: None,
         }
     }
 }

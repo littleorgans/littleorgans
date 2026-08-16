@@ -58,7 +58,7 @@ async fn spawn_conflict_maps_to_typed_client_error() {
     };
     let (client, server) = mock_response(
         RuntimeRpc::Spawn {
-            request: spawn_request(),
+            request: Box::new(spawn_request()),
         },
         RuntimeResponse::SpawnConflict(payload.clone()),
     );
@@ -171,6 +171,7 @@ fn spawn_request() -> SpawnRequest {
         target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
         force: false,
         shell_resume: None,
+        launch_attachment: None,
     }
 }
 
@@ -301,7 +302,7 @@ typed_helper_tests!(
     spawn_helper,
     spawn(spawn_request()),
     RuntimeRpc::Spawn {
-        request: spawn_request()
+        request: Box::new(spawn_request())
     },
     RuntimeResponse::Spawned(spawn_payload()),
     spawn_payload(),

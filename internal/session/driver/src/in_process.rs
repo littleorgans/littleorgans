@@ -5,19 +5,16 @@ use std::time::Duration;
 use lilo_common::id::SessionId;
 use lilo_rm_core::{
     CaptureRequest, EventBatch, EventsRequest, KillOutcome, KillRequest, Lifecycle, NudgeMode,
-    NudgeRequest, StatusFilter,
+    NudgeRequest, RuntimeSignal, SpawnRequest as RuntimeSpawnRequest, StatusFilter,
 };
 use lilo_runtime_daemon::RuntimeService;
 use lilo_session_core::RuntimeDoctorReport;
 
 use crate::conv::{
-    capture_result, kill_outcome_label, nudge_result, parse_runtime_signal, parse_session_id,
-    runtime_doctor_error, runtime_doctor_report, runtime_spawn_request, spawn_outcome,
-    terminal_child_exit,
+    capture_result, kill_outcome_label, nudge_result, runtime_doctor_error, runtime_doctor_report,
+    spawn_outcome, terminal_child_exit,
 };
-use crate::driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnLaunch, SpawnedProcess,
-};
+use crate::driver::{CaptureResult, ChildExit, NudgeResult, RuntimeError, SpawnedProcess};
 use crate::port::{RuntimePort, RuntimePortFuture, wait_for_terminal};
 
 #[derive(Clone)]
@@ -46,15 +43,9 @@ impl InProcessRuntime {
 }
 
 impl RuntimePort for InProcessRuntime {
-    fn spawn<'a>(
-        &'a self,
-        session_id: &'a str,
-        launch: &'a SpawnLaunch,
-    ) -> RuntimePortFuture<'a, SpawnedProcess> {
+    fn spawn(&self, request: RuntimeSpawnRequest) -> RuntimePortFuture<'_, SpawnedProcess> {
         Box::pin(async move {
-            let session_id = parse_session_id(session_id)?;
-            self.locked_terminal_sessions().remove(&session_id);
-            let request = runtime_spawn_request(session_id, launch)?;
+            self.locked_terminal_sessions().remove(&request.session_id);
             let outcome = self
                 .runtime
                 .spawn(request)
@@ -80,13 +71,12 @@ impl RuntimePort for InProcessRuntime {
         })
     }
 
-    fn capture<'a>(
-        &'a self,
-        session_id: &'a str,
+    fn capture(
+        &self,
+        session_id: SessionId,
         scrollback_lines: Option<u32>,
-    ) -> RuntimePortFuture<'a, CaptureResult> {
+    ) -> RuntimePortFuture<'_, CaptureResult> {
         Box::pin(async move {
-            let session_id = parse_session_id(session_id)?;
             let response = self
                 .runtime
                 .capture(CaptureRequest {
@@ -99,15 +89,13 @@ impl RuntimePort for InProcessRuntime {
         })
     }
 
-    fn terminate<'a>(
-        &'a self,
-        session_id: &'a str,
-        signal: &'a str,
+    fn terminate(
+        &self,
+        session_id: SessionId,
+        signal: RuntimeSignal,
         grace: Duration,
-    ) -> RuntimePortFuture<'a, Option<ChildExit>> {
+    ) -> RuntimePortFuture<'_, Option<ChildExit>> {
         Box::pin(async move {
-            let session_id = parse_session_id(session_id)?;
-            let signal = parse_runtime_signal(signal)?;
             let outcome = self
                 .runtime
                 .kill_runtime(KillRequest {
@@ -138,13 +126,12 @@ impl RuntimePort for InProcessRuntime {
 
     fn nudge<'a>(
         &'a self,
-        session_id: &'a str,
+        session_id: SessionId,
         content: &'a str,
         mode: NudgeMode,
         timeout_ms: Option<u64>,
     ) -> RuntimePortFuture<'a, NudgeResult> {
         Box::pin(async move {
-            let session_id = parse_session_id(session_id)?;
             let response = self
                 .runtime
                 .nudge_runtime(NudgeRequest {

@@ -12,7 +12,10 @@ use common::{
 };
 use lilo_common::id::{MessageId, SessionId};
 use lilo_im_core::Action;
-use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
+use lilo_rm_core::{
+    EventBatch, EventsRequest, Lifecycle, NudgeMode, RuntimeSignal,
+    SpawnRequest as RuntimeSpawnRequest, StatusFilter,
+};
 use lilo_session_core::{
     MailDeliveryStatus, MailIntent, MailLogFilter, MailNotifyMode, MailNotifyStatus,
     MailPeekRequest, MailReadRequest, MailSendRequest, MailSendResponse, MessageView, RpcResponse,
@@ -21,7 +24,7 @@ use lilo_session_core::{
 use lilo_session_daemon::handler::DaemonState;
 use lilo_session_daemon::identity_client::IdentityPort;
 use lilo_session_driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnedProcess,
 };
 use tokio::time::timeout;
 
@@ -572,11 +575,7 @@ impl RecordingRuntimePort {
 }
 
 impl RuntimePort for RecordingRuntimePort {
-    fn spawn<'a>(
-        &'a self,
-        _session_id: &'a str,
-        _launch: &'a SpawnLaunch,
-    ) -> TestRuntimeFuture<'a, SpawnedProcess> {
+    fn spawn(&self, _request: RuntimeSpawnRequest) -> TestRuntimeFuture<'_, SpawnedProcess> {
         unsupported("spawn")
     }
 
@@ -584,26 +583,26 @@ impl RuntimePort for RecordingRuntimePort {
         unsupported("reap_exited")
     }
 
-    fn capture<'a>(
-        &'a self,
-        _session_id: &'a str,
+    fn capture(
+        &self,
+        _session_id: SessionId,
         _scrollback_lines: Option<u32>,
-    ) -> TestRuntimeFuture<'a, CaptureResult> {
+    ) -> TestRuntimeFuture<'_, CaptureResult> {
         unsupported("capture")
     }
 
-    fn terminate<'a>(
-        &'a self,
-        _session_id: &'a str,
-        _signal: &'a str,
+    fn terminate(
+        &self,
+        _session_id: SessionId,
+        _signal: RuntimeSignal,
         _grace: Duration,
-    ) -> TestRuntimeFuture<'a, Option<ChildExit>> {
+    ) -> TestRuntimeFuture<'_, Option<ChildExit>> {
         unsupported("terminate")
     }
 
     fn nudge<'a>(
         &'a self,
-        session_id: &'a str,
+        session_id: SessionId,
         content: &'a str,
         _mode: NudgeMode,
         timeout_ms: Option<u64>,

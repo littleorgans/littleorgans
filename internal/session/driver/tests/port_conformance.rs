@@ -21,7 +21,9 @@ use lilo_rm_core::{
 use lilo_runtime_daemon::{DaemonConfig, ReconcileConfig, RuntimeService, RuntimeServiceContext};
 use lilo_runtime_store::LifecycleStore;
 use lilo_session_core::RuntimeKind as SessionRuntimeKind;
-use lilo_session_driver::{InProcessRuntime, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch};
+use lilo_session_driver::{
+    InProcessRuntime, RuntimeError, RuntimeFault, RuntimePort, SpawnLaunch, runtime_spawn_request,
+};
 use lilo_wire::LilodRpc;
 use tokio::io::BufReader;
 use tokio::task::JoinHandle;
@@ -38,7 +40,7 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
 
     let direct = RuntimePort::nudge(
         &in_process.port,
-        &session_id.to_string(),
+        session_id,
         "hello",
         NudgeMode::Immediate,
         None,
@@ -47,7 +49,7 @@ async fn runtime_ports_map_nudge_headless_outcome_identically() {
     .or_panic("in-process nudge maps");
     let via_socket = RuntimePort::nudge(
         &socket.driver,
-        &session_id.to_string(),
+        session_id,
         "hello",
         NudgeMode::Immediate,
         None,
@@ -71,10 +73,10 @@ async fn runtime_ports_map_capture_headless_response_identically() {
         CaptureResponse::Failed(CaptureError::NotATmuxTarget),
     );
 
-    let direct = RuntimePort::capture(&in_process.port, &session_id.to_string(), None)
+    let direct = RuntimePort::capture(&in_process.port, session_id, None)
         .await
         .or_panic("in-process capture maps");
-    let via_socket = RuntimePort::capture(&socket.driver, &session_id.to_string(), None)
+    let via_socket = RuntimePort::capture(&socket.driver, session_id, None)
         .await
         .or_panic("socket capture maps");
 
@@ -168,99 +170,28 @@ async fn runtime_ports_doctor_shapes_match_on_stable_fields() {
 async fn runtime_ports_spawn_conflict_error_variant_matches() {
     let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
     let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
-    let launch = spawn_launch(in_process.dir.path().to_path_buf());
-
-    let direct = RuntimePort::spawn(&in_process.port, &session_id.to_string(), &launch)
-        .await
-        .expect_err("in-process spawn conflicts");
-    let socket = mock_rtmd_spawn_conflict(
-        spawn_request(session_id, &launch),
-        SpawnConflictPayload {
-            kind: SpawnConflictKind::SessionId,
-            lifecycle: running_lifecycle(session_id),
-        },
-    );
-    let via_socket = RuntimePort::spawn(&socket.driver, &session_id.to_string(), &launch)
+    let request = runtime_spawn_request(spawn_launch(
+        session_id,
+        in_process.dir.path().to_path_buf(),
+    ));
+    let direct_request = request.clone();
+    let (socket, received_request) = mock_rtmd_spawn_conflict(SpawnConflictPayload {
+        kind: SpawnConflictKind::SessionId,
+        lifecycle: running_lifecycle(session_id),
+    });
+    let via_socket = RuntimePort::spawn(&socket.driver, request)
         .await
         .expect_err("socket spawn conflicts");
+    let received_request = received_request
+        .await
+        .or_panic("socket server returns decoded spawn request");
+    assert_eq!(received_request, direct_request);
+    let direct = RuntimePort::spawn(&in_process.port, direct_request)
+        .await
+        .expect_err("in-process spawn conflicts");
 
     assert_fault_parity(direct, via_socket);
     socket.server.await.or_panic("socket server exits");
-    in_process.cleanup().await;
-}
-
-#[tokio::test]
-#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
-async fn runtime_ports_invalid_session_id_fault_matches() {
-    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
-    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
-    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
-    let socket = unconnected_rtmd_driver(&socket_dir);
-
-    let direct = RuntimePort::nudge(
-        &in_process.port,
-        "not-a-uuid",
-        "hello",
-        NudgeMode::Immediate,
-        None,
-    )
-    .await
-    .expect_err("in-process invalid session id faults");
-    let via_socket = RuntimePort::nudge(&socket, "not-a-uuid", "hello", NudgeMode::Immediate, None)
-        .await
-        .expect_err("socket invalid session id faults");
-
-    assert_fault_parity(direct, via_socket);
-    in_process.cleanup().await;
-}
-
-#[tokio::test]
-#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
-async fn runtime_ports_invalid_signal_fault_matches() {
-    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
-    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
-    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
-    let socket = unconnected_rtmd_driver(&socket_dir);
-
-    let direct = RuntimePort::terminate(
-        &in_process.port,
-        &session_id.to_string(),
-        "not-a-signal",
-        Duration::from_secs(1),
-    )
-    .await
-    .expect_err("in-process invalid signal faults");
-    let via_socket = RuntimePort::terminate(
-        &socket,
-        &session_id.to_string(),
-        "not-a-signal",
-        Duration::from_secs(1),
-    )
-    .await
-    .expect_err("socket invalid signal faults");
-
-    assert_fault_parity(direct, via_socket);
-    in_process.cleanup().await;
-}
-
-#[tokio::test]
-#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
-async fn runtime_ports_invalid_target_fault_matches() {
-    let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
-    let in_process = in_process_fixture(session_id, LifecycleState::Running).await;
-    let socket_dir = tempfile::tempdir().or_panic("socket tempdir");
-    let socket = unconnected_rtmd_driver(&socket_dir);
-    let mut launch = spawn_launch(in_process.dir.path().to_path_buf());
-    launch.target = "invalid-target".to_string();
-
-    let direct = RuntimePort::spawn(&in_process.port, &session_id.to_string(), &launch)
-        .await
-        .expect_err("in-process invalid target faults");
-    let via_socket = RuntimePort::spawn(&socket, &session_id.to_string(), &launch)
-        .await
-        .expect_err("socket invalid target faults");
-
-    assert_fault_parity(direct, via_socket);
     in_process.cleanup().await;
 }
 
@@ -282,7 +213,7 @@ async fn runtime_port_reap_exited_is_at_most_once() {
         .or_panic("second reap succeeds");
 
     assert_eq!(first.len(), 1);
-    assert_eq!(first[0].session_id, session_id.to_string());
+    assert_eq!(first[0].session_id, session_id);
     assert!(second.is_empty());
     in_process.cleanup().await;
 }
@@ -294,15 +225,15 @@ async fn wait_for_terminal_filters_status_to_session_id() {
 
     let exit = RuntimePort::terminate(
         &socket.driver,
-        &session_id.to_string(),
-        "term",
+        session_id,
+        RuntimeSignal::Term,
         Duration::from_secs(1),
     )
     .await
     .or_panic("terminate waits for terminal status")
     .or_panic("terminal exit observed");
 
-    assert_eq!(exit.session_id, session_id.to_string());
+    assert_eq!(exit.session_id, session_id);
     socket.server.await.or_panic("socket server exits");
 }
 
@@ -424,13 +355,24 @@ fn mock_rtmd_doctor(doctor: lilo_rm_core::DoctorResponse) -> SocketFixture {
 }
 
 fn mock_rtmd_spawn_conflict(
-    request: SpawnRequest,
     conflict: SpawnConflictPayload,
-) -> SocketFixture {
-    mock_rtmd_once(
-        RuntimeRpc::Spawn { request },
-        RuntimeResponse::SpawnConflict(conflict),
-    )
+) -> (SocketFixture, tokio::sync::oneshot::Receiver<SpawnRequest>) {
+    let (request_tx, request_rx) = tokio::sync::oneshot::channel();
+    let (driver, server) = common::mock_rtmd_server(move |stream| async move {
+        let (read_half, mut write_half) = stream.into_split();
+        let mut reader = BufReader::new(read_half);
+        let envelope: LilodRpc = read_json_line(&mut reader).await.or_panic("read rpc");
+        let LilodRpc::Runtime(RuntimeRpc::Spawn { request }) = envelope else {
+            panic!("expected runtime spawn rpc");
+        };
+        request_tx
+            .send(*request)
+            .or_panic("return decoded spawn request");
+        write_json_line(&mut write_half, &RuntimeResponse::SpawnConflict(conflict))
+            .await
+            .or_panic("write runtime response");
+    });
+    (SocketFixture { driver, server }, request_rx)
 }
 
 fn mock_rtmd_once(expected: RuntimeRpc, response: RuntimeResponse) -> SocketFixture {
@@ -444,10 +386,6 @@ fn mock_rtmd_once(expected: RuntimeRpc, response: RuntimeResponse) -> SocketFixt
             .or_panic("write runtime response");
     });
     SocketFixture { driver, server }
-}
-
-fn unconnected_rtmd_driver(dir: &tempfile::TempDir) -> lilo_session_driver::RtmdDriver {
-    lilo_session_driver::RtmdDriver::new(dir.path().join("rtmd.sock"))
 }
 
 fn event_batch_response(batch: EventBatch) -> RuntimeResponse {
@@ -541,45 +479,27 @@ fn running_lifecycle(session_id: SessionId) -> Lifecycle {
     lifecycle
 }
 
-fn spawn_launch(cwd: PathBuf) -> SpawnLaunch {
+fn spawn_launch(session_id: SessionId, cwd: PathBuf) -> SpawnLaunch {
     SpawnLaunch {
+        session_id,
         runtime: SessionRuntimeKind::Claude,
         isolation: IsolationPolicy::default(),
         image: None,
         cwd,
-        target: "headless".to_string(),
+        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
         env: Vec::new(),
         mounts: Vec::<MountSpec>::new(),
         shell_resume: None::<ShellResume>,
         force: false,
+        launch_attachment: Some(common::shared_test_support::launch_attachment_fixture()),
     }
 }
 
-fn spawn_request(session_id: SessionId, launch: &SpawnLaunch) -> SpawnRequest {
-    SpawnRequest {
-        session_id,
-        runtime: RuntimeKind::Claude,
-        isolation: launch.isolation.clone(),
-        image: launch.image.clone(),
-        env: launch.env.clone(),
-        mounts: launch.mounts.clone(),
-        cwd: launch.cwd.clone(),
-        target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
-        force: launch.force,
-        shell_resume: launch.shell_resume.clone(),
-    }
-}
-
-// Separate arms are intentional. Each RuntimeFault variant keeps a compile tripwire.
-#[allow(clippy::match_same_arms)]
 fn assert_fault_parity(direct: RuntimeError, via_socket: RuntimeError) -> ParityProof {
     let direct = runtime_fault("in-process", direct);
     let via_socket = runtime_fault("socket", via_socket);
     match &direct {
         RuntimeFault::SpawnConflict { .. } => lilo_port::prove_eq(&direct, &via_socket),
-        RuntimeFault::InvalidSignal(_) => lilo_port::prove_eq(&direct, &via_socket),
-        RuntimeFault::InvalidSessionId(_) => lilo_port::prove_eq(&direct, &via_socket),
-        RuntimeFault::InvalidTarget(_) => lilo_port::prove_eq(&direct, &via_socket),
     }
 }
 

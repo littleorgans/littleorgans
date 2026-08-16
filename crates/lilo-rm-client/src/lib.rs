@@ -71,7 +71,12 @@ impl RuntimeClient {
 
     /// Spawn a runtime session and return the created lifecycle payload.
     pub async fn spawn(&self, request: SpawnRequest) -> Result<SpawnedPayload, ClientError> {
-        match self.request(RuntimeRpc::Spawn { request }).await? {
+        match self
+            .request(RuntimeRpc::Spawn {
+                request: Box::new(request),
+            })
+            .await?
+        {
             RuntimeResponse::Spawned(payload) => Ok(payload),
             RuntimeResponse::SpawnConflict(payload) => {
                 Err(ClientError::SpawnConflict(Box::new(payload)))

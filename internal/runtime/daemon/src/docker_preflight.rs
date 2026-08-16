@@ -328,6 +328,7 @@ mod tests {
             target: SpawnTarget::Headless(HeadlessSpawnTarget {}),
             force: false,
             shell_resume: None::<ShellResume>,
+            launch_attachment: None,
         }
     }
 }

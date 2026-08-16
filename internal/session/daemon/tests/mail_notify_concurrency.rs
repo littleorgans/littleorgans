@@ -8,12 +8,16 @@ use std::time::Duration;
 
 use common::OrPanic as _;
 use common::{LOCAL_UID, TestDaemon, local_context, mail_request, spawn_test_session};
-use lilo_rm_core::{EventBatch, EventsRequest, Lifecycle, NudgeMode, StatusFilter};
+use lilo_common::id::SessionId;
+use lilo_rm_core::{
+    EventBatch, EventsRequest, Lifecycle, NudgeMode, RuntimeSignal,
+    SpawnRequest as RuntimeSpawnRequest, StatusFilter,
+};
 use lilo_session_core::{
     MailIntent, MailNotifyMode, RpcResponse, RuntimeDoctorReport, Selector, SessionRpc,
 };
 use lilo_session_driver::{
-    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnLaunch, SpawnedProcess,
+    CaptureResult, ChildExit, NudgeResult, RuntimeError, RuntimePort, SpawnedProcess,
 };
 use tokio::sync::Barrier;
 
@@ -94,11 +98,7 @@ impl ConcurrentNudgeRuntimePort {
 }
 
 impl RuntimePort for ConcurrentNudgeRuntimePort {
-    fn spawn<'a>(
-        &'a self,
-        _session_id: &'a str,
-        _launch: &'a SpawnLaunch,
-    ) -> TestRuntimeFuture<'a, SpawnedProcess> {
+    fn spawn(&self, _request: RuntimeSpawnRequest) -> TestRuntimeFuture<'_, SpawnedProcess> {
         unsupported("spawn")
     }
 
@@ -106,26 +106,26 @@ impl RuntimePort for ConcurrentNudgeRuntimePort {
         unsupported("reap_exited")
     }
 
-    fn capture<'a>(
-        &'a self,
-        _session_id: &'a str,
+    fn capture(
+        &self,
+        _session_id: SessionId,
         _scrollback_lines: Option<u32>,
-    ) -> TestRuntimeFuture<'a, CaptureResult> {
+    ) -> TestRuntimeFuture<'_, CaptureResult> {
         unsupported("capture")
     }
 
-    fn terminate<'a>(
-        &'a self,
-        _session_id: &'a str,
-        _signal: &'a str,
+    fn terminate(
+        &self,
+        _session_id: SessionId,
+        _signal: RuntimeSignal,
         _grace: Duration,
-    ) -> TestRuntimeFuture<'a, Option<ChildExit>> {
+    ) -> TestRuntimeFuture<'_, Option<ChildExit>> {
         unsupported("terminate")
     }
 
     fn nudge<'a>(
         &'a self,
-        _session_id: &'a str,
+        _session_id: SessionId,
         _content: &'a str,
         _mode: NudgeMode,
         timeout_ms: Option<u64>,

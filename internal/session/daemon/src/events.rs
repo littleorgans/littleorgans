@@ -123,7 +123,7 @@ mod tests {
     use lilo_paths::{LiloHome, LiloPaths};
     use lilo_rm_core::{
         IsolationPolicy, Lifecycle, LifecycleState, LostEvidence, RuntimeEvent, RuntimeKind,
-        TerminationEvidence,
+        RuntimeSignal, SpawnRequest as RuntimeSpawnRequest, TerminationEvidence,
     };
     use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
     use lilo_runtime_store::LifecycleStore;
@@ -132,7 +132,7 @@ mod tests {
     };
     use lilo_session_driver::{
         CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimePort,
-        SpawnLaunch, SpawnedProcess,
+        SpawnedProcess,
     };
     use lilo_session_store::SessionStore;
 
@@ -168,11 +168,7 @@ mod tests {
     }
 
     impl RuntimePort for PollErrorThenBatchRuntimePort {
-        fn spawn<'a>(
-            &'a self,
-            _session_id: &'a str,
-            _launch: &'a SpawnLaunch,
-        ) -> PortFuture<'a, SpawnedProcess> {
+        fn spawn(&self, _request: RuntimeSpawnRequest) -> PortFuture<'_, SpawnedProcess> {
             unsupported_port_call("spawn")
         }
 
@@ -180,26 +176,26 @@ mod tests {
             unsupported_port_call("reap_exited")
         }
 
-        fn capture<'a>(
-            &'a self,
-            _session_id: &'a str,
+        fn capture(
+            &self,
+            _session_id: SessionId,
             _scrollback_lines: Option<u32>,
-        ) -> PortFuture<'a, CaptureResult> {
+        ) -> PortFuture<'_, CaptureResult> {
             unsupported_port_call("capture")
         }
 
-        fn terminate<'a>(
-            &'a self,
-            _session_id: &'a str,
-            _signal: &'a str,
+        fn terminate(
+            &self,
+            _session_id: SessionId,
+            _signal: RuntimeSignal,
             _grace: Duration,
-        ) -> PortFuture<'a, Option<ChildExit>> {
+        ) -> PortFuture<'_, Option<ChildExit>> {
             unsupported_port_call("terminate")
         }
 
         fn nudge<'a>(
             &'a self,
-            _session_id: &'a str,
+            _session_id: SessionId,
             _content: &'a str,
             _mode: lilo_rm_core::NudgeMode,
             _timeout_ms: Option<u64>,

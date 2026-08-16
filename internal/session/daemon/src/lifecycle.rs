@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use lilo_common::id::SessionId;
 use lilo_session_core::Session;
 use lilo_session_driver::ChildExit;
 
@@ -51,10 +50,7 @@ pub async fn persist_child_exit(
     state: &DaemonState,
     child_exit: ChildExit,
 ) -> Result<Option<Session>> {
-    let id: SessionId = child_exit
-        .session_id
-        .parse()
-        .context("invalid session id")?;
+    let id = child_exit.session_id;
     let now = Utc::now();
     let store = state.store();
     if let Some(transcript_path) = child_exit.transcript_path {

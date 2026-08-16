@@ -1,9 +1,10 @@
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use lilo_common::id::SessionId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 
 use crate::string_serde::{deserialize_string_parsed, serialize_display};
 use crate::{IsolationPolicy, LaunchEnv, RuntimeKind, RuntimeSignal, ShellResume};
@@ -202,6 +203,25 @@ pub fn expand_mount_source(source: &str) -> Result<PathBuf, MountSpecParseError>
     Ok(home.join(rest))
 }
 
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LaunchAttachment {
+    pub kind: String,
+    pub version: u32,
+    pub value: Value,
+}
+
+impl Debug for LaunchAttachment {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LaunchAttachment")
+            .field("kind", &self.kind)
+            .field("version", &self.version)
+            .field("value", &"[REDACTED]")
+            .finish()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SpawnRequest {
     pub session_id: SessionId,
@@ -220,6 +240,8 @@ pub struct SpawnRequest {
     pub force: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shell_resume: Option<ShellResume>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_attachment: Option<LaunchAttachment>,
 }
 
 #[expect(

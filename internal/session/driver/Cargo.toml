@@ -30,6 +30,7 @@ lilo-db = { workspace = true, features = ["test-support"] }
 lilo-paths.workspace = true
 lilo-runtime-store.workspace = true
 lilo-wire.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]

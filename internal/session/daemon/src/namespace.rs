@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use lilo_im_core::Action;
 use lilo_im_core::ResourceSpec;
+use lilo_rm_core::RuntimeSignal;
 use lilo_session_core::{
     DeleteRequest, Namespace, NamespaceCreateRequest, NamespaceCreateResponse,
     NamespaceDeleteRequest, NamespaceDeleteResponse, NamespaceGetRequest, NamespaceGetResponse,
@@ -131,7 +132,10 @@ impl DaemonState {
         let mut sessions = Vec::new();
         let mut errors = Vec::new();
         for target in targets {
-            match self.delete_one(context, &request, target.id).await {
+            match self
+                .delete_one(context, &request, target.id, RuntimeSignal::Term)
+                .await
+            {
                 Ok(session) => sessions.push(session),
                 Err(error) => errors.push(format!("{}: {error}", target.id)),
             }

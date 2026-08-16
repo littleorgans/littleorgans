@@ -172,7 +172,7 @@ impl DaemonState {
         let to = recipient_id.to_string();
         let result = self
             .runtime
-            .nudge(&to, message, mode, timeout_ms)
+            .nudge(recipient_id, message, mode, timeout_ms)
             .await
             .context("nudge runtime port failed")?;
         Ok(NudgeDelivery {

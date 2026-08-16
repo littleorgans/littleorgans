@@ -313,6 +313,7 @@ mod tests {
                 }),
                 force: false,
                 shell_resume: None,
+                launch_attachment: None,
             },
         )
         .await

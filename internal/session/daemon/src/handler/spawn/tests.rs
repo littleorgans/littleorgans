@@ -3,19 +3,21 @@ use crate::identity_client::IdentityClient;
 use lilo_db::test_support::TestDb;
 use lilo_paths::{LiloHome, LiloPaths};
 use lilo_rm_core::{
-    EventBatch, EventsRequest, IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, ShimReady,
+    EventBatch, EventsRequest, IsolationPolicy, RuntimeKind as RuntimeRuntimeKind, RuntimeSignal,
+    ShimReady, SpawnRequest as RuntimeSpawnRequest,
 };
 use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
 use lilo_session_core::{Namespace, RuntimeDoctorReport, RuntimeKind};
 use lilo_session_driver::{
-    CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimeFault,
-    RuntimePort, SpawnedProcess,
+    CaptureResult, ChildExit, InProcessRuntime, NudgeResult, RuntimeError, RuntimePort,
+    SpawnedProcess,
 };
 use lilo_session_store::SessionStore;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -128,10 +130,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         .insert_pending_spawn_intent(&bad_intent)
         .await
         .expect("bad pending intent inserts");
-    store
-        .insert_pending_spawn_intent(&good_intent)
-        .await
-        .expect("good pending intent inserts");
+    insert_old_pending_spawn_intent(db, &good_intent).await;
     let bad_lifecycle = running_lifecycle(bad_session_id, 1001);
     let good_lifecycle = running_lifecycle(good_session_id, 1002);
     insert_running_lifecycle(&lifecycle_store, &bad_lifecycle).await;
@@ -155,6 +154,7 @@ async fn reconcile_pending_spawn_intents_continues_after_failed_intent() {
         .expect("reconcile sweep completes after one intent fails");
 
     assert!(runtime_port.terminated(bad_session_id));
+    assert_eq!(runtime_port.spawn_count(), 0);
     assert!(
         store
             .get_session(&bad_session_id)
@@ -240,6 +240,7 @@ impl Drop for ChildGuard {
 
 struct StaticStatusRuntimePort {
     lifecycles: Vec<Lifecycle>,
+    spawn_calls: AtomicUsize,
     terminated_session_ids: Mutex<Vec<SessionId>>,
 }
 
@@ -247,6 +248,7 @@ impl StaticStatusRuntimePort {
     fn new(lifecycles: Vec<Lifecycle>) -> Self {
         Self {
             lifecycles,
+            spawn_calls: AtomicUsize::new(0),
             terminated_session_ids: Mutex::new(Vec::new()),
         }
     }
@@ -257,14 +259,15 @@ impl StaticStatusRuntimePort {
             .expect("terminated ids lock succeeds")
             .contains(&session_id)
     }
+
+    fn spawn_count(&self) -> usize {
+        self.spawn_calls.load(Ordering::SeqCst)
+    }
 }
 
 impl RuntimePort for StaticStatusRuntimePort {
-    fn spawn<'a>(
-        &'a self,
-        _session_id: &'a str,
-        _launch: &'a SpawnLaunch,
-    ) -> PortFuture<'a, SpawnedProcess> {
+    fn spawn(&self, _request: RuntimeSpawnRequest) -> PortFuture<'_, SpawnedProcess> {
+        self.spawn_calls.fetch_add(1, Ordering::SeqCst);
         unsupported_port_call("spawn")
     }
 
@@ -272,30 +275,27 @@ impl RuntimePort for StaticStatusRuntimePort {
         unsupported_port_call("reap_exited")
     }
 
-    fn capture<'a>(
-        &'a self,
-        _session_id: &'a str,
+    fn capture(
+        &self,
+        _session_id: SessionId,
         _scrollback_lines: Option<u32>,
-    ) -> PortFuture<'a, CaptureResult> {
+    ) -> PortFuture<'_, CaptureResult> {
         unsupported_port_call("capture")
     }
 
-    fn terminate<'a>(
-        &'a self,
-        session_id: &'a str,
-        _signal: &'a str,
+    fn terminate(
+        &self,
+        session_id: SessionId,
+        _signal: RuntimeSignal,
         _grace: Duration,
-    ) -> PortFuture<'a, Option<ChildExit>> {
+    ) -> PortFuture<'_, Option<ChildExit>> {
         Box::pin(async move {
-            let session_id = session_id.parse::<SessionId>().map_err(|_| {
-                RuntimeError::Fault(RuntimeFault::InvalidSessionId(session_id.to_string()))
-            })?;
             self.terminated_session_ids
                 .lock()
                 .expect("terminated ids lock succeeds")
                 .push(session_id);
             Ok(Some(ChildExit {
-                session_id: session_id.to_string(),
+                session_id,
                 runtime_pid: 1001,
                 exit_code: Some(143),
                 transcript_path: None,
@@ -305,7 +305,7 @@ impl RuntimePort for StaticStatusRuntimePort {
 
     fn nudge<'a>(
         &'a self,
-        _session_id: &'a str,
+        _session_id: SessionId,
         _content: &'a str,
         _mode: lilo_rm_core::NudgeMode,
         _timeout_ms: Option<u64>,
@@ -343,14 +343,39 @@ fn read_runtime_pid(pid_file: &Path, child: &mut Child) -> u32 {
 }
 
 fn pending_intent(session_id: SessionId, request: &SpawnRequest) -> PendingSpawnIntent {
-    let launch = spawn_launch(session_id, request, None);
-    let runtime_request =
-        runtime_spawn_request(session_id, &launch).expect("runtime request builds");
+    let launch = spawn_launch(session_id, request, None).expect("spawn launch builds");
+    let runtime_request = runtime_spawn_request(launch);
     PendingSpawnIntent::new(
         IntentId::from_uuid(uuid::Uuid::now_v7()),
         runtime_request,
         SessionDraft::new(&draft_session(session_id, request)),
     )
+}
+
+async fn insert_old_pending_spawn_intent(db: &lilo_db::LiloDb, intent: &PendingSpawnIntent) {
+    let request_json = serde_json::json!({
+        "session_id": intent.session_id,
+        "runtime": "claude",
+        "env": [],
+        "cwd": intent.spawn_request.cwd.clone(),
+        "target": { "type": "headless", "payload": {} }
+    });
+    assert!(request_json.get("launch_attachment").is_none());
+    sqlx::query(
+        "INSERT INTO session_spawn_intents
+            (session_id, operation_id, status, spawn_request_json, session_draft_json,
+             created_at, updated_at, resolved_at, aborted_reason)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, NULL, NULL)",
+    )
+    .bind(intent.session_id.to_string())
+    .bind(intent.operation_id.to_string())
+    .bind(request_json.to_string())
+    .bind(serde_json::to_string(&intent.session_draft).expect("session draft serializes"))
+    .bind(intent.created_at)
+    .bind(intent.created_at)
+    .execute(db.pool())
+    .await
+    .expect("old pending intent inserts");
 }
 
 fn draft_session(session_id: SessionId, request: &SpawnRequest) -> Session {
