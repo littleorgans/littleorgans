@@ -1,7 +1,9 @@
 # Local Postgres service for lilo-db development and `cargo test -p lilo-db`.
-# Operator/test URL: postgres://lilo:lilo@localhost:55432/lilo
+# Operator/test URL: postgres://lilo:lilo@localhost:56432/lilo
 #
 #   docker compose up -d --wait postgres
+#   LILO_DATABASE_DOCKER_PORT=0 docker compose up -d --wait postgres
+#   docker compose port postgres 5432
 #
 # Disposable local data only; the named volume can be removed at any time.
 services:
@@ -12,7 +14,7 @@ services:
       POSTGRES_PASSWORD: lilo
       POSTGRES_DB: lilo
     ports:
-       - "127.0.0.1:${LILO_DATABASE_DOCKER_PORT:-55432}:5432"
+       - "127.0.0.1:${LILO_DATABASE_DOCKER_PORT:-56432}:5432"
     volumes:
       - lilo_pgdata:/var/lib/postgresql/data
     healthcheck:

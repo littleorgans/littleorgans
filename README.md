@@ -50,8 +50,8 @@ lilo doctor           # check local health
 Or run from source without installing:
 
 ```sh
-just lilo -- doctor
-just lilo -- get session
+just lilo doctor
+just lilo get session
 ```
 
 ## Command surface
