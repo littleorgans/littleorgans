@@ -68,18 +68,22 @@ test suite.
 
 ```sh
 docker compose up -d --wait postgres
-export LILO_DATABASE_URL="postgres://lilo:lilo@localhost:55432/lilo"
+export LILO_DATABASE_URL="postgres://lilo:lilo@localhost:56432/lilo"
 ```
 
-The service binds `127.0.0.1:55432` by default. Override the host port with
-`LILO_DATABASE_DOCKER_PORT` when `55432` is taken (for example by a sibling
-stack); the variable changes only the Compose host port, not the URL `lilo`
-reads, so set both together:
+The service binds container port `5432` to `127.0.0.1:56432` by default. To let
+Docker allocate a free host port, set `LILO_DATABASE_DOCKER_PORT` to `0`, then
+read the assigned endpoint and set the matching URL:
 
 ```sh
-LILO_DATABASE_DOCKER_PORT=55433 docker compose up -d --wait postgres
-export LILO_DATABASE_URL="postgres://lilo:lilo@localhost:55433/lilo"
+LILO_DATABASE_DOCKER_PORT=0 docker compose up -d --wait postgres
+database_endpoint="$(docker compose port postgres 5432)"
+export LILO_DATABASE_URL="postgres://lilo:lilo@${database_endpoint}/lilo"
 ```
+
+For a different fixed port, set `LILO_DATABASE_DOCKER_PORT` before Compose and
+use the same port in `LILO_DATABASE_URL`. The Compose variable changes only the
+published host port. `lilo` does not read it.
 
 The named volume holds disposable local data and can be removed at any time
 (`docker compose down -v`).
@@ -145,7 +149,7 @@ suite skips them. Run them against a real database with:
 
 ```sh
 docker compose up -d --wait postgres
-LILO_TEST_DATABASE_URL="postgres://lilo:lilo@localhost:55432/lilo" just test-db
+LILO_TEST_DATABASE_URL="postgres://lilo:lilo@localhost:56432/lilo" just test-db
 ```
 
 `LILO_TEST_DATABASE_URL` is the admin connection the `lilo-db` fixture uses to

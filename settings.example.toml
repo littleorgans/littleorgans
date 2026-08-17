@@ -1,7 +1,7 @@
 # Copy to $LILO_HOME/settings.toml and edit. LILO_* env vars override these.
 [database]
 # Operator Postgres connection used by the daemon.
-url = "postgres://lilo:lilo@localhost:55432/lilo"
+url = "postgres://lilo:lilo@localhost:56432/lilo"
 # Admin/provisioning connection for the lilo-db test fixture (creates and drops
 # throwaway test databases). Defaults to `url` if unset.
-test_url = "postgres://lilo:lilo@localhost:55432/lilo"
+test_url = "postgres://lilo:lilo@localhost:56432/lilo"

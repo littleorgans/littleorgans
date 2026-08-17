@@ -86,7 +86,7 @@ test-doc:
 # Set LILO_TEST_DATABASE_URL (or copy settings.example.toml to
 # $LILO_HOME/settings.toml) first, e.g. with the local compose service:
 #   docker compose up -d --wait postgres
-#   LILO_TEST_DATABASE_URL=postgres://lilo:lilo@localhost:55432/lilo just test-db
+#   LILO_TEST_DATABASE_URL=postgres://lilo:lilo@localhost:56432/lilo just test-db
 test-db:
     CARGO_TARGET_DIR={{TARGET_NEXTEST}} cargo nextest run --workspace --run-ignored ignored-only
 
