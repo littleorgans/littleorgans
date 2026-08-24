@@ -1,6 +1,5 @@
 use chrono::Utc;
 use lilo_rm_core::{EventCursor, LostEvidence, RuntimeEvent, TerminationEvidence};
-use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 
 use super::SessionStore;
@@ -112,7 +111,7 @@ async fn mark_lost(
          WHERE id = $3
            AND state IN ('SPAWNING', 'RUNNING')",
     )
-    .bind(lost_evidence_to_sql(evidence))
+    .bind(evidence.as_str())
     .bind(Utc::now())
     .bind(session_id)
     .execute(&mut **transaction)
@@ -138,30 +137,6 @@ async fn write_cursor(
     Ok(())
 }
 
-/// Read a `session_sessions.lost_evidence` value back into its variant.
-///
-/// Pairs with [`lost_evidence_to_sql`]; see that function for why both
-/// directions go through serde.
-pub(crate) fn lost_evidence_from_sql(value: &str) -> Option<LostEvidence> {
-    serde_json::from_value(Value::String(value.to_owned())).ok()
-}
-
-/// Encode a lost-evidence value for the `session_sessions.lost_evidence`
-/// column.
-///
-/// Both directions delegate to the enum's own serde representation, which is
-/// what makes the round trip total. `LostEvidence` is `#[non_exhaustive]`, so
-/// a hand written encoder here needs a fallback arm, and any fallback emits
-/// text that [`lost_evidence_from_sql`] cannot map back to a variant: the row
-/// then fails to decode on every later read. Delegating instead gives a new
-/// variant its column text for free, and `from_sql` accepts it for free.
-pub(crate) fn lost_evidence_to_sql(evidence: LostEvidence) -> String {
-    let Ok(Value::String(text)) = serde_json::to_value(evidence) else {
-        unreachable!("LostEvidence unit variants serialize as JSON strings")
-    };
-    text
-}
-
 fn decode_cursor(value: &[u8]) -> sqlx::Result<EventCursor> {
     let bytes: [u8; 8] = value
         .try_into()
@@ -180,20 +155,8 @@ mod tests {
     use lilo_rm_core::{RuntimeEvent, TerminationEvidence};
     use lilo_session_core::SessionState;
 
-    use super::super::test_support::{LOST_EVIDENCE_VARIANTS, running_session};
+    use super::super::test_support::running_session;
     use super::*;
-
-    #[test]
-    fn lost_evidence_round_trips_through_sql_text() {
-        for evidence in LOST_EVIDENCE_VARIANTS {
-            let text = lost_evidence_to_sql(evidence);
-            assert_eq!(
-                lost_evidence_from_sql(&text),
-                Some(evidence),
-                "{evidence} encodes to {text:?}, which does not read back"
-            );
-        }
-    }
 
     #[tokio::test]
     #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
@@ -287,7 +250,7 @@ mod tests {
         let testdb = TestDb::create().await.or_panic("test db creates");
         let store = SessionStore::from_db(testdb.db());
 
-        for (index, evidence) in LOST_EVIDENCE_VARIANTS.into_iter().enumerate() {
+        for (index, evidence) in LostEvidence::ALL.into_iter().enumerate() {
             let cursor = 9 + index as EventCursor;
             let session = running_session("general", "test");
             store

@@ -5,7 +5,6 @@ use lilo_common::id::SessionId;
 use lilo_db::test_support::{TestDb, now_micros};
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
-use super::super::test_support::LOST_EVIDENCE_VARIANTS;
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
 
 use super::*;
@@ -373,7 +372,7 @@ async fn round_trips_lost_sessions_for_every_evidence_variant() {
     let testdb = TestDb::create().await.or_panic("test db creates");
     let store = SessionStore::from_db(testdb.db());
 
-    for evidence in LOST_EVIDENCE_VARIANTS {
+    for evidence in LostEvidence::ALL {
         let mut session = test_session("general", "test", Vec::new());
         session.state = SessionState::Lost { evidence };
         store
@@ -388,6 +387,49 @@ async fn round_trips_lost_sessions_for_every_evidence_variant() {
             .or_panic("session exists");
         assert_eq!(loaded.state, SessionState::Lost { evidence });
     }
+
+    testdb.cleanup().await.or_panic("test db cleans up");
+}
+
+/// The encoder that predated [`LostEvidence::Unknown`] fell back to the literal
+/// `unknown` for any variant it could not name, and the decoder mapped that text
+/// to no variant at all, so the row failed every later read. Rows written that
+/// way are still in operator databases; reads have to be total over them.
+#[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn reads_lost_sessions_written_with_the_legacy_unknown_evidence() {
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
+    let session = test_session("general", "test", Vec::new());
+    store
+        .insert_session(&session)
+        .await
+        .or_panic("session inserts");
+
+    sqlx::query(
+        "UPDATE session_sessions
+         SET state = 'LOST', lost_evidence = 'unknown'
+         WHERE id = $1",
+    )
+    .bind(session.id.to_string())
+    .execute(&store.pool)
+    .await
+    .or_panic("legacy lost row writes");
+
+    let loaded = store
+        .get_session(&session.id)
+        .await
+        .or_panic("session loads")
+        .or_panic("session exists");
+    assert_eq!(
+        loaded.state,
+        SessionState::Lost {
+            evidence: LostEvidence::Unknown
+        }
+    );
+
+    let listed = store.list_sessions(None).await.or_panic("sessions list");
+    assert_eq!(listed, vec![loaded]);
 
     testdb.cleanup().await.or_panic("test db cleans up");
 }

@@ -170,6 +170,7 @@ fn encode_lost(evidence: LostEvidence) -> Result<&'static str> {
         LostEvidence::ShimDiedBeforeReport => Ok("ShimDiedBeforeReport"),
         LostEvidence::PidNotAlive => Ok("PidNotAlive"),
         LostEvidence::PidReuseDetected => Ok("PidReuseDetected"),
+        LostEvidence::Unknown => Ok("Unknown"),
         _ => Err(anyhow!("unsupported lost evidence variant: {evidence:?}")),
     }
 }
@@ -179,6 +180,7 @@ fn decode_lost(value: Option<&str>) -> Result<LostEvidence> {
         Some("ShimDiedBeforeReport") => Ok(LostEvidence::ShimDiedBeforeReport),
         Some("PidNotAlive") => Ok(LostEvidence::PidNotAlive),
         Some("PidReuseDetected") => Ok(LostEvidence::PidReuseDetected),
+        Some("Unknown") => Ok(LostEvidence::Unknown),
         Some(other) => Err(anyhow!("unknown lost evidence {other}")),
         None => Err(anyhow!("lost lifecycle missing evidence")),
     }

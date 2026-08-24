@@ -12,7 +12,6 @@ use sqlx::{Postgres, Row};
 use thiserror::Error;
 
 use super::SessionStore;
-use super::events::{lost_evidence_from_sql, lost_evidence_to_sql};
 
 #[derive(Debug, Error)]
 pub enum SessionRowError {
@@ -289,7 +288,7 @@ impl SessionStore {
              WHERE id = $4",
         )
         .bind(SessionState::Lost { evidence }.sql_name())
-        .bind(lost_evidence_to_sql(evidence))
+        .bind(evidence.as_str())
         .bind(updated_at)
         .bind(id.to_string())
         .execute(&mut *transaction)
@@ -449,16 +448,16 @@ fn session_state_from_row(row: &PgRow) -> Result<SessionState, SessionRowError> 
     let lost_evidence = row
         .try_get::<Option<String>, _>("lost_evidence")?
         .as_deref()
-        .and_then(lost_evidence_from_sql);
+        .map(LostEvidence::from_text);
     Ok(SessionState::from_sql(
         &row.try_get::<String, _>("state")?,
         lost_evidence,
     )?)
 }
 
-fn session_lost_evidence(state: SessionState) -> Option<String> {
+fn session_lost_evidence(state: SessionState) -> Option<&'static str> {
     match state {
-        SessionState::Lost { evidence } => Some(lost_evidence_to_sql(evidence)),
+        SessionState::Lost { evidence } => Some(evidence.as_str()),
         _ => None,
     }
 }

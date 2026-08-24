@@ -140,13 +140,62 @@ impl Display for RuntimeExit {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-#[serde(rename_all = "snake_case")]
-pub enum LostEvidence {
-    ShimDiedBeforeReport,
-    PidNotAlive,
-    PidReuseDetected,
+lilo_common::define_unit_enum! {
+    /// Why rtmd believes a runtime process is gone.
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[non_exhaustive]
+    #[serde(rename_all = "snake_case")]
+    pub enum LostEvidence {
+        ShimDiedBeforeReport,
+        PidNotAlive,
+        PidReuseDetected,
+        /// The session is lost with no evidence this build can name.
+        ///
+        /// Durable records decode here when their text belongs to a producer
+        /// this build does not know, including rows an older encoder wrote as
+        /// the literal `unknown`. The loss itself is still a fact, so the
+        /// record stays readable rather than failing the query it appears in.
+        Unknown,
+    }
+}
+
+impl LostEvidence {
+    /// Stable text for durable records, such as the
+    /// `session_sessions.lost_evidence` column.
+    ///
+    /// `#[non_exhaustive]` does not apply inside this crate, so this match is
+    /// exhaustive: a new variant fails to compile until it is given a text, and
+    /// a variant carrying data fails to compile until someone decides
+    /// deliberately how it is stored. Nothing here can fail at runtime, which
+    /// is what lets callers encode without an error path.
+    ///
+    /// Stored rows hold these exact bytes, so they outlive the variant names
+    /// that produced them: renaming a variant is a storage migration, not a
+    /// refactor. They match the serde representation today, which
+    /// `lost_evidence_text_matches_serde_representation` holds in place.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ShimDiedBeforeReport => "shim_died_before_report",
+            Self::PidNotAlive => "pid_not_alive",
+            Self::PidReuseDetected => "pid_reuse_detected",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    /// Read [`Self::as_str`] text back into a variant.
+    ///
+    /// Total by construction: the search covers [`Self::ALL`], generated from
+    /// the declaration above, and anything it does not match is
+    /// [`Self::Unknown`]. A durable record therefore always decodes, whichever
+    /// build wrote it.
+    #[must_use]
+    pub fn from_text(text: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|evidence| evidence.as_str() == text)
+            .unwrap_or(Self::Unknown)
+    }
 }
 
 impl Display for LostEvidence {
@@ -155,6 +204,7 @@ impl Display for LostEvidence {
             Self::ShimDiedBeforeReport => formatter.write_str("ShimDiedBeforeReport"),
             Self::PidNotAlive => formatter.write_str("PidNotAlive"),
             Self::PidReuseDetected => formatter.write_str("PidReuseDetected"),
+            Self::Unknown => formatter.write_str("Unknown"),
         }
     }
 }
@@ -215,6 +265,39 @@ mod tests {
             start_time: Utc::now(),
             tmux_pane: None,
         }
+    }
+
+    #[test]
+    fn lost_evidence_text_round_trips_for_every_variant() {
+        for evidence in LostEvidence::ALL {
+            let text = evidence.as_str();
+
+            assert_eq!(
+                LostEvidence::from_text(text),
+                evidence,
+                "{evidence} stores as {text:?}, which does not read back"
+            );
+        }
+    }
+
+    #[test]
+    fn lost_evidence_text_matches_serde_representation() {
+        for evidence in LostEvidence::ALL {
+            assert_eq!(
+                serde_json::to_value(evidence).expect("evidence serializes"),
+                serde_json::Value::String(evidence.as_str().to_owned()),
+                "{evidence} stores and serializes as different text"
+            );
+        }
+    }
+
+    #[test]
+    fn unrecognised_lost_evidence_text_reads_back_as_unknown() {
+        assert_eq!(
+            LostEvidence::from_text("pid_namespace_gone"),
+            LostEvidence::Unknown
+        );
+        assert_eq!(LostEvidence::from_text(""), LostEvidence::Unknown);
     }
 
     #[test]

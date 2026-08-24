@@ -2,19 +2,7 @@ use std::path::PathBuf;
 
 use lilo_common::id::SessionId;
 use lilo_db::test_support::now_micros;
-use lilo_rm_core::LostEvidence;
 use lilo_session_core::{Label, Namespace, RuntimeKind, Session, SessionState};
-
-/// Every `LostEvidence` variant the runtime can report.
-///
-/// The enum is `#[non_exhaustive]`, so this list cannot be derived from it
-/// outside `lilo-rm-core`. A new variant belongs here, and the lost-evidence
-/// round-trip tests then cover it.
-pub(crate) const LOST_EVIDENCE_VARIANTS: [LostEvidence; 3] = [
-    LostEvidence::ShimDiedBeforeReport,
-    LostEvidence::PidNotAlive,
-    LostEvidence::PidReuseDetected,
-];
 
 pub(crate) fn running_session(role: &str, workspace: &str) -> Session {
     let now = now_micros();
