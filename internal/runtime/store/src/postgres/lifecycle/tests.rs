@@ -32,6 +32,29 @@ async fn persists_lifecycle_transitions() {
     testdb.cleanup().await.expect("cleanup");
 }
 
+/// `runtime_lifecycle.lost_evidence` keeps its own text vocabulary, so a new
+/// `LostEvidence` variant reaches this codec's fallback arm and stops persisting
+/// unless it is given an encoding here too. Iterating `ALL` is what surfaces
+/// that, rather than a hand picked variant.
+#[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn lost_lifecycles_round_trip_for_every_evidence_variant() {
+    let (testdb, store) = lifecycle_store().await;
+
+    for evidence in LostEvidence::ALL {
+        let session_id = SessionId::from_uuid(uuid::Uuid::now_v7());
+        let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
+        store.insert_forking(&lifecycle).await.expect("insert");
+        lifecycle.state = LifecycleState::Lost(evidence);
+        store.update_lifecycle(&lifecycle).await.expect("update");
+
+        let restored = store.get(session_id).await.expect("get").expect("row");
+        assert_eq!(restored.state, LifecycleState::Lost(evidence));
+    }
+
+    testdb.cleanup().await.expect("cleanup");
+}
+
 #[tokio::test]
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn tmux_pane_round_trips() {

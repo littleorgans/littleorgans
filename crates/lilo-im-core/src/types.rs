@@ -121,43 +121,26 @@ impl<'de> Visitor<'de> for PrincipalVisitor {
     }
 }
 
-macro_rules! count_actions {
-    ($($variant:ident),+ $(,)?) => {
-        <[()]>::len(&[$(count_actions!(@unit $variant)),+])
-    };
-    (@unit $variant:ident) => {
-        ()
-    };
+lilo_common::define_unit_enum! {
+    /// Closed v1 authorization verb vocabulary.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum Action {
+        Spawn,
+        Kill,
+        Create,
+        List,
+        Read,
+        Logs,
+        MailSend,
+        MailRead,
+        Nudge,
+        Link,
+        Doctor,
+        Daemon,
+        ShimCallback,
+    }
 }
-
-macro_rules! define_actions {
-    ($($variant:ident),+ $(,)?) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        #[serde(rename_all = "snake_case")]
-        pub enum Action {
-            $($variant),+
-        }
-
-        impl Action {
-            pub const ALL: [Self; count_actions!($($variant),+)] = [$(Self::$variant),+];
-        }
-    };
-}
-
-define_actions!(
-    Spawn,
-    Kill,
-    List,
-    Read,
-    Logs,
-    MailSend,
-    MailRead,
-    Nudge,
-    Link,
-    Doctor,
-    Daemon,
-    ShimCallback,
-);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

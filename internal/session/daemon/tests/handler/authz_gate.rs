@@ -116,6 +116,6 @@ fn expected_action_counts() -> HashMap<Action, usize> {
         (Action::List, 2),
         (Action::Read, 2),
         (Action::MailRead, 2),
-        (Action::Kill, 1),
+        (Action::Create, 1),
     ])
 }

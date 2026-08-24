@@ -111,7 +111,7 @@ async fn mark_lost(
          WHERE id = $3
            AND state IN ('SPAWNING', 'RUNNING')",
     )
-    .bind(lost_evidence_to_sql(evidence))
+    .bind(evidence.as_str())
     .bind(Utc::now())
     .bind(session_id)
     .execute(&mut **transaction)
@@ -135,24 +135,6 @@ async fn write_cursor(
     .execute(&mut **transaction)
     .await?;
     Ok(())
-}
-
-pub(crate) fn lost_evidence_from_sql(value: &str) -> Option<LostEvidence> {
-    match value {
-        "shim_died_before_report" => Some(LostEvidence::ShimDiedBeforeReport),
-        "pid_not_alive" => Some(LostEvidence::PidNotAlive),
-        "pid_reuse_detected" => Some(LostEvidence::PidReuseDetected),
-        _ => None,
-    }
-}
-
-pub(crate) fn lost_evidence_to_sql(evidence: LostEvidence) -> &'static str {
-    match evidence {
-        LostEvidence::ShimDiedBeforeReport => "shim_died_before_report",
-        LostEvidence::PidNotAlive => "pid_not_alive",
-        LostEvidence::PidReuseDetected => "pid_reuse_detected",
-        _ => "unknown",
-    }
 }
 
 fn decode_cursor(value: &[u8]) -> sqlx::Result<EventCursor> {
@@ -267,35 +249,38 @@ mod tests {
     async fn persists_lost_evidence_from_runtime_events() {
         let testdb = TestDb::create().await.or_panic("test db creates");
         let store = SessionStore::from_db(testdb.db());
-        let session = running_session("general", "test");
-        store
-            .insert_session(&session)
-            .await
-            .or_panic("session inserts");
 
-        store
-            .apply_runtime_events_and_cursor(
-                &[RuntimeEvent::Lost {
-                    session_id: session.id,
-                    evidence: LostEvidence::PidReuseDetected,
-                }],
-                9,
-            )
-            .await
-            .or_panic("lost event applies");
+        for (index, evidence) in LostEvidence::ALL.into_iter().enumerate() {
+            let cursor = 9 + index as EventCursor;
+            let session = running_session("general", "test");
+            store
+                .insert_session(&session)
+                .await
+                .or_panic("session inserts");
 
-        let updated = store
-            .get_session(&session.id)
-            .await
-            .or_panic("session loads")
-            .or_panic("session exists");
-        assert_eq!(
-            updated.state,
-            SessionState::Lost {
-                evidence: LostEvidence::PidReuseDetected
-            }
-        );
-        assert_eq!(store.event_cursor().await.or_panic("cursor loads"), Some(9));
+            store
+                .apply_runtime_events_and_cursor(
+                    &[RuntimeEvent::Lost {
+                        session_id: session.id,
+                        evidence,
+                    }],
+                    cursor,
+                )
+                .await
+                .or_panic("lost event applies");
+
+            let updated = store
+                .get_session(&session.id)
+                .await
+                .or_panic("session loads")
+                .or_panic("session exists");
+            assert_eq!(updated.state, SessionState::Lost { evidence });
+            assert_eq!(
+                store.event_cursor().await.or_panic("cursor loads"),
+                Some(cursor)
+            );
+        }
+
         testdb.cleanup().await.or_panic("test db cleans up");
     }
 

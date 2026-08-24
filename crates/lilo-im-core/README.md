@@ -5,7 +5,7 @@ AuthZ is NOT enforced in identity-matters v1. This crate locks the shared IAM bo
 `lilo-im-core` owns the stable authorization types:
 
 - `Principal` identifies the caller. v1 supports `Local(uid)` and preserves unknown tagged variants so newer producers can write audit rows that older readers can still inspect.
-- `Action` is closed in v1: `Spawn`, `Kill`, `List`, `Read`, `Logs`, `MailSend`, `MailRead`, `Nudge`, `Link`, `Doctor`, and `Daemon`. v2+ may extend the enum through a deliberate contract change.
+- `Action` is closed in v1: `Spawn`, `Kill`, `Create`, `List`, `Read`, `Logs`, `MailSend`, `MailRead`, `Nudge`, `Link`, `Doctor`, `Daemon`, and `ShimCallback`. v2+ may extend the enum through a deliberate contract change.
 - `ResourceSpec` describes the target of the request without binding identity-matters to a specific caller.
 - `AuditRow` records every authorization decision, including nullable reserved fields that later policy engines can populate without changing the table shape.
 
