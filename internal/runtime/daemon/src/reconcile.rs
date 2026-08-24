@@ -77,13 +77,13 @@ impl ProcessProbe for SystemProcessProbe {
     }
 }
 
-trait DockerLiveness: Clone + Send + 'static {
-    fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>>;
+trait DockerLiveness {
+    async fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>>;
 }
 
 impl DockerLiveness for DockerCliLiveness {
-    fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>> {
-        let running = docker_runtime::container_running_blocking(session_id)?;
+    async fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>> {
+        let running = docker_runtime::DockerCliRuntime.running(session_id).await?;
         if running {
             Ok(None)
         } else {
@@ -100,18 +100,9 @@ where
     async fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
         match &lifecycle.isolation {
             IsolationPolicy::Host => host_lost_evidence(lifecycle, self.process),
-            IsolationPolicy::Docker(_) => {
-                docker_lost_evidence(self.docker.clone(), lifecycle.session_id).await
-            }
+            IsolationPolicy::Docker(_) => self.docker.lost_evidence(lifecycle.session_id).await,
         }
     }
-}
-
-async fn docker_lost_evidence<D>(docker: D, session_id: SessionId) -> Result<Option<LostEvidence>>
-where
-    D: DockerLiveness,
-{
-    tokio::task::spawn_blocking(move || docker.lost_evidence(session_id)).await?
 }
 
 pub async fn reconcile_startup(

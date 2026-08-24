@@ -89,7 +89,12 @@ async fn test_state_with_docker_config(
     (state, testdb)
 }
 
-async fn insert_running_tmux(state: &Arc<ServerState>, session_id: SessionId, runtime_pid: u32) {
+async fn insert_running_tmux(
+    state: &Arc<ServerState>,
+    session_id: SessionId,
+    runtime_pid: u32,
+    start_time: chrono::DateTime<Utc>,
+) {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
     state
         .store()
@@ -100,7 +105,7 @@ async fn insert_running_tmux(state: &Arc<ServerState>, session_id: SessionId, ru
         session_id,
         shim_pid: runtime_pid + 1,
         runtime_pid,
-        start_time: Utc::now(),
+        start_time,
         tmux_pane: Some(tmux_address()),
     });
     state
@@ -338,16 +343,4 @@ async fn assert_no_lifecycle_or_waiters(state: &Arc<ServerState>, session_id: Se
 fn assert_conflict(payload: &SpawnConflictPayload, kind: SpawnConflictKind, session_id: SessionId) {
     assert_eq!(payload.kind, kind);
     assert_eq!(payload.lifecycle.session_id, session_id);
-}
-
-fn wait_for_child_exit(child: &mut std::process::Child) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        match child.try_wait().expect("poll child") {
-            Some(_) => return,
-            None => std::thread::sleep(Duration::from_millis(25)),
-        }
-    }
-    let _ = child.kill();
-    panic!("child was still alive after force preemption");
 }

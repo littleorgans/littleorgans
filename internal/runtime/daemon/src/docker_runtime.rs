@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::process::{Command as StdCommand, Output};
+use std::process::Output;
 
 use anyhow::Result;
 use lilo_common::id::SessionId;
@@ -59,15 +59,6 @@ impl DockerCliRuntime {
 
         Ok(container_running_from_output(&output))
     }
-}
-
-pub(crate) fn container_running_blocking(session_id: SessionId) -> Result<bool> {
-    let output = StdCommand::new("docker")
-        .args(container_running_args(session_id))
-        .output()
-        .map_err(|error| RuntimeFailure::docker_unavailable(error.to_string()))?;
-
-    Ok(container_running_from_output(&output))
 }
 
 fn container_running_args(session_id: SessionId) -> [String; 5] {
