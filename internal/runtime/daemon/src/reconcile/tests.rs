@@ -66,7 +66,7 @@ impl DockerLiveness for PendingDockerLiveness {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn docker_liveness_does_not_block_the_async_runtime() {
+async fn docker_branch_dispatches_to_injected_liveness() {
     let (started_tx, started_rx) = mpsc::channel();
     let (progress_tx, progress_rx) = mpsc::channel();
     let release = Arc::new(tokio::sync::Notify::new());
