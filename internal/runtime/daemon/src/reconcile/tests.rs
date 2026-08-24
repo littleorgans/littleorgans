@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 
 use chrono::{DateTime, TimeZone};
 use lilo_common::id::SessionId;
@@ -55,16 +56,67 @@ impl ProcessProbe for GoneProbe {
     }
 }
 
+#[derive(Clone)]
 struct FakeDockerLiveness {
-    checks: AtomicUsize,
+    checks: Arc<AtomicUsize>,
     evidence: Option<LostEvidence>,
 }
 
+#[derive(Clone)]
+struct BlockingDockerLiveness {
+    started: mpsc::Sender<()>,
+    release: Arc<std::sync::Mutex<mpsc::Receiver<()>>>,
+}
+
 impl DockerLiveness for FakeDockerLiveness {
-    fn lost_evidence(&self, _lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
+    fn lost_evidence(&self, _session_id: SessionId) -> Result<Option<LostEvidence>> {
         self.checks.fetch_add(1, Ordering::SeqCst);
         Ok(self.evidence)
     }
+}
+
+impl DockerLiveness for BlockingDockerLiveness {
+    fn lost_evidence(&self, _session_id: SessionId) -> Result<Option<LostEvidence>> {
+        self.started.send(()).expect("report probe start");
+        self.release
+            .lock()
+            .expect("release receiver")
+            .recv()
+            .expect("release probe");
+        Ok(None)
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn docker_liveness_does_not_block_the_async_runtime() {
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let (progress_tx, progress_rx) = mpsc::channel();
+    let watchdog = std::thread::spawn(move || {
+        started_rx.recv().expect("probe starts");
+        let runtime_progressed = progress_rx.recv_timeout(Duration::from_secs(1)).is_ok();
+        release_tx.send(()).expect("release probe");
+        runtime_progressed
+    });
+    let probe = tokio::spawn(docker_lost_evidence(
+        BlockingDockerLiveness {
+            started: started_tx,
+            release: Arc::new(std::sync::Mutex::new(release_rx)),
+        },
+        SessionId::new(),
+    ));
+
+    tokio::task::yield_now().await;
+    progress_tx.send(()).expect("report runtime progress");
+
+    assert_eq!(
+        probe.await.expect("probe task").expect("probe result"),
+        None
+    );
+    assert!(
+        watchdog.join().expect("watchdog thread"),
+        "blocking probe stalled the runtime"
+    );
 }
 
 #[tokio::test]
@@ -206,12 +258,12 @@ async fn docker_reconciliation_uses_docker_liveness() {
         start_times: HashMap::new(),
     };
     let docker = FakeDockerLiveness {
-        checks: AtomicUsize::new(0),
+        checks: Arc::new(AtomicUsize::new(0)),
         evidence: Some(LostEvidence::PidNotAlive),
     };
     let liveness = ReconcileLiveness {
         process: &process,
-        docker: &docker,
+        docker: docker.clone(),
     };
 
     let events = reconcile_once(state, &liveness).await.expect("reconcile");

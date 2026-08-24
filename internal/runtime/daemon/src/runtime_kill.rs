@@ -4,11 +4,24 @@ use anyhow::Result;
 use lilo_common::id::SessionId;
 use lilo_rm_core::{IsolationPolicy, KillOutcome, KillRequest, RuntimeSignal};
 
-use crate::{docker_runtime, error::RuntimeFailure, server::ServerState};
+use crate::{
+    docker_runtime,
+    error::RuntimeFailure,
+    reconcile::{ProcessProbe, SystemProcessProbe, host_process_lost_evidence},
+    server::ServerState,
+};
 
 const KILL_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 pub(crate) async fn kill_runtime(state: &ServerState, request: KillRequest) -> Result<KillOutcome> {
+    kill_runtime_with_probe(state, request, &SystemProcessProbe).await
+}
+
+async fn kill_runtime_with_probe(
+    state: &ServerState,
+    request: KillRequest,
+    probe: &impl ProcessProbe,
+) -> Result<KillOutcome> {
     let lifecycle = state
         .store()
         .get(request.session_id)
@@ -19,6 +32,12 @@ pub(crate) async fn kill_runtime(state: &ServerState, request: KillRequest) -> R
             let runtime_pid = lifecycle
                 .runtime_pid
                 .ok_or_else(|| RuntimeFailure::session_not_found(request.session_id))?;
+            if let Some(evidence) =
+                host_process_lost_evidence(runtime_pid, lifecycle.start_time, probe)?
+            {
+                let _ = state.record_lost(request.session_id, evidence).await?;
+                return Ok(KillOutcome::AlreadyExited);
+            }
             let target = HostKillTarget { runtime_pid };
             let mut terminal = StateTerminalCheck::new(state, request.session_id);
             run_kill_loop(&target, &mut terminal, request.signal, request.grace_secs).await
@@ -133,9 +152,69 @@ impl TerminalCheck for StateTerminalCheck<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::process::{Child, Command, Stdio};
     use std::sync::{Arc, Mutex};
 
+    use chrono::{DateTime, TimeZone, Utc};
+    use lilo_rm_core::{Lifecycle, LifecycleState, LostEvidence, RuntimeKind, ShimReady};
+    use lilo_runtime_store::LifecycleStore;
+
     use super::*;
+    use crate::{reconcile::ReconcileConfig, test_support::RuntimeServiceFixture};
+
+    #[tokio::test]
+    #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+    async fn kill_runtime_rejects_a_reused_host_pid() {
+        let fixture = RuntimeServiceFixture::new(ReconcileConfig::default()).await;
+        let store = LifecycleStore::from_db(fixture.testdb.db());
+        let state = ServerState::new(fixture.testdb.db(), fixture.config.clone(), store.clone())
+            .expect("state");
+        let mut child = ChildGuard::spawn();
+        let session_id = SessionId::new();
+        let stored_start_time = Utc.timestamp_opt(1_000, 0).unwrap();
+        let mut lifecycle = Lifecycle::forking(session_id, RuntimeKind::Claude);
+        store.insert_forking(&lifecycle).await.expect("insert");
+        lifecycle.mark_running(ShimReady {
+            session_id,
+            shim_pid: child.id() + 1,
+            runtime_pid: child.id(),
+            start_time: stored_start_time,
+            tmux_pane: None,
+        });
+        store.update_lifecycle(&lifecycle).await.expect("running");
+
+        let outcome = kill_runtime_with_probe(
+            &state,
+            KillRequest {
+                session_id,
+                signal: RuntimeSignal::Term,
+                grace_secs: 0,
+            },
+            &FixedStartTimeProbe {
+                start_time: Utc.timestamp_opt(2_000, 0).unwrap(),
+            },
+        )
+        .await
+        .expect("kill outcome");
+        let child_alive = child.is_alive();
+        let stored_state = store
+            .get(session_id)
+            .await
+            .expect("get lifecycle")
+            .expect("lifecycle")
+            .state;
+
+        drop(state);
+        drop(store);
+        fixture.cleanup().await;
+
+        assert_eq!(outcome, KillOutcome::AlreadyExited);
+        assert!(child_alive, "kill_runtime signalled a reused pid");
+        assert_eq!(
+            stored_state,
+            LifecycleState::Lost(LostEvidence::PidReuseDetected)
+        );
+    }
 
     #[tokio::test]
     async fn shared_kill_loop_escalates_alive_target_after_grace_deadline() {
@@ -193,6 +272,51 @@ mod tests {
     impl TerminalCheck for FakeTerminalCheck {
         async fn is_terminal(&mut self) -> Result<bool> {
             Ok(false)
+        }
+    }
+
+    struct FixedStartTimeProbe {
+        start_time: DateTime<Utc>,
+    }
+
+    impl ProcessProbe for FixedStartTimeProbe {
+        fn pid_alive(&self, _pid: u32) -> bool {
+            true
+        }
+
+        fn start_time_for_pid(&self, _pid: u32) -> Result<lilo_sys::process::ProcessStartTime> {
+            Ok(lilo_sys::process::ProcessStartTime::Known(self.start_time))
+        }
+    }
+
+    struct ChildGuard(Child);
+
+    impl ChildGuard {
+        fn spawn() -> Self {
+            Self(
+                Command::new("sleep")
+                    .arg("60")
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("spawn child"),
+            )
+        }
+
+        fn id(&self) -> u32 {
+            self.0.id()
+        }
+
+        fn is_alive(&mut self) -> bool {
+            self.0.try_wait().expect("child status").is_none()
+        }
+    }
+
+    impl Drop for ChildGuard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
         }
     }
 }

@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use lilo_common::id::SessionId;
 use lilo_paths::env::{
     LILO_PROBE_SWEEP_INTERVAL_MS, LILO_RESUME_GAP_THRESHOLD_MS, LILO_RESUME_POLL_INTERVAL_MS,
 };
@@ -53,16 +54,17 @@ pub trait ProcessProbe {
 }
 
 trait RuntimeLiveness {
-    fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>>;
+    async fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>>;
 }
 
 pub struct SystemProcessProbe;
 
 struct ReconcileLiveness<'a, P, D> {
     process: &'a P,
-    docker: &'a D,
+    docker: D,
 }
 
+#[derive(Clone, Copy)]
 struct DockerCliLiveness;
 
 impl ProcessProbe for SystemProcessProbe {
@@ -75,13 +77,13 @@ impl ProcessProbe for SystemProcessProbe {
     }
 }
 
-trait DockerLiveness {
-    fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>>;
+trait DockerLiveness: Clone + Send + 'static {
+    fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>>;
 }
 
 impl DockerLiveness for DockerCliLiveness {
-    fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
-        let running = docker_runtime::container_running_blocking(lifecycle.session_id)?;
+    fn lost_evidence(&self, session_id: SessionId) -> Result<Option<LostEvidence>> {
+        let running = docker_runtime::container_running_blocking(session_id)?;
         if running {
             Ok(None)
         } else {
@@ -92,26 +94,35 @@ impl DockerLiveness for DockerCliLiveness {
 
 impl<P, D> RuntimeLiveness for ReconcileLiveness<'_, P, D>
 where
-    P: ProcessProbe,
+    P: ProcessProbe + Sync,
     D: DockerLiveness,
 {
-    fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
+    async fn lost_evidence(&self, lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
         match &lifecycle.isolation {
             IsolationPolicy::Host => host_lost_evidence(lifecycle, self.process),
-            IsolationPolicy::Docker(_) => self.docker.lost_evidence(lifecycle),
+            IsolationPolicy::Docker(_) => {
+                docker_lost_evidence(self.docker.clone(), lifecycle.session_id).await
+            }
         }
     }
 }
 
+async fn docker_lost_evidence<D>(docker: D, session_id: SessionId) -> Result<Option<LostEvidence>>
+where
+    D: DockerLiveness,
+{
+    tokio::task::spawn_blocking(move || docker.lost_evidence(session_id)).await?
+}
+
 pub async fn reconcile_startup(
     state: Arc<ServerState>,
-    probe: &impl ProcessProbe,
+    probe: &(impl ProcessProbe + Sync),
 ) -> Result<Vec<RuntimeEvent>> {
     reconcile_once(
         state,
         &ReconcileLiveness {
             process: probe,
-            docker: &DockerCliLiveness,
+            docker: DockerCliLiveness,
         },
     )
     .await
@@ -153,7 +164,7 @@ async fn run_periodic_with_config<P>(
                 if now >= next_deadline || resumed {
                     let liveness = ReconcileLiveness {
                         process: &probe,
-                        docker: &DockerCliLiveness,
+                        docker: DockerCliLiveness,
                     };
                     if let Err(error) = reconcile_once(Arc::clone(&state), &liveness).await {
                         tracing::warn!(%error, "periodic reconciliation failed");
@@ -183,7 +194,7 @@ async fn reconcile_once(
 ) -> Result<Vec<RuntimeEvent>> {
     let mut events = Vec::new();
     for lifecycle in state.store().running().await? {
-        if let Some(evidence) = liveness.lost_evidence(&lifecycle)? {
+        if let Some(evidence) = liveness.lost_evidence(&lifecycle).await? {
             if let Some(event) = state.record_lost(lifecycle.session_id, evidence).await? {
                 events.push(event);
             }
@@ -207,11 +218,19 @@ fn host_lost_evidence(
     let runtime_pid = lifecycle
         .runtime_pid
         .ok_or_else(|| anyhow!("running lifecycle missing runtime pid"))?;
+    host_process_lost_evidence(runtime_pid, lifecycle.start_time, probe)
+}
+
+pub(crate) fn host_process_lost_evidence(
+    runtime_pid: u32,
+    stored_start_time: Option<DateTime<Utc>>,
+    probe: &impl ProcessProbe,
+) -> Result<Option<LostEvidence>> {
     if !probe.pid_alive(runtime_pid) {
         return Ok(Some(LostEvidence::PidNotAlive));
     }
 
-    let Some(stored_start_time) = lifecycle.start_time else {
+    let Some(stored_start_time) = stored_start_time else {
         return Ok(None);
     };
     let current_start_time = match probe.start_time_for_pid(runtime_pid) {

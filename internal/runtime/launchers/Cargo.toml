@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 lilo-common.workspace = true
+lilo-paths.workspace = true
 lilo-rm-core.workspace = true
 uuid.workspace = true
 

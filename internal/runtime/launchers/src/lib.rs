@@ -15,6 +15,7 @@ pub use claude::ClaudeLauncher;
 use codex::CODEX;
 pub use codex::CodexLauncher;
 use lilo_common::id::SessionId;
+use lilo_paths::env::{LILO_AGENT_RUNTIME, LILO_AGENT_SESSION_ID};
 use lilo_rm_core::{
     HeadlessSpawnTarget, IsolationPolicy, LaunchEnv, LauncherError, RuntimeKind, RuntimeLauncher,
     SpawnRequest, SpawnTarget, upsert_launch_env,
@@ -99,11 +100,11 @@ pub(crate) fn runtime_env(request: &SpawnRequest) -> Vec<LaunchEnv> {
     let mut env = request.env.clone();
     upsert_launch_env(
         &mut env,
-        LaunchEnv::new("LILO_AGENT_SESSION_ID", request.session_id.to_string()),
+        LaunchEnv::new(LILO_AGENT_SESSION_ID, request.session_id.to_string()),
     );
     upsert_launch_env(
         &mut env,
-        LaunchEnv::new("LILO_AGENT_RUNTIME", request.runtime.to_string()),
+        LaunchEnv::new(LILO_AGENT_RUNTIME, request.runtime.to_string()),
     );
     env
 }
