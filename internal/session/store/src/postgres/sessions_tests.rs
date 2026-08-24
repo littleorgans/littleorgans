@@ -5,6 +5,7 @@ use lilo_common::id::SessionId;
 use lilo_db::test_support::{TestDb, now_micros};
 use lilo_session_core::{Label, LabelOp, Namespace, Selector};
 
+use super::super::test_support::LOST_EVIDENCE_VARIANTS;
 use crate::test_support::{ErrOrPanic as _, OrPanic as _};
 
 use super::*;
@@ -363,6 +364,31 @@ async fn persists_sessions_across_store_handles() {
     let sessions = store.list_sessions(None).await.or_panic("sessions list");
 
     assert_eq!(sessions, vec![session]);
+    testdb.cleanup().await.or_panic("test db cleans up");
+}
+
+#[tokio::test]
+#[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
+async fn round_trips_lost_sessions_for_every_evidence_variant() {
+    let testdb = TestDb::create().await.or_panic("test db creates");
+    let store = SessionStore::from_db(testdb.db());
+
+    for evidence in LOST_EVIDENCE_VARIANTS {
+        let mut session = test_session("general", "test", Vec::new());
+        session.state = SessionState::Lost { evidence };
+        store
+            .insert_session(&session)
+            .await
+            .or_panic("session inserts");
+
+        let loaded = store
+            .get_session(&session.id)
+            .await
+            .or_panic("session loads")
+            .or_panic("session exists");
+        assert_eq!(loaded.state, SessionState::Lost { evidence });
+    }
+
     testdb.cleanup().await.or_panic("test db cleans up");
 }
 

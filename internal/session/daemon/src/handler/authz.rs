@@ -29,7 +29,7 @@ pub(crate) fn authz_plan(rpc: &SessionRpc) -> AuthzPlan {
             action: Action::MailRead,
         },
         SessionRpc::NamespaceCreate { .. } => AtDoor {
-            action: Action::Kill,
+            action: Action::Create,
         },
         SessionRpc::Spawn { .. }
         | SessionRpc::NamespaceDelete { .. }
@@ -132,7 +132,7 @@ mod tests {
                         slug: "team".to_string(),
                     },
                 },
-                Action::Kill,
+                Action::Create,
             ),
         ]
     }

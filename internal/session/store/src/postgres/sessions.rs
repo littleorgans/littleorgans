@@ -456,7 +456,7 @@ fn session_state_from_row(row: &PgRow) -> Result<SessionState, SessionRowError> 
     )?)
 }
 
-fn session_lost_evidence(state: SessionState) -> Option<&'static str> {
+fn session_lost_evidence(state: SessionState) -> Option<String> {
     match state {
         SessionState::Lost { evidence } => Some(lost_evidence_to_sql(evidence)),
         _ => None,

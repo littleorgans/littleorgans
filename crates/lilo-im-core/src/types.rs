@@ -147,6 +147,7 @@ macro_rules! define_actions {
 define_actions!(
     Spawn,
     Kill,
+    Create,
     List,
     Read,
     Logs,
