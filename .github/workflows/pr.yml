@@ -34,7 +34,12 @@ jobs:
           )
         )
       )
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Runner toggle: exactly one of these two lines is active. Blacksmith is
+    # the faster 4 vCPU option and is commented out while credits are
+    # exhausted. Nothing else in this job is Blacksmith-specific, so flipping
+    # which line is commented is the entire switch in either direction.
+    # runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # Both vars resolve to the health-checked postgres service below. They make
     # the lilo-db Postgres tests run in the gate (instead of skipping as they do
     # locally without a database) and give `lilo doctor` a real backend. The CI
