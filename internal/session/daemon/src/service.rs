@@ -5,8 +5,8 @@ use anyhow::{Context, Result};
 use lilo_db::LiloDb;
 use lilo_im_core::Principal;
 use lilo_im_store::AuditStore;
-use lilo_paths::{LiloHome, LiloPaths};
-use lilo_runtime_daemon::{DaemonConfig, RuntimeService, RuntimeServiceContext};
+use lilo_paths::LiloPaths;
+use lilo_runtime_daemon::RuntimeService;
 use lilo_session_core::{RpcResponse, SessionRpc};
 use lilo_session_driver::InProcessRuntime;
 use lilo_session_store::SessionStore;
@@ -35,18 +35,6 @@ impl SessionServiceContext {
             db,
             runtime,
         }
-    }
-
-    pub async fn from_env(daemon_version: impl Into<String>) -> Result<Self> {
-        let daemon_version = daemon_version.into();
-        let home = LiloHome::from_env().context("failed to resolve lilo home")?;
-        let paths = LiloPaths::new(home);
-        let db = LiloDb::open_postgres_resolved().await?;
-        let runtime_config = DaemonConfig::from_lilo_paths(&paths)?;
-        let runtime = Arc::new(
-            RuntimeService::build(RuntimeServiceContext::new(runtime_config, db.clone())).await?,
-        );
-        Ok(Self::new(paths, daemon_version, db, runtime))
     }
 
     pub fn paths(&self) -> &LiloPaths {

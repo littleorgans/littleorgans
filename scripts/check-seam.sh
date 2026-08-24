@@ -17,6 +17,7 @@ done < <(
         ! -path '*/tests/*' \
         ! -path '*/benches/*' \
         ! -path '*test_support*' \
+        ! -name 'tests.rs' \
         -print0
 )
 
@@ -27,36 +28,69 @@ import bisect
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
-SIG_ALLOWLIST = Path("internal/runtime/daemon/src/signal.rs")
+OS_SEAM = "Move OS seam code into crates/lilo-sys or an approved boundary"
+COMPOSITION = "Move service composition into internal/session/app/src/compose.rs"
 
-FORBIDDEN = [
-    ("raw cfg", re.compile(r"\bcfg\s*\(\s*(unix|windows|target_os|target_family)\b")),
-    ("UnixListener", re.compile(r"\bUnixListener\b")),
-    ("UnixStream", re.compile(r"\bUnixStream\b")),
-    ("std::os::unix", re.compile(r"\bstd::os::unix\b")),
-    ("tokio::signal::unix", re.compile(r"\btokio::signal::unix\b")),
-    ("SignalKind", re.compile(r"\bSignalKind\b")),
-    ("libc::signal", re.compile(r"\blibc::signal\s*\(")),
-    ("pre_exec", re.compile(r"\bpre_exec\b")),
-    ("CommandExt", re.compile(r"\bCommandExt\b")),
-    ("ExitStatusExt", re.compile(r"\bExitStatusExt\b")),
-    ("getpeereid", re.compile(r"\bgetpeereid\b")),
-    ("SO_PEERCRED", re.compile(r"\bSO_PEERCRED\b")),
-    ("getuid", re.compile(r"\bgetuid\b")),
-    ("pidfd", re.compile(r"\bpidfd\b")),
-    ("kqueue", re.compile(r"\bkqueue\b")),
-    ("libc::SIG", re.compile(r"\blibc::SIG[A-Z0-9_]+\b")),
+
+class Rule(NamedTuple):
+    kind: str
+    pattern: re.Pattern[str]
+    remedy: str
+    # Path prefixes the rule applies to. Empty means every scanned file.
+    scope: tuple[str, ...] = ()
+    # Path prefixes the rule never applies to, checked after scope.
+    exempt: tuple[str, ...] = ()
+
+    def applies_to(self, path: Path) -> bool:
+        text = path.as_posix()
+        if self.scope and not any(text.startswith(prefix) for prefix in self.scope):
+            return False
+        return not any(text.startswith(prefix) for prefix in self.exempt)
+
+
+SESSION_DAEMON = ("internal/session/daemon/",)
+
+RULES = [
+    Rule("raw cfg", re.compile(r"\bcfg\s*\(\s*(unix|windows|target_os|target_family)\b"), OS_SEAM),
+    Rule("UnixListener", re.compile(r"\bUnixListener\b"), OS_SEAM),
+    Rule("UnixStream", re.compile(r"\bUnixStream\b"), OS_SEAM),
+    Rule("std::os::unix", re.compile(r"\bstd::os::unix\b"), OS_SEAM),
+    Rule("tokio::signal::unix", re.compile(r"\btokio::signal::unix\b"), OS_SEAM),
+    Rule("SignalKind", re.compile(r"\bSignalKind\b"), OS_SEAM),
+    Rule("libc::signal", re.compile(r"\blibc::signal\s*\("), OS_SEAM),
+    Rule("pre_exec", re.compile(r"\bpre_exec\b"), OS_SEAM),
+    Rule("CommandExt", re.compile(r"\bCommandExt\b"), OS_SEAM),
+    Rule("ExitStatusExt", re.compile(r"\bExitStatusExt\b"), OS_SEAM),
+    Rule("getpeereid", re.compile(r"\bgetpeereid\b"), OS_SEAM),
+    Rule("SO_PEERCRED", re.compile(r"\bSO_PEERCRED\b"), OS_SEAM),
+    Rule("getuid", re.compile(r"\bgetuid\b"), OS_SEAM),
+    Rule("pidfd", re.compile(r"\bpidfd\b"), OS_SEAM),
+    Rule("kqueue", re.compile(r"\bkqueue\b"), OS_SEAM),
+    Rule(
+        "libc::SIG",
+        re.compile(r"\blibc::SIG[A-Z0-9_]+\b"),
+        OS_SEAM,
+        exempt=("internal/runtime/daemon/src/signal.rs",),
+    ),
+    # compose.rs is the single owner of Session and Runtime construction. The
+    # daemon crate receives its dependencies through SessionServiceContext::new
+    # and must not build the Runtime service or open the database itself. A
+    # second environment-owned composition constructor cannot avoid these two
+    # calls, whatever it is named.
+    Rule(
+        "self-composition",
+        re.compile(r"\b(?:RuntimeService::build|LiloDb::open_postgres_resolved)\b"),
+        COMPOSITION,
+        scope=SESSION_DAEMON,
+    ),
 ]
 
 # Masking only ever removes matches, so a file with no raw forbidden token
 # cannot produce a post-mask hit. Prefilter on the union of the patterns and
 # skip the O(chars) mask_rust() for the common clean file (~7.5s -> <1s).
-ANY_FORBIDDEN = re.compile("|".join(f"(?:{pattern.pattern})" for _, pattern in FORBIDDEN))
-
-
-def blank_preserving_newlines(text: str) -> str:
-    return "".join("\n" if char == "\n" else " " for char in text)
+ANY_FORBIDDEN = re.compile("|".join(f"(?:{rule.pattern.pattern})" for rule in RULES))
 
 
 def mask_rust(text: str) -> str:
@@ -346,40 +380,42 @@ def apply_ranges(masked: str, ranges: list[tuple[int, int]]) -> str:
     return "".join(chars)
 
 
-def scan_file(path: Path) -> list[str]:
+def scan_file(path: Path) -> list[tuple[str, str]]:
     original = path.read_text(encoding="utf-8")
     if not ANY_FORBIDDEN.search(original):
         return []
     masked = mask_rust(original)
     sanitized = apply_ranges(masked, test_ranges(masked))
     starts = line_starts(sanitized)
-    violations: list[str] = []
+    violations: list[tuple[str, str]] = []
 
-    for kind, pattern in FORBIDDEN:
-        if kind == "libc::SIG" and path == SIG_ALLOWLIST:
+    for rule in RULES:
+        if not rule.applies_to(path):
             continue
-        for match in pattern.finditer(sanitized):
+        for match in rule.pattern.finditer(sanitized):
             line_number = line_for(starts, match.start())
             line = original.splitlines()[line_number - 1].strip()
-            violations.append(f"{path}:{line_number}: {kind}: {line}")
+            violations.append((rule.remedy, f"{path}:{line_number}: {rule.kind}: {line}"))
 
     return violations
 
 
 def main() -> int:
-    violations: list[str] = []
+    violations: list[tuple[str, str]] = []
     for raw_path in sys.argv[1:]:
         path = Path(raw_path)
         display_path = Path(*path.parts[1:]) if path.parts and path.parts[0] == "." else path
         violations.extend(scan_file(display_path))
 
-    if violations:
-        print("Seam lint failed. Move OS seam code into crates/lilo-sys or an approved boundary:", file=sys.stderr)
-        for violation in sorted(set(violations)):
-            print(violation, file=sys.stderr)
-        return 1
+    if not violations:
+        return 0
 
-    return 0
+    print("Seam lint failed.", file=sys.stderr)
+    for remedy in dict.fromkeys(remedy for remedy, _ in violations):
+        print(f"{remedy}:", file=sys.stderr)
+        for entry in sorted({text for rule_remedy, text in violations if rule_remedy == remedy}):
+            print(f"  {entry}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
