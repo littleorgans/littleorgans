@@ -64,7 +64,10 @@ async fn namespace_deleted_recovery_kills_runtime_before_abort() {
         .insert_forking(&lifecycle)
         .await
         .expect("forking lifecycle inserts");
-    mark_running(&mut lifecycle, child.runtime_pid());
+    let runtime_start_time = lilo_sys::process::start_time_for_pid(child.runtime_pid())
+        .expect("runtime start time reads")
+        .expect("runtime start time is supported");
+    mark_running(&mut lifecycle, child.runtime_pid(), runtime_start_time);
     lifecycle_store
         .update_lifecycle(&lifecycle)
         .await
@@ -402,12 +405,12 @@ fn draft_session(session_id: SessionId, request: &SpawnRequest) -> Session {
     }
 }
 
-fn mark_running(lifecycle: &mut Lifecycle, runtime_pid: u32) {
+fn mark_running(lifecycle: &mut Lifecycle, runtime_pid: u32, start_time: chrono::DateTime<Utc>) {
     assert!(lifecycle.mark_running(ShimReady {
         session_id: lifecycle.session_id,
         shim_pid: runtime_pid,
         runtime_pid,
-        start_time: Utc::now(),
+        start_time,
         tmux_pane: None,
     }));
 }
@@ -428,7 +431,7 @@ async fn insert_running_lifecycle(store: &LifecycleStore, lifecycle: &Lifecycle)
 fn running_lifecycle(session_id: SessionId, runtime_pid: u32) -> Lifecycle {
     let mut lifecycle = Lifecycle::forking(session_id, RuntimeRuntimeKind::Claude);
     lifecycle.isolation = IsolationPolicy::Host;
-    mark_running(&mut lifecycle, runtime_pid);
+    mark_running(&mut lifecycle, runtime_pid, Utc::now());
     lifecycle
 }
 

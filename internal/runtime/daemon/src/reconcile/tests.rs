@@ -1,33 +1,16 @@
-use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 
 use chrono::{DateTime, TimeZone};
 use lilo_common::id::SessionId;
-use lilo_rm_core::{IsolationPolicy, IsolationProfile, LifecycleState, RuntimeKind, ShimReady};
+use lilo_rm_core::{
+    IsolationPolicy, IsolationProfile, Lifecycle, LifecycleState, RuntimeKind, ShimReady,
+};
 use lilo_runtime_store::LifecycleStore;
 
 use super::*;
-use crate::server::DaemonConfig;
-
-struct FakeProbe {
-    alive: HashSet<u32>,
-    start_times: HashMap<u32, DateTime<Utc>>,
-}
-
-impl ProcessProbe for FakeProbe {
-    fn pid_alive(&self, pid: u32) -> bool {
-        self.alive.contains(&pid)
-    }
-
-    fn start_time_for_pid(&self, pid: u32) -> Result<ProcessStartTime> {
-        Ok(self
-            .start_times
-            .get(&pid)
-            .copied()
-            .map_or(ProcessStartTime::Unsupported, ProcessStartTime::Known))
-    }
-}
+use crate::{server::DaemonConfig, test_support::FakeProcessProbe};
 
 struct VanishingProbe {
     alive_checks: AtomicUsize,
@@ -55,16 +38,70 @@ impl ProcessProbe for GoneProbe {
     }
 }
 
+#[derive(Clone)]
 struct FakeDockerLiveness {
-    checks: AtomicUsize,
+    checks: Arc<AtomicUsize>,
     evidence: Option<LostEvidence>,
 }
 
+#[derive(Clone)]
+struct PendingDockerLiveness {
+    started: mpsc::Sender<()>,
+    release: Arc<tokio::sync::Notify>,
+}
+
 impl DockerLiveness for FakeDockerLiveness {
-    fn lost_evidence(&self, _lifecycle: &Lifecycle) -> Result<Option<LostEvidence>> {
+    async fn lost_evidence(&self, _session_id: SessionId) -> Result<Option<LostEvidence>> {
         self.checks.fetch_add(1, Ordering::SeqCst);
         Ok(self.evidence)
     }
+}
+
+impl DockerLiveness for PendingDockerLiveness {
+    async fn lost_evidence(&self, _session_id: SessionId) -> Result<Option<LostEvidence>> {
+        self.started.send(()).expect("report probe start");
+        self.release.notified().await;
+        Ok(None)
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn docker_branch_dispatches_to_injected_liveness() {
+    let (started_tx, started_rx) = mpsc::channel();
+    let (progress_tx, progress_rx) = mpsc::channel();
+    let release = Arc::new(tokio::sync::Notify::new());
+    let watchdog_release = Arc::clone(&release);
+    let watchdog = std::thread::spawn(move || {
+        started_rx.recv().expect("probe starts");
+        let runtime_progressed = progress_rx.recv_timeout(Duration::from_secs(1)).is_ok();
+        watchdog_release.notify_one();
+        runtime_progressed
+    });
+    let probe = tokio::spawn(async move {
+        let process = FakeProcessProbe::new([], []);
+        let mut lifecycle = Lifecycle::forking(SessionId::new(), RuntimeKind::Claude);
+        lifecycle.isolation = IsolationPolicy::Docker(IsolationProfile { name: None });
+        let liveness = ReconcileLiveness {
+            process: &process,
+            docker: PendingDockerLiveness {
+                started: started_tx,
+                release,
+            },
+        };
+        liveness.lost_evidence(&lifecycle).await
+    });
+
+    tokio::task::yield_now().await;
+    progress_tx.send(()).expect("report runtime progress");
+
+    assert_eq!(
+        probe.await.expect("probe task").expect("probe result"),
+        None
+    );
+    assert!(
+        watchdog.join().expect("watchdog thread"),
+        "blocking probe stalled the runtime"
+    );
 }
 
 #[tokio::test]
@@ -85,10 +122,7 @@ async fn startup_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let state = Arc::new(
         ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
-    let probe = FakeProbe {
-        alive: HashSet::from([202]),
-        start_times: HashMap::from([(202, Utc.timestamp_opt(2_001, 0).unwrap())]),
-    };
+    let probe = FakeProcessProbe::new([202], [(202, Utc.timestamp_opt(2_001, 0).unwrap())]);
 
     let events = reconcile_startup(Arc::clone(&state), &probe)
         .await
@@ -154,10 +188,7 @@ async fn periodic_reconciliation_marks_dead_and_reused_pids_lost_once() {
     let state = Arc::new(
         ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
-    let probe = FakeProbe {
-        alive: HashSet::from([202]),
-        start_times: HashMap::from([(202, Utc.timestamp_opt(2_001, 0).unwrap())]),
-    };
+    let probe = FakeProcessProbe::new([202], [(202, Utc.timestamp_opt(2_001, 0).unwrap())]);
     let (shutdown_tx, shutdown_rx) = tokio::sync::broadcast::channel(1);
     let task = tokio::spawn(run_periodic_with_config(
         Arc::clone(&state),
@@ -201,17 +232,14 @@ async fn docker_reconciliation_uses_docker_liveness() {
     let state = Arc::new(
         ServerState::new(testdb.db(), test_config(temp.path()), store.clone()).expect("state"),
     );
-    let process = FakeProbe {
-        alive: HashSet::new(),
-        start_times: HashMap::new(),
-    };
+    let process = FakeProcessProbe::new([], []);
     let docker = FakeDockerLiveness {
-        checks: AtomicUsize::new(0),
+        checks: Arc::new(AtomicUsize::new(0)),
         evidence: Some(LostEvidence::PidNotAlive),
     };
     let liveness = ReconcileLiveness {
         process: &process,
-        docker: &docker,
+        docker: docker.clone(),
     };
 
     let events = reconcile_once(state, &liveness).await.expect("reconcile");

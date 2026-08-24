@@ -1281,6 +1281,7 @@ name = "lilo-runtime-launchers"
 version = "0.8.0"
 dependencies = [
  "lilo-common",
+ "lilo-paths",
  "lilo-rm-core",
  "uuid",
 ]

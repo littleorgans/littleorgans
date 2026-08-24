@@ -3,15 +3,15 @@ use anyhow::{Context, Result};
 use lilo_common::id::SessionId;
 use lilo_rm_core::{
     LaunchEnv, LaunchSpec, RuntimeResponse, RuntimeRpc, ShimExit, ShimLaunchRequest, ShimReady,
-    SpawnRequest, SpawnTarget, TmuxAddress, TmuxSpawnTarget, read_json_line,
-    read_json_line_blocking, write_json_line, write_json_line_blocking,
+    SpawnRequest, SpawnTarget, TmuxAddress, TmuxSpawnTarget, read_json_line_blocking,
+    write_json_line_blocking,
 };
 use lilo_wire::LilodRpc;
 use std::io::BufReader as StdBufReader;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::fs::File;
-use tokio::io::{AsyncRead, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncWriteExt};
 use tokio::process::Command;
 
 use crate::server::DaemonConfig;
@@ -155,24 +155,6 @@ fn shim_env(config: &DaemonConfig) -> Result<Vec<LaunchEnv>> {
     }])
 }
 
-pub async fn request_launch(
-    socket_path: &std::path::Path,
-    request: ShimLaunchRequest,
-) -> Result<LaunchSpec> {
-    let stream = lilo_sys::ipc::connect(socket_path)
-        .await
-        .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
-    let (read_half, mut write_half) = stream.into_split();
-    write_json_line(
-        &mut write_half,
-        &LilodRpc::Runtime(RuntimeRpc::ShimLaunch { request }),
-    )
-    .await?;
-
-    let mut reader = BufReader::new(read_half);
-    launch_from_response(read_json_line(&mut reader).await?)
-}
-
 pub fn request_launch_blocking(
     socket_path: &std::path::Path,
     request: ShimLaunchRequest,
@@ -188,35 +170,12 @@ pub fn request_launch_blocking(
     launch_from_response(read_json_line_blocking(&mut reader)?)
 }
 
-pub async fn send_ready(socket_path: &std::path::Path, ready: ShimReady) -> Result<()> {
-    send_shim_rpc(socket_path, RuntimeRpc::ShimReady { ready }, "ShimReady").await
-}
-
 pub fn send_ready_blocking(socket_path: &std::path::Path, ready: ShimReady) -> Result<()> {
     send_shim_rpc_blocking(socket_path, &RuntimeRpc::ShimReady { ready }, "ShimReady")
 }
 
-pub async fn send_exit(socket_path: &std::path::Path, exit: ShimExit) -> Result<()> {
-    send_shim_rpc(socket_path, RuntimeRpc::ShimExit { exit }, "ShimExit").await
-}
-
 pub fn send_exit_blocking(socket_path: &std::path::Path, exit: ShimExit) -> Result<()> {
     send_shim_rpc_blocking(socket_path, &RuntimeRpc::ShimExit { exit }, "ShimExit")
-}
-
-async fn send_shim_rpc(
-    socket_path: &std::path::Path,
-    rpc: RuntimeRpc,
-    label: &'static str,
-) -> Result<()> {
-    let stream = lilo_sys::ipc::connect(socket_path)
-        .await
-        .with_context(|| format!("failed to connect to {}", socket_path.display()))?;
-    let (read_half, mut write_half) = stream.into_split();
-    write_json_line(&mut write_half, &LilodRpc::Runtime(rpc)).await?;
-
-    let mut reader = BufReader::new(read_half);
-    ack_from_response(read_json_line(&mut reader).await?, label)
 }
 
 fn send_shim_rpc_blocking(

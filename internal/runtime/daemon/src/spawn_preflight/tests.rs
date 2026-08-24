@@ -1,6 +1,4 @@
-use std::process::Command;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use chrono::Utc;
@@ -16,6 +14,7 @@ use super::*;
 use crate::docker_preflight::DockerPreflightConfig;
 use crate::reconcile::ReconcileConfig;
 use crate::server::{DaemonConfig, ServerState};
+use crate::test_support::ChildGuard;
 
 include!("tests/helpers.rs");
 include!("tests/conflicts.rs");

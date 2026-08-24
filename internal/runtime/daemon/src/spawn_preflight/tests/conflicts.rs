@@ -31,7 +31,7 @@ async fn session_id_conflict_includes_terminal_lifecycle() {
 async fn tmux_occupant_conflict_is_typed_without_force() {
     let (state, testdb) = test_state().await;
     let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
-    insert_running_tmux(&state, occupant, 60_000).await;
+    insert_running_tmux(&state, occupant, 60_000, Utc::now()).await;
 
     let mut request = tmux_request(SessionId::from_uuid(uuid::Uuid::now_v7()), false);
     let response = check(&state, &mut request)
@@ -47,9 +47,9 @@ async fn tmux_occupant_conflict_is_typed_without_force() {
 #[ignore = "requires Postgres: set LILO_TEST_DATABASE_URL; run with --run-ignored all"]
 async fn force_kills_tmux_occupant_and_allows_spawn() {
     let (state, testdb) = test_state().await;
-    let mut child = Command::new("sleep").arg("60").spawn().expect("sleep");
+    let mut child = ChildGuard::spawn();
     let occupant = SessionId::from_uuid(uuid::Uuid::now_v7());
-    insert_running_tmux(&state, occupant, child.id()).await;
+    insert_running_tmux(&state, occupant, child.id(), child.start_time()).await;
 
     let mut request = tmux_request(SessionId::from_uuid(uuid::Uuid::now_v7()), true);
     let response = check(&state, &mut request)
@@ -57,6 +57,6 @@ async fn force_kills_tmux_occupant_and_allows_spawn() {
         .expect("preflight");
 
     assert!(response.is_none(), "force should clear pane conflict");
-    wait_for_child_exit(&mut child);
+    child.wait_for_exit();
     testdb.cleanup().await.expect("test db cleans up");
 }
