@@ -139,7 +139,7 @@ lives under the tree.
 
 littleorgans owns exactly one environment prefix: `LILO_`. The authoritative
 owned name set is the `lilo_paths::env` const registry, and
-`scripts/check-env.sh --check` rejects unregistered owned names.
+`scripts/check-env.py --check` rejects unregistered owned names.
 
 The audience model is:
 

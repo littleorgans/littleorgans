@@ -21,10 +21,8 @@ Two independent passes:
      audience for review. Best-effort; the gate, not the inventory, is the guard.
 
 Usage:
-  scripts/check-env.sh            Inventory + a legacy summary.
-  scripts/check-env.sh --check    Legacy gate: exit 1 if any forbidden token.
-
-Run directly (it is a python3 script); do not invoke via `bash`.
+  scripts/check-env.py            Inventory + a legacy summary.
+  scripts/check-env.py --check    Legacy gate: exit 1 if any forbidden token.
 """
 from __future__ import annotations
 
@@ -42,7 +40,7 @@ PRUNE = {"target", ".git", ".moon", ".nancy", "node_modules"}
 # only when the exact archived path is listed here because its canonical
 # convention document is already exempt.
 EXCLUDE = {
-    "scripts/check-env.sh",
+    "scripts/check-env.py",
     "CLAUDE.md",
     "AGENTS.md",
     "LESSONS.md",

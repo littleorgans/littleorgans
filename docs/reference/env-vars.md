@@ -7,7 +7,7 @@ only target (`LILO_`) variables; the rename mapping from pre-monorepo and former
 recorded in the migration plan, not here, so this file carries no forbidden literal.
 
 > **Status:** v0.8 pre-release. This describes the current `LILO_` contract. The const registry
-> in `lilo-paths` is the owned name source of truth, and `scripts/check-env.sh --check` consumes
+> in `lilo-paths` is the owned name source of truth, and `scripts/check-env.py --check` consumes
 > that registry.
 
 ## Naming & ownership rule
@@ -29,7 +29,7 @@ sub-prefix marks audience.
   (`HOME`, `SHELL`, `CARGO_*`, `CLAUDE_*`, `ANTHROPIC_*`) keep their upstream names; we never
   prefix them.
 - **Forbidden:** the pre-monorepo legacy prefixes and the former cross-brand agent namespace. The
-  exact forbidden tokens are defined **once**, in the gate (`scripts/check-env.sh`), which excludes
+  exact forbidden tokens are defined **once**, in the gate (`scripts/check-env.py`), which excludes
   itself from its own scan. This document and all other repo files refer to them descriptively, so
   the gate's own pattern is the only place a forbidden literal exists.
 
@@ -78,10 +78,10 @@ correlate a captured session to the control-plane spawn id through `LILO_AGENT_S
 
 | Variable | Set to | Injected at | Read by (in-repo) | Status |
 |---|---|---|---|---|
-| `LILO_AGENT_SESSION_ID` | spawn UUIDv7 | `launchers/lib.rs:100`, `spawn.rs:395` | `mcp/server.rs:19`, `cli/mail.rs:261` | live |
-| `LILO_AGENT_RUNTIME` | runtime kind | `launchers/lib.rs:104` | none | live |
-| `LILO_AGENT_ROLE` | session role | `spawn.rs:399` | none | live |
-| `LILO_AGENT_WORKSPACE` | workspace path | `spawn.rs:403` | none | live |
+| `LILO_AGENT_SESSION_ID` | spawn UUIDv4 | `launchers/lib.rs:102`, `spawn.rs:382` | `mcp/server.rs:19`, `cli/mail.rs:319` | live |
+| `LILO_AGENT_RUNTIME` | runtime kind | `launchers/lib.rs:106` | none | live |
+| `LILO_AGENT_ROLE` | session role | `spawn.rs:386` | none | live |
+| `LILO_AGENT_WORKSPACE` | workspace path | `spawn.rs:390` | none | live |
 
 **Caller-env stripping.** When capturing the caller's environment for a spawned runtime, all
 `LILO_AGENT_*` must be stripped before child identity is re-injected, so a child never inherits its
@@ -141,7 +141,7 @@ We read these; we do not own or prefix them. The detector's classification sets 
 ## Enforcement
 
 - **Registry.** Every owned `LILO_*` name is a `pub const` in `lilo-paths/src/env.rs`.
-- **Gate.** `scripts/check-env.sh` consumes that registry and runs in `just check` and `moon ci`.
+- **Gate.** `scripts/check-env.py` consumes that registry and runs in `just check` and `moon ci`.
   Its legacy check is a **raw-token scan** for the forbidden prefixes (defined in the script) across
   **all** authored files, independent of the inventory site-regexes, so exhaustiveness does not
   depend on enumerating call shapes. The script **excludes itself** from that scan (it is the one

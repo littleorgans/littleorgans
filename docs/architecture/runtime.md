@@ -185,8 +185,8 @@ shim, tmux, and Docker evidence.
 
 | Crate | Role |
 | --- | --- |
-| `lilo-rm-core` | Published runtime protocol crate. Owns RPC, response, lifecycle, spawn, launcher, admin, MCP, output, and tool contract types. |
-| `lilo-rm-client` | Published async client for Runtime JSON line requests inside the composed `LilodRpc` envelope and for the event watcher API. |
+| `lilo-rm-core` | Runtime protocol crate. Owns RPC, response, lifecycle, spawn, launcher, admin, MCP, output, and tool contract types. Intended for crates.io publication pending #36. |
+| `lilo-rm-client` | Async client for Runtime JSON line requests inside the composed `LilodRpc` envelope and for the event watcher API. Intended for crates.io publication pending #36. |
 | `lilo-paths` | Published path policy crate. Owns the littleorgans home, socket, run, event, log, cache, and temporary paths. |
 | `lilo-runtime-app` | Internal diagnostic command implementation and shim entrypoint used by `lilo`. |
 | `lilo-runtime-daemon` | Internal Runtime service package. Owns request dispatch, lifecycle orchestration, event delivery, Docker wrapping, reconciliation, and `RuntimeService`. |
