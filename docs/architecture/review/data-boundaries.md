@@ -70,7 +70,7 @@ The direct Session-to-Runtime call is documented as interim (`system.md:22-28`, 
 | --- | --- | --- | --- | --- | --- |
 | Typed ids (`SessionId`, `MessageId`, `IntentId`, `AuditId`) | `lilo-common` | `define_id!` newtypes | constructors (`::new()` = UUIDv4) | all contexts | wire/disk = 36-char string; sqlx Type is `uuid` but stores bind `TEXT` |
 | Operator home, socket, logs, events path | `lilo-paths` | `LiloPaths` | env / `LILO_HOME` | daemons, CLI, tests | filesystem under `~/.lilo/` |
-| Env name registry | `lilo-paths::env` | consts | n/a | `scripts/check-env.sh`, spawn env | process env |
+| Env name registry | `lilo-paths::env` | consts | n/a | `scripts/check-env.py`, spawn env | process env |
 | DB URL / pool | `lilo-db` | `DbConfig`, `LiloDb` | env over `settings.toml` | all stores | Postgres |
 | Unified schema | `lilo-db` migrator | 10 tables | `LiloDb::open_postgres` | stores | Postgres |
 | Principal | Identity | `Principal::{Local,Unknown}` | peer creds at socket accept | session/runtime handlers | serialized into `identity_audit.principal` |
@@ -421,7 +421,7 @@ Boundary discipline is mostly good: parse at the edge, trust internal types.
 | Mail | intent (receipt reserved), notify/timeout pairing | `mail.rs:64-71,137-155` |
 | SessionId | UUID parse | `FromStr` at store/driver edges (`conv.rs:171-175`) |
 | Config | `settings.toml` deny unknown fields; missing file = default; present-but-bad = error | `settings.rs:18,51-57` |
-| Env | owned `LILO_*` registry | `lilo-paths/src/env.rs`; `scripts/check-env.sh` |
+| Env | owned `LILO_*` registry | `lilo-paths/src/env.rs`; `scripts/check-env.py` |
 | DB URL | refuse guessed host | `DbConfig::resolve` |
 | Socket | peer uid | `peer_creds::extract` |
 | Authz | local uid match | `AuditDecision::evaluate_local` |

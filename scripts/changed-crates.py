@@ -2,7 +2,7 @@
 """Emit -p flags for workspace crates whose source changed since base_ref,
 plus the transitive reverse-dep closure. See gate-incremental in the justfile.
 
-Usage:  scripts/changed-crates.sh [base_ref]
+Usage:  scripts/changed-crates.py [base_ref]
 Output:
   - Empty line: no relevant changes; caller should skip the gate.
   - `--workspace`: change touched a workspace-wide file (root Cargo.toml,

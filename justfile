@@ -35,7 +35,7 @@ default:
 
 # Build, test, run
 # `build` and `test` scope to changed crates + reverse-dep closure via
-# scripts/changed-crates.sh (default base ref: `main`, override with
+# scripts/changed-crates.py (default base ref: `main`, override with
 # BASE_REF=...). Falls back to `--workspace` on workspace-wide changes
 # (root Cargo.toml, rust-toolchain.toml, .cargo/*). Use `just regression`
 # for the unconditional full-workspace gate.
@@ -44,7 +44,7 @@ build:
     #!/usr/bin/env bash
     set -euo pipefail
     export CARGO_TARGET_DIR={{TARGET_BUILD}}
-    flags="$(scripts/changed-crates.sh {{BASE_REF}})"
+    flags="$(scripts/changed-crates.py {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[build] no relevant changes vs {{BASE_REF}}; nothing to compile."
         exit 0
@@ -64,7 +64,7 @@ test *ARGS:
     #!/usr/bin/env bash
     set -euo pipefail
     export CARGO_TARGET_DIR={{TARGET_NEXTEST}}
-    flags="$(scripts/changed-crates.sh {{BASE_REF}})"
+    flags="$(scripts/changed-crates.py {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[test] no relevant changes vs {{BASE_REF}}; nothing to run."
         exit 0
@@ -167,7 +167,11 @@ check-seam:
     bash scripts/check-seam.sh
 
 check-env:
-    python3 scripts/check-env.sh --check
+    python3 scripts/check-env.py --check
+
+# Generated CLI/MCP surfaces must match tools/schemas/cli.toml. Fails when a
+# generated file was hand-edited or the registry changed without `just codegen`.
+check-codegen: (codegen "--check")
 
 # Scope clippy to changed crates + reverse-dep closure. Run read-only clippy
 # first because `cargo clippy --fix` uses a different fingerprint mode from
@@ -178,7 +182,7 @@ _clippy-incremental:
     #!/usr/bin/env bash
     set -euo pipefail
     export CARGO_TARGET_DIR={{TARGET_CLIPPY}}
-    flags="$(scripts/changed-crates.sh {{BASE_REF}})"
+    flags="$(scripts/changed-crates.py {{BASE_REF}})"
     if [[ -z "$flags" ]]; then
         echo "[clippy] no relevant changes vs {{BASE_REF}}; skipping."
         exit 0
@@ -203,10 +207,10 @@ _clippy-incremental:
 # to changed crates + reverse deps. fmt / loc / provenance / seam always run
 # workspace-wide because they are cheap and operate on raw files, not the
 # Rust compile graph.
-check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam check-env
+check: fmt _clippy-incremental fmt-check check-loc check-provenance check-seam check-env check-codegen
 
 # Full-workspace gate. Use before merging to main, in CI, or any time the
-# scoping heuristic in scripts/changed-crates.sh might miss a regression
+# scoping heuristic in scripts/changed-crates.py might miss a regression
 # surface (e.g. workspace-wide refactors, release-prep, manual audits).
 # Mirrors the legacy `cargo fmt --all -- --check && clippy --workspace
 # --all-targets && nextest run --workspace` chain.
@@ -217,4 +221,5 @@ regression:
     bash scripts/check-loc-limit.sh
     bash scripts/check-provenance.sh
     bash scripts/check-seam.sh
-    python3 scripts/check-env.sh --check
+    python3 scripts/check-env.py --check
+    CARGO_TARGET_DIR={{TARGET_BUILD}} cargo xtask codegen --check

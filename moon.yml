@@ -51,6 +51,7 @@ tasks:
       - "check-provenance"
       - "check-seam"
       - "check-env"
+      - "check-codegen"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
@@ -102,11 +103,21 @@ tasks:
       runInCI: "always"
 
   check-env:
-    command: "python3 scripts/check-env.sh --check"
+    command: "python3 scripts/check-env.py --check"
     inputs:
       - "@globs(sources)"
       - "@globs(tests)"
-      - "scripts/check-env.sh"
+      - "scripts/check-env.py"
+    options:
+      runInCI: "always"
+
+  check-codegen:
+    command: "cargo xtask codegen --check"
+    inputs:
+      - "tools/schemas/**/*"
+      - "tools/xtask/**/*"
+      - "crates/lilo/src/cli/generated_help.rs"
+      - "crates/lilo/src/cli/generated_schema.rs"
     options:
       runInCI: "always"
 
@@ -118,5 +129,6 @@ tasks:
       - "check-provenance"
       - "check-seam"
       - "check-env"
+      - "check-codegen"
     options:
       runInCI: false

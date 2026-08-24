@@ -110,8 +110,9 @@ CREATE TABLE session_event_cursor (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
--- Spawn-intent timestamps are epoch-millis BIGINT (transient rows, deleted on
--- resolve, no cross-table time comparison); deliberately not timestamptz.
+-- Spawn-intent timestamps are epoch-millis BIGINT (rows are updated in place on
+-- resolve or abort and retained, no cross-table time comparison); deliberately
+-- not timestamptz.
 CREATE TABLE session_spawn_intents (
     session_id TEXT PRIMARY KEY,
     operation_id TEXT NOT NULL,

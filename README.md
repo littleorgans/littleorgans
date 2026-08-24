@@ -92,7 +92,7 @@ This is the private monorepo; one version number covers the whole family.
 | `apps/`, `packages/`, `python/` | Reserved product and language workspaces. Their exact activation follows the Transport and Canvas architecture proof. |
 | `tools/` | Workspace tooling (`xtask`, future `mirror-publish`). |
 | `docs/` | Architecture, reference, ADRs, mirror and provenance material. |
-| `scripts/` | Repo gates (`check-env.sh`, `check-seam.sh`, `changed-crates.sh`). |
+| `scripts/` | Repo gates (`check-env.py`, `check-seam.sh`, `changed-crates.py`). |
 
 ## Development
 

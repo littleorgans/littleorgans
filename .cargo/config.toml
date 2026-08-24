@@ -1,10 +1,6 @@
 [alias]
 xtask = "run -p xtask --"
 
-[patch.crates-io]
-lilo-im-core = { path = "crates/lilo-im-core" }
-lilo-im-stub = { path = "crates/lilo-im-stub" }
-
 # Faster linkers, applied per host triple so each environment uses what it has.
 # macOS arm64 (local): LLVM lld (`brew install lld`). Linux (CI + linux dev):
 # mold, installed in CI via rui314/setup-mold in .github/workflows/pr.yml. mold

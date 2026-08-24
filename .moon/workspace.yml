@@ -5,7 +5,9 @@ projects:
     - "tools/*/"
   sources:
     littleorgans: "."
+    "internal/db": "internal/db"
     "internal/identity/service": "internal/identity/service"
+    "internal/port": "internal/port"
     "internal/runtime/app": "internal/runtime/app"
     "internal/runtime/daemon": "internal/runtime/daemon"
     "internal/runtime/launchers": "internal/runtime/launchers"
@@ -15,6 +17,8 @@ projects:
     "internal/session/daemon": "internal/session/daemon"
     "internal/session/driver": "internal/session/driver"
     "internal/session/store": "internal/session/store"
+    "internal/wire": "internal/wire"
+    "tests/integration": "tests/integration"
 
 vcs:
   client: "git"
